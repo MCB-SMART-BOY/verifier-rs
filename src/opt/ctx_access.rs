@@ -14,11 +14,11 @@
 //! - **Dead access elimination**: Removes accesses whose results are unused
 
 #[cfg(not(feature = "std"))]
-use alloc::{format, string::String, vec, vec::Vec};
+use alloc::{format, vec, vec::Vec};
 #[cfg(not(feature = "std"))]
-use alloc::collections::BTreeMap as HashMap;
+use alloc::collections::{BTreeMap as HashMap, BTreeSet as HashSet};
 #[cfg(feature = "std")]
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::core::types::*;
 use crate::core::error::{Result, VerifierError};
@@ -1757,7 +1757,7 @@ impl AccessHeuristics {
         }
         
         // Check for loop-based pattern (same offsets repeated)
-        let unique_offsets: std::collections::HashSet<_> = 
+        let unique_offsets: HashSet<_> = 
             accesses.iter().map(|a| a.off).collect();
         if unique_offsets.len() < accesses.len() / 2 {
             return AccessPattern::LoopBased;
@@ -1795,7 +1795,7 @@ impl AccessHeuristics {
     fn compute_cache_lines(accesses: &[CtxAccessInfo]) -> usize {
         const CACHE_LINE_SIZE: u32 = 64;
         
-        let mut lines: std::collections::HashSet<u32> = std::collections::HashSet::new();
+        let mut lines: HashSet<u32> = HashSet::new();
         
         for access in accesses {
             let start_line = access.off / CACHE_LINE_SIZE;

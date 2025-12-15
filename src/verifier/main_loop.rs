@@ -12,7 +12,7 @@
 //! - Precision tracking for conditional jumps
 
 #[cfg(not(feature = "std"))]
-use alloc::{vec, vec::Vec};
+use alloc::{format, vec::Vec};
 
 use crate::core::types::*;
 use crate::core::error::{Result, VerifierError};

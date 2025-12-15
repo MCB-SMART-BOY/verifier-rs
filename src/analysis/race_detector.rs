@@ -8,7 +8,7 @@
 //! - Per-CPU data access patterns
 
 #[cfg(not(feature = "std"))]
-use alloc::{format, string::String, vec, vec::Vec};
+use alloc::{format, string::String, vec::Vec};
 
 use crate::stdlib::{BTreeMap, BTreeSet};
 use crate::core::error::{Result, VerifierError};

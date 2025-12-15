@@ -7,7 +7,7 @@ use crate::core::types::*;
 use core::fmt::Write;
 
 #[cfg(not(feature = "std"))]
-use alloc::{string::{String, ToString}, format, vec::Vec};
+use alloc::{string::{String, ToString}, format};
 #[cfg(not(feature = "std"))]
 use alloc::collections::BTreeSet as HashSet;
 #[cfg(feature = "std")]

@@ -6,7 +6,7 @@
 
 
 #[cfg(not(feature = "std"))]
-use alloc::{vec, vec::Vec};
+use alloc::vec::Vec;
 
 use crate::bounds::range_refine::{
     BranchCond, BranchOutcome,

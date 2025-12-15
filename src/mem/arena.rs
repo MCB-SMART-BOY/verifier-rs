@@ -4,7 +4,7 @@
 //! Arenas provide user-space addressable memory regions for BPF programs.
 
 #[cfg(not(feature = "std"))]
-use alloc::{boxed::Box, format, string::String, vec, vec::Vec};
+use alloc::{format, vec::Vec};
 
 #[cfg(not(feature = "std"))]
 use alloc::collections::{BTreeMap as HashMap};

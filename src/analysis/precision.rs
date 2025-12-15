@@ -48,7 +48,7 @@
 
 
 #[cfg(not(feature = "std"))]
-use alloc::{format, string::String, vec, vec::Vec};
+use alloc::{vec, vec::Vec};
 
 use crate::state::verifier_state::BpfVerifierState;
 use crate::state::reg_state::BpfRegState;

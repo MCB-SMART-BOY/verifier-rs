@@ -4,7 +4,7 @@
 //! into the main verification loop.
 
 #[cfg(not(feature = "std"))]
-use alloc::{format, string::String, vec::Vec};
+use alloc::{format, string::String};
 
 use crate::core::types::*;
 use crate::core::error::{Result, VerifierError};

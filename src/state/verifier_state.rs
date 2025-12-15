@@ -4,7 +4,7 @@
 //! function frames, register states, and tracking of verification progress.
 
 #[cfg(not(feature = "std"))]
-use alloc::{format, string::String, vec, vec::Vec, boxed::Box};
+use alloc::{format, vec::Vec, boxed::Box};
 
 use crate::state::reg_state::BpfRegState;
 use crate::state::stack_state::StackManager;

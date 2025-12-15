@@ -20,7 +20,7 @@ use crate::special::struct_ops::StructOpsContext;
 use crate::analysis::race_detector::RaceDetector;
 
 #[cfg(not(feature = "std"))]
-use alloc::{boxed::Box, format, string::String, vec, vec::Vec};
+use alloc::{format, string::String, vec, vec::Vec};
 #[cfg(not(feature = "std"))]
 use alloc::collections::BTreeMap as HashMap;
 #[cfg(feature = "std")]

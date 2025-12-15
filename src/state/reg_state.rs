@@ -4,7 +4,7 @@
 //! Each register tracks its type, bounds (for scalars), and other metadata.
 
 #[cfg(not(feature = "std"))]
-use alloc::{format, string::String, vec::Vec, boxed::Box};
+use alloc::{format, vec::Vec};
 
 use crate::bounds::tnum::Tnum;
 use crate::bounds::bounds::ScalarBounds;

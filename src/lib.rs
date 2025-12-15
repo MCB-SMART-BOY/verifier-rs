@@ -129,6 +129,10 @@ pub mod opt;
 /// Main verifier
 pub mod verifier;
 
+/// C FFI bindings for kernel integration
+#[cfg(feature = "ffi")]
+pub mod ffi;
+
 // ============================================================================
 // Prelude - commonly used re-exports
 // ============================================================================

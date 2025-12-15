@@ -4,7 +4,7 @@
 //! dynptrs, iterators, and IRQ flags.
 
 #[cfg(not(feature = "std"))]
-use alloc::{format, string::String, vec, vec::Vec};
+use alloc::{format, vec::Vec};
 
 use crate::state::reg_state::BpfRegState;
 use crate::core::types::*;

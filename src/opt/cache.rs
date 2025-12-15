@@ -13,7 +13,7 @@ use crate::state::reg_state::BpfRegState;
 use crate::core::types::*;
 
 #[cfg(not(feature = "std"))]
-use alloc::vec::Vec;
+use alloc::{vec, vec::Vec};
 #[cfg(not(feature = "std"))]
 use alloc::boxed::Box;
 
@@ -48,22 +48,32 @@ impl BloomFilter {
         // Calculate optimal number of bits and hash functions
         // m = -n * ln(p) / (ln(2)^2)
         // k = (m/n) * ln(2)
-        let ln2 = core::f64::consts::LN_2;
-        let ln2_sq = ln2 * ln2;
+        // 
+        // For no_std compatibility, we use a simplified calculation
+        // with precomputed values for common false positive rates
+        let n = expected_items.max(1);
         
-        let n = expected_items.max(1) as f64;
-        let p = false_positive_rate.max(0.0001).min(0.5);
+        // Use lookup table for bits per item based on false positive rate
+        // These are precomputed from: -ln(p) / (ln(2)^2)
+        let bits_per_item = if false_positive_rate <= 0.001 {
+            14  // ~0.1% FPR
+        } else if false_positive_rate <= 0.01 {
+            10  // ~1% FPR
+        } else if false_positive_rate <= 0.05 {
+            6   // ~5% FPR
+        } else {
+            4   // ~10%+ FPR
+        };
         
-        let m = (-n * p.ln() / ln2_sq).ceil() as usize;
-        let k = ((m as f64 / n) * ln2).ceil() as usize;
-        
-        let num_bits = m.max(64);
+        let num_bits = (n * bits_per_item).max(64);
+        // Optimal k = (m/n) * ln(2) ≈ bits_per_item * 0.693
+        let num_hashes = ((bits_per_item * 7) / 10).max(1).min(16);
         let num_words = (num_bits + 63) / 64;
         
         Self {
             bits: vec![0u64; num_words],
             num_bits,
-            num_hashes: k.max(1).min(16),
+            num_hashes,
             count: 0,
         }
     }
@@ -144,7 +154,12 @@ impl BloomFilter {
             .sum();
         
         let fill_ratio = bits_set as f64 / self.num_bits as f64;
-        fill_ratio.powi(self.num_hashes as i32)
+        // Manual power calculation for no_std compatibility
+        let mut result = 1.0;
+        for _ in 0..self.num_hashes {
+            result *= fill_ratio;
+        }
+        result
     }
 }
 

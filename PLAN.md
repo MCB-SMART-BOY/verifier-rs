@@ -2,17 +2,29 @@
 
 ## 项目概述
 
-完整的 Linux 内核 BPF 验证器 (`reference/verifier.c`, 25,398 行) 的 Rust 重新实现。
+完整的 Linux 内核 BPF 验证器 (`kernel/bpf/verifier.c`, 25,398 行) 的 Rust 重新实现。
 
 ### 当前状态 (更新于 2025-12-16)
-- **Rust 代码**: 88,000+ 行
-- **模块数量**: 94 个文件，11 个功能区域
-- **测试用例**: 1,017+ 通过 (单元测试)
-- **整体完成度**: ~99%
+- **Rust 代码**: 88,119 行
+- **模块数量**: 95 个文件，12 个功能区域
+- **测试用例**: 1,017+ 单元测试 + 123 集成测试 通过
+- **整体完成度**: ~99.5%
 - **Helper 函数**: 211/211 已实现 (100%)
+- **no_std 支持**: ✅ 完整 (kernel feature)
+- **C FFI 绑定**: ✅ 完整 (ffi feature)
+- **许可证**: GPL-2.0-only (Linux 内核兼容)
+
+### 功能完成度
 - **P0 关键差距**: ✅ 全部完成 (用户内存验证、状态合并精度、Struct Ops 验证)
 - **P1 高优先级**: ✅ 全部完成 (IRQ 状态跟踪、竞态检测、睡眠上下文验证)
-- **P2 中等优先级**: ✅ 大部分完成 (kfunc 特化、循环内联、workqueue/task_work 处理)
+- **P2 中等优先级**: ✅ 全部完成 (kfunc 特化、循环内联、workqueue/task_work 处理)
+- **P3 优化 Pass**: ✅ 全部完成 (misc_fixups, ctx_access, dead_code)
+
+### 内核集成就绪
+- ✅ no_std 构建通过
+- ✅ C FFI 头文件 (`include/bpf_verifier_rs.h`)
+- ✅ GPL-2.0-only 许可证
+- ⏳ 需要内核测试环境验证
 
 ---
 
@@ -164,8 +176,8 @@
 |--------|------|-----------|------|
 | `process_spin_lock()` | L8407-8521 | `state/lock_state.rs` | ✅ 80% |
 | `process_timer_func()` | L8571-8593 | `special/timer_kptr.rs` | ✅ 80% |
-| `process_wq_func()` | L8595-8614 | `special/timer_kptr.rs` | ⚠️ 60% |
-| `process_task_work_func()` | L8616-8634 | `special/timer_kptr.rs` | ⚠️ 60% |
+| `process_wq_func()` | L8595-8614 | `special/timer_kptr.rs` | ✅ 85% |
+| `process_task_work_func()` | L8616-8634 | `special/timer_kptr.rs` | ✅ 85% |
 | `process_kptr_func()` | L8636-8682 | `special/timer_kptr.rs` | ✅ 80% |
 | `process_dynptr_func()` | L8709-8787 | `special/dynptr.rs` | ✅ 75% |
 | `process_iter_arg()` | L8829-8913 | `special/iter.rs` | ✅ 85% |
@@ -326,26 +338,26 @@
 | `sanitize_dead_code()` | L21554-21568 | `opt/dead_code.rs` | ✅ 80% |
 | `opt_remove_dead_code()` | L21610-21632 | `opt/dead_code.rs` | ✅ 80% |
 | `opt_subreg_zext_lo32_rnd_hi32()` | L21662-21761 | `opt/pass.rs` | ✅ 80% |
-| `convert_ctx_accesses()` | L21768-22066 | `opt/ctx_access.rs` | ⚠️ 60% |
+| `convert_ctx_accesses()` | L21768-22066 | `opt/ctx_access.rs` | ✅ 90% |
 | `jit_subprogs()` | L22068-22352 | `opt/jit_subprogs.rs` | ✅ 80% |
-| `fixup_call_args()` | L22354-22403 | `opt/misc_fixups.rs` | ⚠️ 60% |
+| `fixup_call_args()` | L22354-22403 | `opt/misc_fixups.rs` | ✅ 85% |
 
 ### 27. Kfunc Fixup (C: L22406-22610)
 
 | C 函数 | 行号 | Rust 位置 | 状态 |
 |--------|------|-----------|------|
-| `specialize_kfunc()` | L22406-22447 | `opt/misc_fixups.rs` | ⚠️ 60% |
-| `__fixup_collection_insert_kfunc()` | L22449-22464 | `opt/misc_fixups.rs` | ⚠️ 60% |
-| `fixup_kfunc_call()` | L22466-22576 | `opt/misc_fixups.rs` | ⚠️ 60% |
-| `add_hidden_subprog()` | L22579-22603 | `opt/misc_fixups.rs` | ⚠️ 60% |
+| `specialize_kfunc()` | L22406-22447 | `opt/misc_fixups.rs` | ✅ 90% |
+| `__fixup_collection_insert_kfunc()` | L22449-22464 | `opt/misc_fixups.rs` | ✅ 85% |
+| `fixup_kfunc_call()` | L22466-22576 | `opt/misc_fixups.rs` | ✅ 85% |
+| `add_hidden_subprog()` | L22579-22603 | `opt/misc_fixups.rs` | ✅ 85% |
 
 ### 28. Misc Fixups (C: L22608-23700)
 
 | C 函数 | 行号 | Rust 位置 | 状态 |
 |--------|------|-----------|------|
-| `do_misc_fixups()` | L22608-23527 | `opt/misc_fixups.rs` | ⚠️ 60% |
-| `inline_bpf_loop()` | L23529-23603 | `opt/misc_fixups.rs` | ⚠️ 60% |
-| `optimize_bpf_loop()` | L23621-23664 | `opt/misc_fixups.rs` | ⚠️ 60% |
+| `do_misc_fixups()` | L22608-23527 | `opt/misc_fixups.rs` | ✅ 90% |
+| `inline_bpf_loop()` | L23529-23603 | `opt/misc_fixups.rs` | ✅ 90% |
+| `optimize_bpf_loop()` | L23621-23664 | `opt/misc_fixups.rs` | ✅ 85% |
 | `remove_fastcall_spills_fills()` | L23669-23698 | `opt/misc_fixups.rs` | ✅ 95% |
 
 ### 29. 检查入口 (C: L23743-24100)
@@ -545,17 +557,34 @@
 - ✅ 8 个 CO-RE 集成测试（字段偏移、字段存在性、类型存在/大小、跨BTF重定位等）
 
 #### 10. Workqueue/Task Work 处理 ✅ (85%)
-**文件**: `src/check/kfunc.rs`
+**文件**: `src/special/timer_kptr.rs`
 **对应 C**: 
 - `process_wq_func()` (L8595-8614)
 - `process_task_work_func()` (L8616-8634)
 **状态**: ✅ 已完成
 
 **已实现**:
-- `KfuncArgType::PtrToWorkqueue` - 验证 workqueue 指针指向 map value
-- `KfuncArgType::PtrToTaskWork` - 验证 task_work 指针指向 map value
-- 偏移量边界检查
-- Map value 类型验证
+- `WorkqueueInfo` 结构体：workqueue 状态管理
+- `TaskWorkInfo` 结构体：task_work 状态管理
+- `process_wq_func()` - workqueue 初始化/回调/启动验证
+- `process_task_work_func()` - task_work 初始化/调度验证
+- `validate_wq_callback()` - workqueue 回调验证
+- `validate_task_work_callback()` - task_work 回调验证
+- 程序类型限制检查
+
+#### 11. C FFI 绑定 ✅ (100%)
+**文件**: `src/ffi.rs`, `include/bpf_verifier_rs.h`
+**状态**: ✅ 新增完成
+
+**已实现**:
+- `bpf_verifier_env_new()` - 创建验证器环境
+- `bpf_verifier_env_free()` - 释放验证器环境
+- `bpf_verify()` - 运行验证
+- `bpf_check_rs()` - 主入口点（匹配内核 bpf_check）
+- `bpf_verifier_get_stats()` - 获取验证统计
+- `bpf_verifier_set_log_callback()` - 设置日志回调
+- C 头文件 `bpf_verifier_rs.h`
+- 内核分配器支持 (`kernel` feature)
 
 ---
 

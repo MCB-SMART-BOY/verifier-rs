@@ -4,7 +4,7 @@
 //! from overly complex programs and tracks resource usage during verification.
 
 #[cfg(not(feature = "std"))]
-use alloc::{format, string::String, vec, vec::Vec};
+use alloc::{format, string::String, vec::Vec};
 
 #[cfg(not(feature = "std"))]
 use core::time::Duration;

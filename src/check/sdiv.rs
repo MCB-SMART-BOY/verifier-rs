@@ -8,7 +8,7 @@
 
 
 #[cfg(not(feature = "std"))]
-use alloc::{format, string::String, vec, vec::Vec};
+use alloc::vec::Vec;
 
 use crate::core::types::*;
 use crate::state::reg_state::BpfRegState;

@@ -5,7 +5,7 @@
 //! enabling state pruning to avoid redundant verification paths.
 
 #[cfg(not(feature = "std"))]
-use alloc::{boxed::Box, format, string::String, vec, vec::Vec};
+use alloc::{boxed::Box, vec::Vec};
 
 #[cfg(not(feature = "std"))]
 use alloc::collections::BTreeMap as HashMap;

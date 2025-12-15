@@ -4,7 +4,7 @@
 //! Different program types have different requirements for their return values.
 
 #[cfg(not(feature = "std"))]
-use alloc::{format, string::String, vec, vec::Vec};
+use alloc::format;
 
 use crate::core::types::*;
 use crate::state::verifier_state::BpfVerifierState;

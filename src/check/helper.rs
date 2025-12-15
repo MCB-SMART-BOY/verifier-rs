@@ -4,7 +4,7 @@
 //! handling for BPF helper functions.
 
 #[cfg(not(feature = "std"))]
-use alloc::{format, string::String, vec::Vec};
+use alloc::format;
 
 use crate::state::reg_state::BpfRegState;
 use crate::state::verifier_state::BpfVerifierState;

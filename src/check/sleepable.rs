@@ -15,7 +15,7 @@
 //! - Global functions that might_sleep propagate this property to callers
 
 #[cfg(not(feature = "std"))]
-use alloc::{format, string::String, vec::Vec};
+use alloc::{format, vec::Vec};
 
 use crate::core::error::{Result, VerifierError};
 use crate::core::types::BpfTypeFlag;

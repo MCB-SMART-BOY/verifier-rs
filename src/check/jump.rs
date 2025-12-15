@@ -6,7 +6,7 @@
 
 
 #[cfg(not(feature = "std"))]
-use alloc::{format, string::String, vec, vec::Vec};
+use alloc::{format, vec::Vec};
 
 use crate::bounds::tnum::Tnum;
 use crate::core::types::*;

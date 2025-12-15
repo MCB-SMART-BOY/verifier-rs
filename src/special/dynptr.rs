@@ -4,7 +4,7 @@
 //! They can point to local stack memory, ringbuf entries, SKB/XDP data, etc.
 
 #[cfg(not(feature = "std"))]
-use alloc::{format, string::String, vec::Vec};
+use alloc::{format, vec::Vec};
 
 use crate::stdlib::BTreeMap;
 use crate::state::reg_state::BpfRegState;

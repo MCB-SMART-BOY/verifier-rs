@@ -5,7 +5,7 @@
 //! check_btf_line(), and check_core_relo() functions.
 
 #[cfg(not(feature = "std"))]
-use alloc::{format, string::{String, ToString}, vec, vec::Vec};
+use alloc::{format, string::String, vec::Vec};
 
 #[cfg(not(feature = "std"))]
 use alloc::collections::BTreeMap as HashMap;

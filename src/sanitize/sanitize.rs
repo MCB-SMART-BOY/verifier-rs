@@ -7,7 +7,7 @@
 #![allow(missing_docs)] // Sanitization internals
 
 #[cfg(not(feature = "std"))]
-use alloc::{format, string::String, vec, vec::Vec};
+use alloc::{format, string::String, vec::Vec};
 
 use crate::core::types::*;
 use crate::state::reg_state::BpfRegState;

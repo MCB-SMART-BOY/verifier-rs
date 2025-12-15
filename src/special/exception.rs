@@ -4,7 +4,7 @@
 //! Exception callbacks are used for handling errors in struct_ops programs.
 
 #[cfg(not(feature = "std"))]
-use alloc::{boxed::Box, format, string::String, vec, vec::Vec};
+use alloc::{format, string::String, vec::Vec};
 
 #[cfg(not(feature = "std"))]
 use alloc::collections::{BTreeMap as HashMap};

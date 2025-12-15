@@ -4,7 +4,7 @@
 //! dispatching to appropriate handlers for each instruction class.
 
 #[cfg(not(feature = "std"))]
-use alloc::{format, vec::Vec};
+use alloc::format;
 
 use crate::state::reg_state::BpfRegState;
 use crate::state::verifier_state::BpfVerifierState;

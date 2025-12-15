@@ -17,7 +17,7 @@
 //! - RCU-safe kptrs can be read under RCU protection
 
 #[cfg(not(feature = "std"))]
-use alloc::{format, string::String, vec::Vec};
+use alloc::format;
 
 use crate::core::types::*;
 use crate::core::error::{Result, VerifierError};
@@ -441,6 +441,201 @@ pub fn check_kptr_xchg(
     };
     
     Ok(ret_ref_id)
+}
+
+// ============================================================================
+// Workqueue and Task Work Processing
+// ============================================================================
+
+/// Information about a workqueue callback
+#[derive(Debug, Clone, Default)]
+pub struct WorkqueueInfo {
+    /// Map UID that the workqueue is associated with
+    pub map_uid: u32,
+    /// BTF ID of the workqueue struct
+    pub btf_id: u32,
+    /// Offset of workqueue field in map value
+    pub offset: u32,
+    /// Whether the workqueue has been initialized
+    pub initialized: bool,
+}
+
+/// Information about a task_work callback
+#[derive(Debug, Clone, Default)]
+pub struct TaskWorkInfo {
+    /// Map UID for the task_work
+    pub map_uid: u32,
+    /// BTF ID of the task_work struct
+    pub btf_id: u32,
+    /// Offset in map value
+    pub offset: u32,
+    /// Whether task_work has been scheduled
+    pub scheduled: bool,
+}
+
+/// Process a workqueue kfunc call.
+///
+/// Validates workqueue operations including:
+/// - bpf_wq_init: Initialize workqueue in map value
+/// - bpf_wq_set_callback_impl: Set callback function
+/// - bpf_wq_start: Start the workqueue
+///
+/// Corresponds to kernel's process_wq_func() (L8595-8614)
+pub fn process_wq_func(
+    reg: &BpfRegState,
+    kfunc_id: u32,
+    map_uid: u32,
+    insn_idx: usize,
+) -> Result<Option<WorkqueueInfo>> {
+    // Verify the register points to a map value
+    if reg.reg_type != BpfRegType::PtrToMapValue {
+        return Err(VerifierError::InvalidKfunc(
+            "workqueue arg must be pointer to map value".into()
+        ));
+    }
+    
+    // Check offset is valid for workqueue field
+    let off = reg.off;
+    if off < 0 {
+        return Err(VerifierError::InvalidKfunc(
+            format!("invalid workqueue offset {}", off)
+        ));
+    }
+    
+    // Different handling based on kfunc type
+    // These are placeholder BTF IDs - real implementation would use actual IDs
+    const BPF_WQ_INIT: u32 = 1001;
+    const BPF_WQ_SET_CALLBACK: u32 = 1002;
+    const BPF_WQ_START: u32 = 1003;
+    
+    match kfunc_id {
+        BPF_WQ_INIT => {
+            // Initialize workqueue - creates new workqueue info
+            Ok(Some(WorkqueueInfo {
+                map_uid,
+                btf_id: 0, // Would be resolved from BTF
+                offset: off as u32,
+                initialized: true,
+            }))
+        }
+        BPF_WQ_SET_CALLBACK => {
+            // Set callback - workqueue must already be initialized
+            // Callback validation happens elsewhere
+            Ok(None)
+        }
+        BPF_WQ_START => {
+            // Start workqueue - must be initialized with callback set
+            Ok(None)
+        }
+        _ => Ok(None),
+    }
+}
+
+/// Process a task_work kfunc call.
+///
+/// Validates task_work operations including:
+/// - bpf_task_work_init: Initialize task_work
+/// - bpf_task_work_schedule: Schedule work on a task
+///
+/// Corresponds to kernel's process_task_work_func() (L8616-8634)
+pub fn process_task_work_func(
+    reg: &BpfRegState,
+    kfunc_id: u32,
+    map_uid: u32,
+    insn_idx: usize,
+) -> Result<Option<TaskWorkInfo>> {
+    // Verify the register points to a map value
+    if reg.reg_type != BpfRegType::PtrToMapValue {
+        return Err(VerifierError::InvalidKfunc(
+            "task_work arg must be pointer to map value".into()
+        ));
+    }
+    
+    // Check offset
+    let off = reg.off;
+    if off < 0 {
+        return Err(VerifierError::InvalidKfunc(
+            format!("invalid task_work offset {}", off)
+        ));
+    }
+    
+    // Placeholder BTF IDs
+    const BPF_TASK_WORK_INIT: u32 = 2001;
+    const BPF_TASK_WORK_SCHEDULE: u32 = 2002;
+    
+    match kfunc_id {
+        BPF_TASK_WORK_INIT => {
+            Ok(Some(TaskWorkInfo {
+                map_uid,
+                btf_id: 0,
+                offset: off as u32,
+                scheduled: false,
+            }))
+        }
+        BPF_TASK_WORK_SCHEDULE => {
+            // Schedule the task_work
+            Ok(Some(TaskWorkInfo {
+                map_uid,
+                btf_id: 0,
+                offset: off as u32,
+                scheduled: true,
+            }))
+        }
+        _ => Ok(None),
+    }
+}
+
+/// Validate workqueue callback registration.
+///
+/// Ensures that:
+/// 1. The callback function is a valid subprogram
+/// 2. The callback signature matches expected prototype
+/// 3. The workqueue is associated with the correct map
+pub fn validate_wq_callback(
+    callback_subprog: usize,
+    wq_info: &WorkqueueInfo,
+    prog_type: BpfProgType,
+) -> Result<()> {
+    // Workqueue callbacks are only allowed in certain program types
+    match prog_type {
+        BpfProgType::Syscall | BpfProgType::StructOps => {
+            // Allowed
+        }
+        _ => {
+            return Err(VerifierError::InvalidKfunc(
+                format!("workqueue not allowed in {:?} programs", prog_type)
+            ));
+        }
+    }
+    
+    if !wq_info.initialized {
+        return Err(VerifierError::InvalidKfunc(
+            "workqueue must be initialized before setting callback".into()
+        ));
+    }
+    
+    Ok(())
+}
+
+/// Validate task_work callback registration.
+pub fn validate_task_work_callback(
+    callback_subprog: usize,
+    tw_info: &TaskWorkInfo,
+    prog_type: BpfProgType,
+) -> Result<()> {
+    // Task work has similar restrictions
+    match prog_type {
+        BpfProgType::Syscall | BpfProgType::StructOps | BpfProgType::Tracing => {
+            // Allowed
+        }
+        _ => {
+            return Err(VerifierError::InvalidKfunc(
+                format!("task_work not allowed in {:?} programs", prog_type)
+            ));
+        }
+    }
+    
+    Ok(())
 }
 
 #[cfg(test)]

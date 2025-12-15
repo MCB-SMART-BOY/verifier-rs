@@ -5,7 +5,7 @@
 //! represents a potential loop that needs iteration bounds checking.
 
 #[cfg(not(feature = "std"))]
-use alloc::{format, string::String, vec, vec::Vec};
+use alloc::{format, vec::Vec};
 
 #[cfg(not(feature = "std"))]
 use alloc::collections::{BTreeMap as HashMap, BTreeSet as HashSet};

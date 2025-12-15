@@ -6,7 +6,7 @@
 #![allow(missing_docs)] // BTF types have complex internal structure
 
 #[cfg(not(feature = "std"))]
-use alloc::{format, string::{String, ToString}, vec, vec::Vec};
+use alloc::{format, string::{String, ToString}, vec::Vec};
 
 #[cfg(not(feature = "std"))]
 use alloc::collections::BTreeMap as HashMap;

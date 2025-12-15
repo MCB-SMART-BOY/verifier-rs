@@ -4,7 +4,7 @@
 //! Each iterator type has its own lifecycle: new -> next* -> destroy.
 
 #[cfg(not(feature = "std"))]
-use alloc::{format, string::String, vec::Vec};
+use alloc::{format, vec::Vec};
 
 use crate::stdlib::BTreeMap;
 use crate::state::reg_state::BpfRegState;

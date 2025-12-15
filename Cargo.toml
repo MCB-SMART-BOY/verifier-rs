@@ -50,6 +50,8 @@ default = ["std"]
 std = ["thiserror"]
 # Kernel mode (no_std)
 kernel = []
+# C FFI bindings for kernel integration
+ffi = []
 # Enable verbose logging
 verbose = []
 # Enable statistics collection

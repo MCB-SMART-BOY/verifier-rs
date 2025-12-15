@@ -5,7 +5,7 @@
 //! now supported with proper verification.
 
 #[cfg(not(feature = "std"))]
-use alloc::{boxed::Box, format, string::String, vec, vec::Vec};
+use alloc::{format, vec, vec::Vec};
 
 #[cfg(not(feature = "std"))]
 use alloc::collections::{BTreeMap as HashMap, BTreeSet as HashSet};

@@ -4,7 +4,7 @@
 //! including call tracking, stack depth calculation, and callback handling.
 
 #[cfg(not(feature = "std"))]
-use alloc::{boxed::Box, format, string::{String, ToString}, vec, vec::Vec};
+use alloc::{format, string::{String, ToString}, vec, vec::Vec};
 
 #[cfg(not(feature = "std"))]
 use alloc::collections::{BTreeMap as HashMap};

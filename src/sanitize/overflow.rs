@@ -11,7 +11,7 @@
 #![allow(missing_docs)]
 
 #[cfg(not(feature = "std"))]
-use alloc::{format, string::String, vec, vec::Vec};
+use alloc::{string::String, vec::Vec};
 
 use crate::core::error::{Result, VerifierError};
 use crate::core::types::*;

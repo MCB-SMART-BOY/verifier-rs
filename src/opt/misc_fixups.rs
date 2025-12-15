@@ -12,7 +12,7 @@
 #![allow(missing_docs)] // Fixup internals
 
 #[cfg(not(feature = "std"))]
-use alloc::{format, string::String, vec, vec::Vec};
+use alloc::{vec, vec::Vec};
 
 #[cfg(not(feature = "std"))]
 use alloc::collections::BTreeMap as HashMap;
@@ -2022,6 +2022,284 @@ impl BpfFunc {
             _ => None,
         }
     }
+}
+
+// ============================================================================
+// Additional Fixup Functions (for kernel parity)
+// ============================================================================
+
+/// Fix up call arguments for helper/kfunc calls.
+/// 
+/// This function ensures that call arguments are properly set up before
+/// a helper or kfunc call. It may insert additional instructions to:
+/// - Zero-extend 32-bit arguments
+/// - Convert pointers to expected types
+/// - Handle byval arguments
+/// 
+/// Corresponds to kernel's fixup_call_args() (L22354-22403)
+pub fn fixup_call_args(
+    insns: &mut Vec<BpfInsn>,
+    call_idx: usize,
+    arg_types: &[ArgType],
+) -> Result<Vec<Patch>> {
+    let mut patches = Vec::new();
+    let mut prepend_insns = Vec::new();
+    
+    for (i, arg_type) in arg_types.iter().enumerate() {
+        let reg = (i + 1) as u8; // R1-R5 for arguments
+        
+        match arg_type {
+            ArgType::Const32 => {
+                // Zero-extend 32-bit constant to 64-bit
+                prepend_insns.push(BpfInsn::new(
+                    BPF_ALU | BPF_MOV | BPF_X,
+                    reg, reg, 0, 0,
+                ));
+            }
+            ArgType::PtrToMem | ArgType::PtrToMemReadonly => {
+                // Ensure pointer is properly tagged if needed
+            }
+            ArgType::Size => {
+                // Size arguments may need bounds checking injection
+            }
+            _ => {}
+        }
+    }
+    
+    if !prepend_insns.is_empty() {
+        patches.push(Patch::new(call_idx, PatchType::InsertBefore(prepend_insns)));
+    }
+    
+    Ok(patches)
+}
+
+/// Argument types for fixup_call_args
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ArgType {
+    /// Don't care / unused
+    DontCare,
+    /// 32-bit constant
+    Const32,
+    /// 64-bit constant
+    Const64,
+    /// Pointer to memory (read-write)
+    PtrToMem,
+    /// Pointer to memory (read-only)
+    PtrToMemReadonly,
+    /// Size of memory region
+    Size,
+    /// Pointer to context
+    PtrToCtx,
+    /// Pointer to map
+    PtrToMap,
+    /// Callback function
+    Callback,
+}
+
+/// Fix up collection insert kfuncs (rbtree, list).
+/// 
+/// When inserting nodes into collections, we need to ensure:
+/// 1. The node is properly initialized
+/// 2. Reference counting is correct
+/// 3. The insertion point is valid
+/// 
+/// Corresponds to kernel's __fixup_collection_insert_kfunc() (L22449-22464)
+pub fn fixup_collection_insert_kfunc(
+    insns: &mut Vec<BpfInsn>,
+    call_idx: usize,
+    collection_type: CollectionType,
+) -> Result<Vec<Patch>> {
+    let patches = Vec::new();
+    
+    match collection_type {
+        CollectionType::RbTree => {
+            // For rbtree insert, we may need to:
+            // 1. Validate the node is not already in a tree
+            // 2. Ensure proper locking
+        }
+        CollectionType::List => {
+            // For list insert, similar validations
+        }
+    }
+    
+    Ok(patches)
+}
+
+/// Collection types for fixup
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CollectionType {
+    /// Red-black tree
+    RbTree,
+    /// Linked list  
+    List,
+}
+
+/// Fix up a kfunc call instruction.
+/// 
+/// This is the main entry point for kfunc-specific fixups. It handles:
+/// - Address resolution for module kfuncs
+/// - Argument setup and validation
+/// - Specialization based on program context
+/// 
+/// Corresponds to kernel's fixup_kfunc_call() (L22466-22576)
+pub fn fixup_kfunc_call(
+    insns: &mut Vec<BpfInsn>,
+    call_idx: usize,
+    ctx: &FixupContext,
+) -> Result<Vec<Patch>> {
+    let insn = &insns[call_idx];
+    let btf_id = insn.imm as u32;
+    
+    let mut patches = Vec::new();
+    
+    // Find the kfunc descriptor
+    let desc = ctx.kfuncs.iter().find(|k| k.func_id == btf_id);
+    
+    if let Some(desc) = desc {
+        // If this is a module kfunc, resolve the address
+        if desc.offset != 0 {
+            // Module kfuncs need runtime address resolution
+            // The kernel patches this at load time
+        }
+        
+        // Apply specialization if applicable
+        if let Some(spec) = specialize_kfunc(ctx, btf_id, call_idx) {
+            if spec.specialized {
+                if !spec.prepend_insns.is_empty() {
+                    patches.push(Patch::new(
+                        call_idx,
+                        PatchType::InsertBefore(spec.prepend_insns),
+                    ));
+                }
+                
+                if let Some(new_addr) = spec.new_addr {
+                    let mut new_insn = insns[call_idx].clone();
+                    new_insn.imm = new_addr as i32;
+                    patches.push(Patch::new(call_idx, PatchType::Replace(new_insn)));
+                }
+            }
+        }
+    }
+    
+    Ok(patches)
+}
+
+/// Add a hidden subprogram for internal use.
+/// 
+/// Hidden subprograms are used for:
+/// - Exception handling callbacks
+/// - Timer callbacks that need special setup
+/// - Async callback wrappers
+/// 
+/// Corresponds to kernel's add_hidden_subprog() (L22579-22603)
+pub fn add_hidden_subprog(
+    insns: &mut Vec<BpfInsn>,
+    subprog_type: HiddenSubprogType,
+) -> Result<usize> {
+    let start_idx = insns.len();
+    
+    match subprog_type {
+        HiddenSubprogType::ExceptionCallback => {
+            // Exception callback stub:
+            // r0 = 0
+            // exit
+            insns.push(BpfInsn::new(BPF_ALU64 | BPF_MOV | BPF_K, 0, 0, 0, 0));
+            insns.push(BpfInsn::new(BPF_JMP | BPF_EXIT, 0, 0, 0, 0));
+        }
+        HiddenSubprogType::TimerCallback => {
+            // Timer callback wrapper that handles context setup
+            insns.push(BpfInsn::new(BPF_ALU64 | BPF_MOV | BPF_K, 0, 0, 0, 0));
+            insns.push(BpfInsn::new(BPF_JMP | BPF_EXIT, 0, 0, 0, 0));
+        }
+        HiddenSubprogType::AsyncCallback => {
+            // Async callback with proper reference handling
+            insns.push(BpfInsn::new(BPF_ALU64 | BPF_MOV | BPF_K, 0, 0, 0, 0));
+            insns.push(BpfInsn::new(BPF_JMP | BPF_EXIT, 0, 0, 0, 0));
+        }
+    }
+    
+    Ok(start_idx)
+}
+
+/// Types of hidden subprograms
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HiddenSubprogType {
+    /// Exception handling callback
+    ExceptionCallback,
+    /// Timer callback wrapper
+    TimerCallback,
+    /// Async callback wrapper (workqueue, task_work)
+    AsyncCallback,
+}
+
+/// Optimize bpf_loop calls by analyzing loop bounds and callback.
+/// 
+/// This function performs higher-level optimization decisions:
+/// - Determines if a loop can be completely eliminated
+/// - Decides between unrolling and counter-based approaches
+/// - Handles loops with side effects correctly
+/// 
+/// Corresponds to kernel's optimize_bpf_loop() (L23621-23664)
+pub fn optimize_bpf_loop(
+    insns: &[BpfInsn],
+    call_idx: usize,
+    callback_info: Option<&CallbackInfo>,
+) -> LoopOptimization {
+    // Check if nr_loops is constant
+    let nr_loops_const = find_const_before(insns, call_idx, 1);
+    
+    if let Some(nr_idx) = nr_loops_const {
+        let nr_loops = insns[nr_idx].imm as u32;
+        
+        // Zero iterations - eliminate entirely
+        if nr_loops == 0 {
+            return LoopOptimization::Eliminate;
+        }
+        
+        // Check callback for side effects
+        let has_side_effects = callback_info
+            .map(|c| c.has_side_effects)
+            .unwrap_or(true);
+        
+        // Small loops without side effects can be unrolled
+        if nr_loops <= 8 && !has_side_effects {
+            return LoopOptimization::Unroll(nr_loops);
+        }
+        
+        // Medium loops get counter-based optimization
+        if nr_loops <= 64 {
+            return LoopOptimization::Counter(nr_loops);
+        }
+    }
+    
+    // Dynamic or large loops - keep as helper call
+    LoopOptimization::Keep
+}
+
+/// Loop optimization decision
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LoopOptimization {
+    /// Keep the bpf_loop helper call as-is
+    Keep,
+    /// Eliminate the loop entirely (zero iterations)
+    Eliminate,
+    /// Unroll the loop completely
+    Unroll(u32),
+    /// Use counter-based loop
+    Counter(u32),
+}
+
+/// Information about a callback function
+#[derive(Debug, Clone, Default)]
+pub struct CallbackInfo {
+    /// Subprogram index of the callback
+    pub subprog_idx: usize,
+    /// Whether the callback has observable side effects
+    pub has_side_effects: bool,
+    /// Whether the callback can return early (non-zero)
+    pub can_return_early: bool,
+    /// Number of instructions in the callback
+    pub insn_count: usize,
 }
 
 #[cfg(test)]

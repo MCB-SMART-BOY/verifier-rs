@@ -12,7 +12,7 @@
 
 
 #[cfg(not(feature = "std"))]
-use alloc::{format, string::String, vec, vec::Vec};
+use alloc::format;
 
 use crate::state::reg_state::{BpfRegState, RegLiveness};
 use crate::state::verifier_state::BpfVerifierState;

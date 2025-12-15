@@ -12,7 +12,7 @@
 #![allow(missing_docs)]
 
 #[cfg(not(feature = "std"))]
-use alloc::{format, string::{String, ToString}, vec, vec::Vec};
+use alloc::{format, string::String, vec::Vec};
 
 #[cfg(not(feature = "std"))]
 use alloc::collections::BTreeMap as HashMap;

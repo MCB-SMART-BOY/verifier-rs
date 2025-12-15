@@ -20,7 +20,7 @@
 
 
 #[cfg(not(feature = "std"))]
-use alloc::{boxed::Box, format, string::String, vec, vec::Vec};
+use alloc::{boxed::Box, format, vec, vec::Vec};
 
 use crate::core::types::*;
 use crate::core::error::{Result, VerifierError};
