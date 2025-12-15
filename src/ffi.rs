@@ -21,6 +21,7 @@
 //! - No data races occur
 
 #![allow(unsafe_code)]
+#![allow(missing_docs)]
 
 use core::ffi::c_void;
 use core::ptr;
@@ -30,7 +31,7 @@ use core::slice;
 use alloc::{vec, vec::Vec, string::String, boxed::Box};
 
 use crate::core::types::*;
-use crate::core::error::{Result, VerifierError};
+use crate::core::error::VerifierError;
 use crate::verifier::{VerifierEnv, MainVerifier};
 
 // ============================================================================

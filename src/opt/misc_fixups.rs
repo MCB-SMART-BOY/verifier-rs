@@ -693,7 +693,8 @@ pub mod map_types {
 /// Array map header size (kernel internal structure)
 const ARRAY_MAP_HEADER_SIZE: u32 = 64;
 
-/// Hash map bucket header size
+/// Hash map bucket header size (reserved for hash map optimization)
+#[allow(dead_code)]
 const HASH_MAP_BUCKET_SIZE: u32 = 8;
 
 /// Try to inline a map lookup operation.
@@ -908,7 +909,8 @@ fn try_optimize_hash_lookup(
 
 /// Key setup information for hash map optimization
 struct KeySetupInfo {
-    /// Stack offset where key is stored
+    /// Stack offset where key is stored (reserved for future optimization)
+    #[allow(dead_code)]
     stack_offset: i16,
     /// Constant key bytes if detectable
     const_key: Option<Vec<u8>>,
@@ -2038,7 +2040,7 @@ impl BpfFunc {
 /// 
 /// Corresponds to kernel's fixup_call_args() (L22354-22403)
 pub fn fixup_call_args(
-    insns: &mut Vec<BpfInsn>,
+    _insns: &mut Vec<BpfInsn>,
     call_idx: usize,
     arg_types: &[ArgType],
 ) -> Result<Vec<Patch>> {
@@ -2105,8 +2107,8 @@ pub enum ArgType {
 /// 
 /// Corresponds to kernel's __fixup_collection_insert_kfunc() (L22449-22464)
 pub fn fixup_collection_insert_kfunc(
-    insns: &mut Vec<BpfInsn>,
-    call_idx: usize,
+    _insns: &mut Vec<BpfInsn>,
+    _call_idx: usize,
     collection_type: CollectionType,
 ) -> Result<Vec<Patch>> {
     let patches = Vec::new();

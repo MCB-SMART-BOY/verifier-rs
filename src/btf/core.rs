@@ -25,6 +25,7 @@ use super::btf::{Btf, BtfKind, BtfType, BtfMember};
 use super::func_info::{BpfCoreRelo, BpfCoreReloKind};
 
 /// Maximum depth for type resolution to prevent infinite loops
+#[allow(dead_code)]
 const MAX_RESOLVE_DEPTH: usize = 32;
 
 /// Maximum number of access path components

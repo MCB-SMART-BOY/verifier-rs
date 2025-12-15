@@ -485,7 +485,7 @@ pub fn process_wq_func(
     reg: &BpfRegState,
     kfunc_id: u32,
     map_uid: u32,
-    insn_idx: usize,
+    _insn_idx: usize,
 ) -> Result<Option<WorkqueueInfo>> {
     // Verify the register points to a map value
     if reg.reg_type != BpfRegType::PtrToMapValue {
@@ -542,7 +542,7 @@ pub fn process_task_work_func(
     reg: &BpfRegState,
     kfunc_id: u32,
     map_uid: u32,
-    insn_idx: usize,
+    _insn_idx: usize,
 ) -> Result<Option<TaskWorkInfo>> {
     // Verify the register points to a map value
     if reg.reg_type != BpfRegType::PtrToMapValue {
@@ -592,7 +592,7 @@ pub fn process_task_work_func(
 /// 2. The callback signature matches expected prototype
 /// 3. The workqueue is associated with the correct map
 pub fn validate_wq_callback(
-    callback_subprog: usize,
+    _callback_subprog: usize,
     wq_info: &WorkqueueInfo,
     prog_type: BpfProgType,
 ) -> Result<()> {
@@ -619,8 +619,8 @@ pub fn validate_wq_callback(
 
 /// Validate task_work callback registration.
 pub fn validate_task_work_callback(
-    callback_subprog: usize,
-    tw_info: &TaskWorkInfo,
+    _callback_subprog: usize,
+    _tw_info: &TaskWorkInfo,
     prog_type: BpfProgType,
 ) -> Result<()> {
     // Task work has similar restrictions

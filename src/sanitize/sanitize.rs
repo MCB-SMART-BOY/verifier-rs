@@ -1374,7 +1374,8 @@ pub struct SpectreV1Analyzer {
     path: SpeculativePathTracker,
     /// Detected gadgets
     gadgets: Vec<SpectreV1Gadget>,
-    /// Configuration
+    /// Configuration (reserved for future use)
+    #[allow(dead_code)]
     config: SpectreConfig,
 }
 

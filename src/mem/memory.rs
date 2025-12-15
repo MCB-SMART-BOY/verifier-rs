@@ -733,6 +733,7 @@ fn check_btf_id_access(
 }
 
 /// Check generic memory region access (legacy wrapper)
+#[allow(dead_code)]
 fn check_mem_region_access(
     reg: &BpfRegState,
     off: i32,
