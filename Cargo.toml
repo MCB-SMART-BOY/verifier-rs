@@ -1,0 +1,60 @@
+[package]
+name = "bpf-verifier"
+version = "0.1.0"
+edition = "2021"
+authors = ["MCB-SMART-BOY <mcb2720838051@gmail.com>"]
+description = "A Rust implementation of the Linux kernel BPF verifier"
+license = "GPL-2.0-only"
+repository = "https://github.com/yourusername/bpf-verifier"
+documentation = "https://docs.rs/bpf-verifier"
+readme = "README.md"
+keywords = ["bpf", "ebpf", "verifier", "linux", "security"]
+categories = ["development-tools", "parsing", "no-std"]
+
+[lib]
+name = "bpf_verifier"
+path = "src/lib.rs"
+
+[[example]]
+name = "demo"
+path = "examples/demo.rs"
+
+[[example]]
+name = "verify_program"
+path = "examples/verify_program.rs"
+
+[[bin]]
+name = "test_harness"
+path = "tools/test_harness.rs"
+required-features = ["std"]
+
+[dependencies]
+# thiserror requires std, use conditional compilation
+thiserror = { version = "1.0", optional = true }
+bitflags = "2.4"
+
+# no_std compatible error handling
+derive_more = { version = "1.0", default-features = false, features = ["display", "from"] }
+
+[dev-dependencies]
+# For examples and tests
+criterion = { version = "0.5", features = ["html_reports"] }
+
+[[bench]]
+name = "verifier_benchmarks"
+harness = false
+
+[features]
+default = ["std"]
+# Standard library support (user-space)
+std = ["thiserror"]
+# Kernel mode (no_std)
+kernel = []
+# Enable verbose logging
+verbose = []
+# Enable statistics collection
+stats = []
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
