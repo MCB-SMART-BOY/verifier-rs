@@ -46,25 +46,10 @@ expect "#"
 sleep 1
 
 puts "\n=== Installing build dependencies ==="
-send "apk update && apk add build-base linux-virt-dev rust cargo rustup binutils\r"
+send "apk update && apk add build-base linux-virt-dev binutils\r"
 expect {
     "#" { }
     timeout { puts "Timeout installing packages"; exit 1 }
-}
-sleep 2
-
-puts "\n=== Setting up Rust nightly for build-std ==="
-send "rustup-init -y --default-toolchain nightly 2>&1 | tail -10\r"
-expect {
-    "#" { }
-    timeout { puts "Timeout installing rustup"; exit 1 }
-}
-sleep 3
-
-send "source \$HOME/.cargo/env && rustup component add rust-src --toolchain nightly 2>&1 | tail -5\r"
-expect {
-    "#" { }
-    timeout { puts "Timeout adding rust-src"; exit 1 }
 }
 sleep 2
 
@@ -73,23 +58,20 @@ send "KVER=\$(ls /lib/modules/ | head -1) && echo \"Kernel: \$KVER\"\r"
 expect "#"
 sleep 1
 
-puts "\n=== Building Rust static library with kernel target ==="
-send "source \$HOME/.cargo/env && cd /mnt/verifier-rs && cargo +nightly build --release --features kernel,ffi --no-default-features -Z build-std=core,alloc --target x86_64-linux-kernel.json 2>&1 | tail -40\r"
+# Use pre-built Rust library from host (built with kernel target)
+puts "\n=== Checking pre-built Rust library ==="
+send "ls -la /mnt/verifier-rs/target/x86_64-linux-kernel/release/libbpf_verifier.a 2>/dev/null && echo 'RUST_LIB_OK' || echo 'NO_RUST_LIB'\r"
 expect {
-    "Finished" {
-        puts "\n=== Rust library built successfully ==="
+    "RUST_LIB_OK" {
+        puts "\n=== Pre-built Rust library found ==="
     }
-    "error" {
-        puts "\n=== Rust build error detected ==="
+    "NO_RUST_LIB" {
+        puts "\n=== ERROR: Rust library not found. Build on host first! ==="
+        exit 1
     }
     "#" { }
-    timeout { puts "Timeout building Rust"; exit 1 }
 }
-sleep 2
-
-# Wait for prompt
-send "\r"
-expect "#"
+sleep 1
 
 puts "\n=== Pre-processing Rust library (stripping problematic sections) ==="
 send "cd /mnt/verifier-rs/kernel-module && sh strip-rust-lib.sh\r"

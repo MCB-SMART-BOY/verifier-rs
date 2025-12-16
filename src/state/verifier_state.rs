@@ -323,6 +323,79 @@ impl BpfVerifierState {
             cleaned: false,
         }
     }
+    
+    /// Create a new verifier state directly on the heap (kernel-safe version)
+    ///
+    /// This avoids creating a large temporary on the stack.
+    #[cfg(feature = "kernel")]
+    pub fn new_boxed() -> Box<Self> {
+        // Allocate box first, then initialize in place
+        let mut frames = Vec::with_capacity(MAX_BPF_STACK_FRAMES);
+        frames.push(Some(BpfFuncState::new_boxed(-1, 0, 0)));
+        for _ in 1..MAX_BPF_STACK_FRAMES {
+            frames.push(None);
+        }
+        
+        Box::new(Self {
+            frame: frames,
+            curframe: 0,
+            refs: ReferenceManager::new(),
+            lock_state: LockState::new(),
+            speculative: false,
+            in_sleepable: false,
+            jmp_history: Vec::new(),
+            branches: 1,
+            insn_idx: 0,
+            first_insn_idx: 0,
+            last_insn_idx: 0,
+            dfs_depth: 0,
+            callback_unroll_depth: 0,
+            may_goto_depth: 0,
+            parent_idx: None,
+            cleaned: false,
+        })
+    }
+    
+    /// Create a new verifier state directly on the heap (non-kernel version)
+    #[cfg(not(feature = "kernel"))]
+    pub fn new_boxed() -> Box<Self> {
+        Box::new(Self::new())
+    }
+    
+    /// Clone this state into a new boxed allocation (kernel-safe)
+    #[cfg(feature = "kernel")]
+    pub fn clone_boxed(&self) -> Box<Self> {
+        // Clone frames using clone_boxed to avoid stack allocation
+        let mut frames = Vec::with_capacity(MAX_BPF_STACK_FRAMES);
+        for frame_opt in &self.frame {
+            frames.push(frame_opt.as_ref().map(|f| f.clone_boxed()));
+        }
+        
+        Box::new(Self {
+            frame: frames,
+            curframe: self.curframe,
+            refs: self.refs.clone(),
+            lock_state: self.lock_state.clone(),
+            speculative: self.speculative,
+            in_sleepable: self.in_sleepable,
+            jmp_history: self.jmp_history.clone(),
+            branches: self.branches,
+            insn_idx: self.insn_idx,
+            first_insn_idx: self.first_insn_idx,
+            last_insn_idx: self.last_insn_idx,
+            dfs_depth: self.dfs_depth,
+            callback_unroll_depth: self.callback_unroll_depth,
+            may_goto_depth: self.may_goto_depth,
+            parent_idx: self.parent_idx,
+            cleaned: self.cleaned,
+        })
+    }
+    
+    /// Clone this state into a new boxed allocation (non-kernel version)
+    #[cfg(not(feature = "kernel"))]
+    pub fn clone_boxed(&self) -> Box<Self> {
+        Box::new(self.clone())
+    }
 
     /// Get the current function state
     pub fn cur_func(&self) -> Option<&BpfFuncState> {

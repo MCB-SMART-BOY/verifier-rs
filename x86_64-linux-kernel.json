@@ -13,5 +13,6 @@
     "code-model": "kernel",
     "relocation-model": "static",
     "executables": false,
-    "emit-debug-gdb-scripts": false
+    "emit-debug-gdb-scripts": false,
+    "features": "-fma,-fma4,-avx,-avx2"
 }

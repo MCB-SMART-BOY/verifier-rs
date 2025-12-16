@@ -17,5 +17,6 @@ ccflags-y := -I$(src)/../include -I$(src)/include
 RUST_OBJ := $(src)/rust_lib_stripped.o
 bpf_verifier_rs-y += rust_lib_stripped.o
 
-# Disable objtool for Rust code (it doesn't understand Rust-generated code)
-OBJECT_FILES_NON_STANDARD_rust_lib_stripped.o := y
+# Disable objtool for this entire directory
+# Rust-generated code uses FMA4 instructions that objtool can't decode
+OBJECT_FILES_NON_STANDARD := y

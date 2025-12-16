@@ -140,7 +140,7 @@ sleep 1
 
 # Show dmesg for any kernel messages
 puts "\n=== Kernel messages ==="
-send "dmesg | grep -i bpf_verifier | tail -20\r"
+send "dmesg | tail -50\r"
 expect "#"
 sleep 1
 

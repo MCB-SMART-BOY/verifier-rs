@@ -5,6 +5,12 @@
 
 #![allow(missing_docs)] // Many internal types don't need public docs
 
+#[cfg(not(feature = "std"))]
+use crate::stdlib::Box;
+
+use core::mem::MaybeUninit;
+use core::ptr;
+
 use crate::core::types::*;
 use crate::core::error::{Result, VerifierError};
 use crate::core::log::{VerifierLog, LogLevel};
@@ -333,10 +339,10 @@ pub struct VerifierEnv {
     pub insn_aux: Vec<InsnAuxData>,
     /// Subprogram information
     pub subprogs: Vec<SubprogInfoEntry>,
-    /// Current verification state
-    pub cur_state: Option<BpfVerifierState>,
-    /// Stack of states to explore (DFS)
-    pub state_stack: Vec<(BpfVerifierState, usize)>,
+    /// Current verification state (boxed to avoid stack overflow in kernel)
+    pub cur_state: Option<Box<BpfVerifierState>>,
+    /// Stack of states to explore (DFS) - boxed for kernel safety
+    pub state_stack: Vec<(Box<BpfVerifierState>, usize)>,
     /// Explored states per instruction (for pruning)
     pub explored_states: HashMap<usize, Vec<ExploredState>>,
     /// Control flow graph information
@@ -465,6 +471,104 @@ impl VerifierEnv {
         })
     }
 
+    /// Create a new verifier environment directly on the heap.
+    /// 
+    /// This avoids placing the large VerifierEnv struct on the stack,
+    /// which is critical for kernel mode where stack space is limited.
+    /// 
+    /// # Kernel Safety
+    /// 
+    /// VerifierEnv is ~1664 bytes. In kernel mode with 8-16KB stacks,
+    /// creating it on the stack and then boxing would use significant
+    /// stack space. This method allocates on the heap first, then
+    /// initializes fields in place using ptr::write.
+    /// 
+    /// # Safety
+    /// 
+    /// This function uses unsafe code internally to write fields directly
+    /// to heap-allocated memory, avoiding stack allocation of the full struct.
+    /// All fields are properly initialized before the struct is returned.
+    #[allow(unsafe_code)]
+    pub fn new_boxed(
+        insns: Vec<BpfInsn>,
+        prog_type: BpfProgType,
+        allow_ptr_leaks: bool,
+    ) -> Result<Box<Self>> {
+        if insns.is_empty() {
+            return Err(VerifierError::EmptyProgram);
+        }
+        if insns.len() > BPF_COMPLEXITY_LIMIT_INSNS {
+            return Err(VerifierError::ProgramTooLarge(insns.len()));
+        }
+
+        let insn_count = insns.len();
+        
+        // Allocate uninitialized memory on the heap
+        let mut boxed: Box<MaybeUninit<Self>> = Box::new(MaybeUninit::uninit());
+        let env_ptr = boxed.as_mut_ptr();
+        
+        // Safety: We're writing to heap-allocated memory through raw pointers.
+        // Each field is initialized exactly once before we convert to Box<Self>.
+        unsafe {
+            // Initialize each field in place using ptr::write
+            // This avoids creating the struct on the stack
+            
+            ptr::write(ptr::addr_of_mut!((*env_ptr).prog_type), prog_type);
+            ptr::write(ptr::addr_of_mut!((*env_ptr).expected_attach_type), BpfAttachType::None);
+            ptr::write(ptr::addr_of_mut!((*env_ptr).insns), insns);
+            
+            // Build vectors - they allocate on heap internally
+            let insn_aux: Vec<InsnAuxData> = (0..insn_count)
+                .map(|i| InsnAuxData {
+                    orig_idx: i,
+                    ..Default::default()
+                })
+                .collect();
+            ptr::write(ptr::addr_of_mut!((*env_ptr).insn_aux), insn_aux);
+            
+            let subprogs = vec![SubprogInfoEntry::new(0, insn_count)];
+            ptr::write(ptr::addr_of_mut!((*env_ptr).subprogs), subprogs);
+            
+            ptr::write(ptr::addr_of_mut!((*env_ptr).cur_state), None);
+            ptr::write(ptr::addr_of_mut!((*env_ptr).state_stack), Vec::new());
+            ptr::write(ptr::addr_of_mut!((*env_ptr).explored_states), HashMap::new());
+            ptr::write(ptr::addr_of_mut!((*env_ptr).cfg), None);
+            ptr::write(ptr::addr_of_mut!((*env_ptr).scc_analysis), None);
+            ptr::write(ptr::addr_of_mut!((*env_ptr).back_edge_propagator), None);
+            
+            let sanitize_aux = vec![SanitizeAuxData::default(); insn_count];
+            ptr::write(ptr::addr_of_mut!((*env_ptr).sanitize_aux), sanitize_aux);
+            
+            ptr::write(ptr::addr_of_mut!((*env_ptr).speculative), false);
+            ptr::write(ptr::addr_of_mut!((*env_ptr).log), VerifierLog::new(LogLevel::Info));
+            ptr::write(ptr::addr_of_mut!((*env_ptr).caps), VerifierCaps::modern());
+            ptr::write(ptr::addr_of_mut!((*env_ptr).allow_ptr_leaks), allow_ptr_leaks);
+            ptr::write(ptr::addr_of_mut!((*env_ptr).insn_processed), 0);
+            ptr::write(ptr::addr_of_mut!((*env_ptr).peak_states), 0);
+            ptr::write(ptr::addr_of_mut!((*env_ptr).total_states), 0);
+            ptr::write(ptr::addr_of_mut!((*env_ptr).insn_idx), 0);
+            ptr::write(ptr::addr_of_mut!((*env_ptr).prev_insn_idx), 0);
+            ptr::write(ptr::addr_of_mut!((*env_ptr).subprog), 0);
+            ptr::write(ptr::addr_of_mut!((*env_ptr).pass_cnt), 0);
+            ptr::write(ptr::addr_of_mut!((*env_ptr).id_gen), 0);
+            ptr::write(ptr::addr_of_mut!((*env_ptr).in_callback), false);
+            ptr::write(ptr::addr_of_mut!((*env_ptr).callback_depth), 0);
+            ptr::write(ptr::addr_of_mut!((*env_ptr).exception_callback_subprog), None);
+            ptr::write(ptr::addr_of_mut!((*env_ptr).stack_write_marks), StackWriteMarks::new());
+            ptr::write(ptr::addr_of_mut!((*env_ptr).prog_sleepable), false);
+            ptr::write(ptr::addr_of_mut!((*env_ptr).btf_ctx), BtfContext::new());
+            ptr::write(ptr::addr_of_mut!((*env_ptr).struct_ops_ctx), None);
+            ptr::write(ptr::addr_of_mut!((*env_ptr).attach_btf_id), 0);
+            ptr::write(ptr::addr_of_mut!((*env_ptr).expected_attach_type_idx), 0);
+            ptr::write(ptr::addr_of_mut!((*env_ptr).has_refcounted_args), false);
+            ptr::write(ptr::addr_of_mut!((*env_ptr).race_detector), RaceDetector::new(prog_type));
+            ptr::write(ptr::addr_of_mut!((*env_ptr).race_detection_enabled), true);
+            
+            // All fields initialized, convert to Box<Self>
+            Ok(Box::from_raw(Box::into_raw(boxed) as *mut Self))
+        }
+    }
+
     /// Set BTF context for type-aware verification
     pub fn set_btf_context(&mut self, ctx: BtfContext) {
         self.btf_ctx = ctx;
@@ -553,14 +657,14 @@ impl VerifierEnv {
         idx
     }
 
-    /// Push a state to explore
-    pub fn push_state(&mut self, state: BpfVerifierState, insn_idx: usize) {
+    /// Push a state to explore (takes boxed state for kernel safety)
+    pub fn push_state(&mut self, state: Box<BpfVerifierState>, insn_idx: usize) {
         self.state_stack.push((state, insn_idx));
         self.peak_states = self.peak_states.max(self.state_stack.len());
     }
 
-    /// Pop a state to explore
-    pub fn pop_state(&mut self) -> Option<(BpfVerifierState, usize)> {
+    /// Pop a state to explore (returns boxed state)
+    pub fn pop_state(&mut self) -> Option<(Box<BpfVerifierState>, usize)> {
         self.state_stack.pop()
     }
 
@@ -1029,8 +1133,8 @@ mod tests {
         ];
         let mut env = VerifierEnv::new(insns, BpfProgType::SocketFilter, true).unwrap();
         
-        let state1 = BpfVerifierState::new();
-        let state2 = BpfVerifierState::new();
+        let state1 = Box::new(BpfVerifierState::new());
+        let state2 = Box::new(BpfVerifierState::new());
         
         env.push_state(state1, 0);
         env.push_state(state2, 5);

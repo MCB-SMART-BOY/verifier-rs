@@ -93,39 +93,54 @@ impl LoopDetector {
         Ok(())
     }
 
-    /// DFS to find back edges
-    fn dfs(&mut self, insns: &[BpfInsn], idx: usize) -> Result<()> {
-        if idx >= insns.len() {
+    /// DFS to find back edges (iterative version to avoid stack overflow in kernel)
+    fn dfs(&mut self, insns: &[BpfInsn], start_idx: usize) -> Result<()> {
+        if start_idx >= insns.len() {
             return Ok(());
         }
 
-        if self.in_stack.contains(&idx) {
-            // Back edge found
-            return Ok(());
-        }
+        // Use explicit stack instead of recursion
+        // Each entry: (node_idx, next_successor_to_process, is_entering)
+        // is_entering: true means we're just entering this node (need to mark visited/in_stack)
+        //              false means we're returning from a child
+        let mut stack: Vec<(usize, usize, bool)> = Vec::new();
+        stack.push((start_idx, 0, true));
 
-        if self.visited.contains(&idx) {
-            return Ok(());
-        }
+        while let Some((idx, succ_idx, is_entering)) = stack.pop() {
+            if is_entering {
+                // First time visiting this node
+                if self.visited.contains(&idx) {
+                    continue;
+                }
+                self.visited.insert(idx);
+                self.in_stack.insert(idx);
+            }
 
-        self.visited.insert(idx);
-        self.in_stack.insert(idx);
+            let successors = self.get_successors(insns, idx);
+            let mut found_unvisited = false;
 
-        let _insn = &insns[idx];
+            for i in succ_idx..successors.len() {
+                let succ = successors[i];
 
-        // Get successors
-        let successors = self.get_successors(insns, idx);
+                if self.in_stack.contains(&succ) {
+                    // Back edge found
+                    self.back_edges.push((idx, succ));
+                } else if !self.visited.contains(&succ) && succ < insns.len() {
+                    // Push current node back to continue after child returns
+                    stack.push((idx, i + 1, false));
+                    // Push child to visit
+                    stack.push((succ, 0, true));
+                    found_unvisited = true;
+                    break;
+                }
+            }
 
-        for succ in successors {
-            if self.in_stack.contains(&succ) {
-                // Back edge
-                self.back_edges.push((idx, succ));
-            } else {
-                self.dfs(insns, succ)?;
+            // If no unvisited successors, we're done with this node
+            if !found_unvisited {
+                self.in_stack.remove(&idx);
             }
         }
 
-        self.in_stack.remove(&idx);
         Ok(())
     }
 

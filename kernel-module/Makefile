@@ -58,7 +58,7 @@ rust_lib:
 # Build kernel module
 module: rust_lib
 	@echo "Building kernel module..."
-	$(MAKE) -C $(KDIR) M=$(PWD) OBJTOOL=/bin/true modules
+	$(MAKE) -C $(KDIR) M=$(PWD) CONFIG_OBJTOOL= CONFIG_STACK_VALIDATION= modules
 
 # Clean everything
 clean:

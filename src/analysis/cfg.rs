@@ -319,45 +319,59 @@ impl ControlFlowGraph {
     }
 
     /// Detect loop headers (targets of back edges)
+    /// Uses iterative DFS to avoid stack overflow in kernel mode
     pub fn find_loop_headers(&self, insns: &[BpfInsn]) -> HashSet<usize> {
         let mut loop_headers = HashSet::new();
         let mut visited = HashSet::new();
         let mut in_stack = HashSet::new();
         
-        self.find_loop_headers_dfs(insns, 0, &mut visited, &mut in_stack, &mut loop_headers);
+        if insns.is_empty() {
+            return loop_headers;
+        }
+
+        // Iterative DFS
+        // Each entry: (node_idx, next_successor_to_process, is_entering)
+        // is_entering: true means we're just entering this node
+        //              false means we're returning from a child
+        let mut stack: Vec<(usize, usize, bool)> = Vec::new();
+        stack.push((0, 0, true));
+
+        while let Some((idx, succ_idx, is_entering)) = stack.pop() {
+            if is_entering {
+                // First time visiting this node
+                if visited.contains(&idx) {
+                    continue;
+                }
+                visited.insert(idx);
+                in_stack.insert(idx);
+            }
+
+            let successors = self.get_insn_successors(insns, idx);
+            let mut found_unvisited = false;
+
+            for i in succ_idx..successors.len() {
+                let succ = successors[i];
+
+                if in_stack.contains(&succ) {
+                    // Back edge found - succ is a loop header
+                    loop_headers.insert(succ);
+                } else if !visited.contains(&succ) && succ < insns.len() {
+                    // Push current node back to continue after child returns
+                    stack.push((idx, i + 1, false));
+                    // Push child to visit
+                    stack.push((succ, 0, true));
+                    found_unvisited = true;
+                    break;
+                }
+            }
+
+            // If no unvisited successors, we're done with this node
+            if !found_unvisited {
+                in_stack.remove(&idx);
+            }
+        }
         
         loop_headers
-    }
-
-    fn find_loop_headers_dfs(
-        &self,
-        insns: &[BpfInsn],
-        idx: usize,
-        visited: &mut HashSet<usize>,
-        in_stack: &mut HashSet<usize>,
-        loop_headers: &mut HashSet<usize>,
-    ) {
-        if idx >= insns.len() || visited.contains(&idx) {
-            if in_stack.contains(&idx) {
-                // Back edge found - idx is a loop header
-                loop_headers.insert(idx);
-            }
-            return;
-        }
-
-        visited.insert(idx);
-        in_stack.insert(idx);
-
-        for succ in self.get_insn_successors(insns, idx) {
-            if in_stack.contains(&succ) {
-                // Back edge to succ
-                loop_headers.insert(succ);
-            } else if !visited.contains(&succ) {
-                self.find_loop_headers_dfs(insns, succ, visited, in_stack, loop_headers);
-            }
-        }
-
-        in_stack.remove(&idx);
     }
 }
 

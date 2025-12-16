@@ -56,7 +56,7 @@ int main(void)
     int ret;
     struct bpf_verify_request req;
     struct bpf_verifier_stats_rs stats;
-    
+
     /* Simple program: mov r0, 0; exit */
     struct bpf_insn_rs prog[2] = {
         { .code = BPF_ALU64 | BPF_MOV | BPF_K, .dst_reg = 0, .src_reg = 0, .off = 0, .imm = 0 },
@@ -86,7 +86,7 @@ int main(void)
     req.insn_cnt = 0;
     req.insns_ptr = 0;
     ret = ioctl(fd, BPF_VERIFY_RS_VERIFY, &req);
-    printf("  ioctl returned: %d (errno=%d, expected EINVAL=%d)\n", 
+    printf("  ioctl returned: %d (errno=%d, expected EINVAL=%d)\n",
            ret, ret < 0 ? errno : 0, EINVAL);
 
     /* Test 3: Prepare valid request but don't send yet */
@@ -99,7 +99,7 @@ int main(void)
     req.log_size = 0;
     req.log_buf_ptr = 0;
     req.result = -999;
-    
+
     printf("  prog_type: %u\n", req.prog_type);
     printf("  insn_cnt: %u\n", req.insn_cnt);
     printf("  insns_ptr: %p\n", (void*)req.insns_ptr);
@@ -114,9 +114,9 @@ int main(void)
     printf("\nTest 4: VERIFY with valid program\n");
     printf("  Calling ioctl...\n");
     fflush(stdout);
-    
+
     ret = ioctl(fd, BPF_VERIFY_RS_VERIFY, &req);
-    
+
     printf("  ioctl returned: %d\n", ret);
     if (ret < 0) {
         printf("  errno: %d (%s)\n", errno, strerror(errno));

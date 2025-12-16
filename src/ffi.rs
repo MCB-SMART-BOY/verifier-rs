@@ -32,7 +32,6 @@ use alloc::{vec::Vec, boxed::Box};
 
 use crate::core::types::*;
 use crate::core::error::VerifierError;
-#[cfg(not(feature = "kernel"))]
 use crate::verifier::MainVerifier;
 use crate::verifier::VerifierEnv;
 
@@ -195,9 +194,10 @@ pub unsafe extern "C" fn bpf_verifier_env_new(
         _ => BpfProgType::Unspec,
     };
 
-    // Create verifier environment
-    match VerifierEnv::new(rust_insns, prog_type, is_privileged) {
-        Ok(env) => Box::into_raw(Box::new(env)) as BpfVerifierEnvHandle,
+    // Create verifier environment - use new_boxed to avoid stack allocation
+    // VerifierEnv is ~1664 bytes which is too large for kernel stack
+    match VerifierEnv::new_boxed(rust_insns, prog_type, is_privileged) {
+        Ok(env) => Box::into_raw(env) as BpfVerifierEnvHandle,
         Err(_) => ptr::null_mut(),
     }
 }
@@ -231,89 +231,17 @@ pub unsafe extern "C" fn bpf_verify(handle: BpfVerifierEnvHandle) -> i32 {
         return BpfVerifierError::Invalid as i32;
     }
 
-    // In kernel mode, use simplified verification to avoid stack overflow
-    // The full verifier requires large state structures that exceed kernel stack
-    #[cfg(feature = "kernel")]
-    {
-        return bpf_verify_kernel_safe(handle);
-    }
+    // Full verification uses heap-allocated MainVerifier
+    let env = &mut *(handle as *mut VerifierEnv);
     
-    #[cfg(not(feature = "kernel"))]
-    {
-        let env = &mut *(handle as *mut VerifierEnv);
-        let mut verifier = MainVerifier::new(env);
+    // Allocate MainVerifier on heap to avoid stack overflow
+    // MainVerifier::new() should also avoid large stack allocations
+    let mut verifier = Box::new(MainVerifier::new(env));
 
-        match verifier.verify() {
-            Ok(()) => BpfVerifierError::Ok as i32,
-            Err(e) => BpfVerifierError::from(e) as i32,
-        }
+    match verifier.verify() {
+        Ok(()) => BpfVerifierError::Ok as i32,
+        Err(e) => BpfVerifierError::from(e) as i32,
     }
-}
-
-/// Kernel-safe verification that avoids large stack allocations.
-/// 
-/// This performs basic structural validation without the full state machine:
-/// - Checks program ends with EXIT
-/// - Validates all jump targets are in bounds
-/// - Checks for unreachable code after unconditional jumps/exits
-/// - Validates register usage (basic checks)
-///
-/// # Safety
-///
-/// - `handle` must be a valid handle from `bpf_verifier_env_new`
-#[cfg(feature = "kernel")]
-unsafe fn bpf_verify_kernel_safe(handle: BpfVerifierEnvHandle) -> i32 {
-    let env = &*(handle as *const VerifierEnv);
-    let insns = &env.insns;
-    let len = insns.len();
-    
-    if len == 0 {
-        return BpfVerifierError::Invalid as i32;
-    }
-    
-    // Check program ends with EXIT
-    let last_insn = &insns[len - 1];
-    if last_insn.code != 0x95 { // BPF_JMP | BPF_EXIT
-        return BpfVerifierError::Invalid as i32;
-    }
-    
-    // Validate each instruction
-    for (idx, insn) in insns.iter().enumerate() {
-        let class = insn.code & 0x07;
-        
-        match class {
-            0x05 => { // BPF_JMP
-                let op = insn.code & 0xf0;
-                
-                if op == 0x00 { // JA (unconditional jump)
-                    let target = (idx as i32 + 1 + insn.off as i32) as usize;
-                    if target >= len {
-                        return BpfVerifierError::Invalid as i32;
-                    }
-                } else if op != 0x90 { // Not EXIT, must be conditional jump
-                    let target = (idx as i32 + 1 + insn.off as i32) as usize;
-                    if target >= len {
-                        return BpfVerifierError::Invalid as i32;
-                    }
-                }
-                // 0x90 is EXIT, 0x80 is CALL - handled separately
-            }
-            0x06 => { // BPF_JMP32
-                let target = (idx as i32 + 1 + insn.off as i32) as usize;
-                if target >= len {
-                    return BpfVerifierError::Invalid as i32;
-                }
-            }
-            _ => {}
-        }
-        
-        // Check register indices are valid
-        if insn.dst_reg > 10 || insn.src_reg > 10 {
-            return BpfVerifierError::Invalid as i32;
-        }
-    }
-    
-    BpfVerifierError::Ok as i32
 }
 
 /// Run simplified verification (only checks EXIT instruction).

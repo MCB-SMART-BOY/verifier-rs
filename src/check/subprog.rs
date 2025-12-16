@@ -249,68 +249,76 @@ impl CallState {
 }
 
 /// Check maximum stack depth for all subprograms
+/// Uses iterative DFS to avoid stack overflow in kernel mode
 pub fn check_max_stack_depth(
     subprogs: &SubprogManager,
     call_state: &CallState,
 ) -> Result<i32> {
     let mut max_depth: i32 = 0;
     let mut visited = vec![false; subprogs.count()];
-    let mut stack_depth = vec![0i32; subprogs.count()];
+    let mut stack_depth_arr = vec![0i32; subprogs.count()];
 
     // Calculate stack depth for each subprogram
     for i in 0..subprogs.count() {
         if let Some(info) = subprogs.get(i) {
-            stack_depth[i] = info.stack_depth;
+            stack_depth_arr[i] = info.stack_depth;
         }
     }
 
-    // DFS through call graph
-    fn dfs(
-        idx: usize,
-        subprogs: &SubprogManager,
-        call_state: &CallState,
-        visited: &mut [bool],
-        stack_depth: &[i32],
-        depth: usize,
-        current_stack: i32,
-        max_depth: &mut i32,
-    ) -> Result<()> {
-        if depth > MAX_CALL_FRAMES {
-            return Err(VerifierError::CallStackOverflow);
+    // Build adjacency list for call graph
+    let mut callees: Vec<Vec<usize>> = vec![Vec::new(); subprogs.count()];
+    for site in &call_state.call_sites {
+        if site.caller < subprogs.count() && site.callee < subprogs.count() {
+            callees[site.caller].push(site.callee);
         }
+    }
 
-        if visited[idx] {
-            return Ok(()); // Already processed
-        }
+    // Iterative DFS through call graph
+    // Stack contains: (subprog_idx, callee_idx, current_total_stack, call_depth)
+    let mut stack: Vec<(usize, usize, i32, usize)> = Vec::new();
+    
+    // Start from main (subprog 0)
+    let initial_total = stack_depth_arr[0];
+    if initial_total > MAX_BPF_STACK as i32 {
+        return Err(VerifierError::StackOverflow(initial_total));
+    }
+    max_depth = max_depth.max(initial_total);
+    stack.push((0, 0, initial_total, 0));
 
-        let total = current_stack + stack_depth[idx];
-        if total > MAX_BPF_STACK as i32 {
-            return Err(VerifierError::StackOverflow(total));
-        }
+    while let Some((idx, mut callee_idx, current_stack, depth)) = stack.pop() {
+        // Process remaining callees for this subprogram
+        while callee_idx < callees[idx].len() {
+            let callee = callees[idx][callee_idx];
+            callee_idx += 1;
 
-        *max_depth = (*max_depth).max(total);
-
-        // Find calls from this subprogram
-        for site in &call_state.call_sites {
-            if site.caller == idx {
-                dfs(
-                    site.callee,
-                    subprogs,
-                    call_state,
-                    visited,
-                    stack_depth,
-                    depth + 1,
-                    total,
-                    max_depth,
-                )?;
+            if depth + 1 > MAX_CALL_FRAMES {
+                return Err(VerifierError::CallStackOverflow);
             }
+
+            if visited[callee] {
+                continue; // Already processed
+            }
+
+            let total = current_stack + stack_depth_arr[callee];
+            if total > MAX_BPF_STACK as i32 {
+                return Err(VerifierError::StackOverflow(total));
+            }
+
+            max_depth = max_depth.max(total);
+
+            // Push current state back with updated callee index
+            stack.push((idx, callee_idx, current_stack, depth));
+            
+            // Push callee to explore
+            stack.push((callee, 0, total, depth + 1));
+            break;
         }
 
-        visited[idx] = true;
-        Ok(())
+        // If we've processed all callees for this node, mark as visited
+        if callee_idx >= callees[idx].len() {
+            visited[idx] = true;
+        }
     }
-
-    dfs(0, subprogs, call_state, &mut visited, &stack_depth, 0, 0, &mut max_depth)?;
 
     Ok(max_depth)
 }
