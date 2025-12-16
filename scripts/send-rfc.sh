@@ -7,9 +7,9 @@
 
 set -e
 
-# Configuration - EDIT THESE
-YOUR_NAME="Your Name"
-YOUR_EMAIL="your@email.com"
+# Configuration
+YOUR_NAME="MCB-SMART-BOY"
+YOUR_EMAIL="mcb2720838051@gmail.com"
 
 # Mailing lists
 TO_LIST="rust-for-linux@vger.kernel.org"

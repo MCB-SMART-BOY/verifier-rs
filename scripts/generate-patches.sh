@@ -19,7 +19,7 @@ rm -f ${PATCH_DIR}/*.patch
 
 # Generate cover letter
 cat > ${PATCH_DIR}/0000-cover-letter.patch << 'EOF'
-From: Your Name <your@email.com>
+From: MCB-SMART-BOY <mcb2720838051@gmail.com>
 Subject: [PATCH v1 0/3] Rust implementation of BPF verifier
 
 This patch series adds a Rust implementation of the BPF verifier
@@ -48,7 +48,7 @@ Testing:
 - 300+ unit tests passing
 - Benchmarks show competitive performance
 
-Your Name (3):
+MCB-SMART-BOY (3):
   bpf: Add Kconfig options for Rust BPF verifier
   bpf: Add Rust BPF verifier module  
   bpf: Hook Rust verifier into verification path
@@ -66,7 +66,7 @@ echo "Generated: ${PATCH_DIR}/0000-cover-letter.patch"
 
 # Patch 1: Kconfig
 cat > ${PATCH_DIR}/0001-bpf-Add-Kconfig-options-for-Rust-BPF-verifier.patch << 'EOF'
-From: Your Name <your@email.com>
+From: MCB-SMART-BOY <mcb2720838051@gmail.com>
 Subject: [PATCH v1 1/3] bpf: Add Kconfig options for Rust BPF verifier
 
 Add configuration options to enable the Rust BPF verifier:
@@ -78,7 +78,7 @@ Add configuration options to enable the Rust BPF verifier:
 The Rust verifier is disabled by default and requires explicit
 opt-in via Kconfig or runtime sysctl.
 
-Signed-off-by: Your Name <your@email.com>
+Signed-off-by: MCB-SMART-BOY <mcb2720838051@gmail.com>
 ---
  kernel/bpf/Kconfig      |  3 +++
  kernel/bpf/Kconfig.rust | 45 +++++++++++++++++++++++++++++++++++++++++++++
@@ -132,7 +132,7 @@ echo "Generated: ${PATCH_DIR}/0001-bpf-Add-Kconfig-options-for-Rust-BPF-verifier
 
 # Patch 2: Rust module
 cat > ${PATCH_DIR}/0002-bpf-Add-Rust-BPF-verifier-module.patch << 'EOF'
-From: Your Name <your@email.com>
+From: MCB-SMART-BOY <mcb2720838051@gmail.com>
 Subject: [PATCH v1 2/3] bpf: Add Rust BPF verifier module
 
 Add the Rust BPF verifier kernel module using the native
@@ -143,7 +143,7 @@ The module provides:
 - KernelVerifierEnv wrapper for kernel structures
 - Full verification using the bpf_verifier Rust crate
 
-Signed-off-by: Your Name <your@email.com>
+Signed-off-by: MCB-SMART-BOY <mcb2720838051@gmail.com>
 ---
  kernel/bpf/Makefile             |   1 +
  kernel/bpf/rust_bpf_verifier.rs | 100 ++++++++++++++++++++++++++++++++
@@ -159,7 +159,7 @@ echo "Generated: ${PATCH_DIR}/0002-bpf-Add-Rust-BPF-verifier-module.patch"
 
 # Patch 3: Hook integration
 cat > ${PATCH_DIR}/0003-bpf-Hook-Rust-verifier-into-verification-path.patch << 'EOF'
-From: Your Name <your@email.com>
+From: MCB-SMART-BOY <mcb2720838051@gmail.com>
 Subject: [PATCH v1 3/3] bpf: Hook Rust verifier into verification path
 
 Integrate the Rust BPF verifier into the kernel's BPF verification
@@ -169,7 +169,7 @@ sysctl is set, bpf_check() will call the Rust verifier.
 If the Rust verifier returns -ENOSYS, fall back to the C verifier.
 This allows gradual adoption and testing.
 
-Signed-off-by: Your Name <your@email.com>
+Signed-off-by: MCB-SMART-BOY <mcb2720838051@gmail.com>
 ---
  kernel/bpf/verifier.c | 15 +++++++++++++++
  1 file changed, 15 insertions(+)
