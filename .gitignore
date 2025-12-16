@@ -55,3 +55,7 @@ kernel-module/.tmp_versions/
 # Rust build
 target/
 tests/userspace/target/
+
+REPLY.txt
+RFC.md
+RFC_PLAIN.txt

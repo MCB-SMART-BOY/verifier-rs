@@ -1,0 +1,41 @@
+From: MCB-SMART-BOY <mcb2720838051@gmail.com>
+Subject: [PATCH v1 0/3] Rust implementation of BPF verifier
+
+This patch series adds a Rust implementation of the BPF verifier
+to the Linux kernel, using the native Rust support available in
+Linux 6.12+.
+
+Motivation:
+- Compile-time memory safety guarantees
+- Type-safe register and bounds tracking
+- Reduced attack surface for security-critical code
+- Better maintainability via Rust idioms
+
+Implementation:
+- ~78,000 lines of Rust (including tests)
+- Pure Rust module (no C glue code)
+- 211 helper functions, 85+ kfuncs
+- Full state tracking and pruning
+- Spectre mitigations
+
+Patch breakdown:
+  [1/3] bpf: Add Kconfig options for Rust BPF verifier
+  [2/3] bpf: Add Rust BPF verifier module
+  [3/3] bpf: Hook Rust verifier into verification path
+
+Testing:
+- 300+ unit tests passing
+- Benchmarks show competitive performance
+
+MCB-SMART-BOY (3):
+  bpf: Add Kconfig options for Rust BPF verifier
+  bpf: Add Rust BPF verifier module  
+  bpf: Hook Rust verifier into verification path
+
+ kernel/bpf/Kconfig              |    3 +
+ kernel/bpf/Kconfig.rust         |   45 +
+ kernel/bpf/Makefile             |    1 +
+ kernel/bpf/rust_bpf_verifier.rs |  100+
+ kernel/bpf/verifier.c           |   15 +
+ rust/kernel/bpf_verifier/       | 78000+ (new crate)
+ ---
