@@ -2,7 +2,6 @@
 //! Tests for bpf_verifier::bounds::tnum
 
 use bpf_verifier::prelude::*;
-use bpf_verifier::bounds::tnum::*;
 
 
     #[test]

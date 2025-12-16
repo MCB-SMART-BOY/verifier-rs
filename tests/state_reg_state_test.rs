@@ -2,7 +2,6 @@
 //! Tests for bpf_verifier::state::reg_state
 
 use bpf_verifier::prelude::*;
-use bpf_verifier::state::reg_state::*;
 
 
     #[test]

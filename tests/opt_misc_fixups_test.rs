@@ -13,7 +13,7 @@ use bpf_verifier::opt::misc_fixups::*;
         let call = BpfInsn::new(BPF_JMP | BPF_CALL, 0, 0, 0, 1);
         assert!(is_helper_call(&call));
 
-        let pseudo_call = BpfInsn::new(BPF_JMP | BPF_CALL, 0, BPF_PSEUDO_CALL as u8, 0, 1);
+        let pseudo_call = BpfInsn::new(BPF_JMP | BPF_CALL, 0, BPF_PSEUDO_CALL, 0, 1);
         assert!(!is_helper_call(&pseudo_call));
 
         let exit = BpfInsn::new(BPF_JMP | BPF_EXIT, 0, 0, 0, 0);

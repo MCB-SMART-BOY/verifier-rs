@@ -2,7 +2,6 @@
 
 //! Tests for attach target validation.
 
-use bpf_verifier::prelude::*;
 use bpf_verifier::check::attach_target::{
     check_extension_compatibility, is_sleepable_lsm_hook,
 };

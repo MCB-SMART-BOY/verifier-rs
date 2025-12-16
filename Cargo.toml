@@ -37,3 +37,12 @@ opt-level = 2
 
 [profile.dev]
 panic = "abort"
+
+[lints.rust]
+unexpected_cfgs = { level = "allow", check-cfg = ['cfg(feature, values("__disabled_test__"))'] }
+
+[lints.clippy]
+field_reassign_with_default = "allow"
+unnecessary_cast = "allow"
+unnecessary_map_or = "allow"
+get_first = "allow"

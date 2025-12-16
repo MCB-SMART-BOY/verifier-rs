@@ -28,8 +28,10 @@ use bpf_verifier::check::helper::*;
 
     #[test]
     fn test_check_mem_arg() {
-        let mut reg = BpfRegState::default();
-        reg.reg_type = BpfRegType::PtrToStack;
+        let mut reg = BpfRegState {
+            reg_type: BpfRegType::PtrToStack,
+            ..Default::default()
+        };
         
         assert!(check_mem_arg(&reg, "memory").is_ok());
         

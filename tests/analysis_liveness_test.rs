@@ -1,5 +1,6 @@
 // TODO: Export internal functions for testing
 #![cfg(feature = "__disabled_test__")]
+#![allow(unexpected_cfgs)]
 // SPDX-License-Identifier: GPL-2.0
 //! Tests for bpf_verifier::analysis::liveness
 

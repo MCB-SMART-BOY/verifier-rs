@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 //! Tests for bpf_verifier::btf::validation
 
-use bpf_verifier::prelude::*;
 use bpf_verifier::btf::validation::*;
 
 

@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 //! Tests for bpf_verifier::check::special_types
 
-use bpf_verifier::prelude::*;
 use bpf_verifier::check::special_types::*;
 
 

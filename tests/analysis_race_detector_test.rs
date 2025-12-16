@@ -88,7 +88,7 @@ use bpf_verifier::analysis::race_detector::*;
         detector.mark_shared_global(1);
         
         // Should not detect race - same lock protects both
-        let races = detector.analyze();
+        let _races = detector.analyze();
         // Note: This specific test depends on is_compatible_with logic
     }
 
