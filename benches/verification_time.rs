@@ -1,18 +1,14 @@
 // SPDX-License-Identifier: GPL-2.0
 //! Benchmarks for BPF verification time
 
-#![feature(test)]
+use criterion::{black_box, criterion_group, criterion_main, Criterion};
 
-extern crate test;
-
-use bpf_verifier::core::insn::*;
-use bpf_verifier::core::types::BpfProgType;
+use bpf_verifier::core::types::{BpfInsn, BpfProgType};
+use bpf_verifier::prelude::*;
 use bpf_verifier::verifier::{MainVerifier, VerifierEnv};
-use test::Bencher;
 
 /// Create a simple BPF program that just returns 0
-fn simple_program() -> Vec<bpf_verifier::core::types::BpfInsn> {
-    use bpf_verifier::core::types::BpfInsn;
+fn simple_program() -> Vec<BpfInsn> {
     vec![
         // mov r0, 0
         BpfInsn::new(BPF_ALU64 | BPF_MOV | BPF_K, 0, 0, 0, 0),
@@ -22,8 +18,7 @@ fn simple_program() -> Vec<bpf_verifier::core::types::BpfInsn> {
 }
 
 /// Create a medium complexity program with branches
-fn medium_program() -> Vec<bpf_verifier::core::types::BpfInsn> {
-    use bpf_verifier::core::types::BpfInsn;
+fn medium_program() -> Vec<BpfInsn> {
     let mut insns = Vec::new();
     
     // r0 = 0
@@ -31,14 +26,12 @@ fn medium_program() -> Vec<bpf_verifier::core::types::BpfInsn> {
     // r1 = 10
     insns.push(BpfInsn::new(BPF_ALU64 | BPF_MOV | BPF_K, 1, 0, 0, 10));
     
-    // Loop: 10 iterations
+    // Unrolled loop iterations
     for _ in 0..10 {
         // r0 += 1
         insns.push(BpfInsn::new(BPF_ALU64 | BPF_ADD | BPF_K, 0, 0, 0, 1));
         // r1 -= 1
         insns.push(BpfInsn::new(BPF_ALU64 | BPF_SUB | BPF_K, 1, 0, 0, 1));
-        // if r1 > 0 goto loop
-        insns.push(BpfInsn::new(BPF_JMP | BPF_JGT | BPF_K, 1, 0, -3i16 as i16, 0));
     }
     
     // exit
@@ -48,8 +41,7 @@ fn medium_program() -> Vec<bpf_verifier::core::types::BpfInsn> {
 }
 
 /// Create a complex program with many instructions
-fn complex_program() -> Vec<bpf_verifier::core::types::BpfInsn> {
-    use bpf_verifier::core::types::BpfInsn;
+fn complex_program() -> Vec<BpfInsn> {
     let mut insns = Vec::new();
     
     // Initialize registers
@@ -73,62 +65,78 @@ fn complex_program() -> Vec<bpf_verifier::core::types::BpfInsn> {
     insns
 }
 
-#[bench]
-fn bench_simple_verification(b: &mut Bencher) {
+fn bench_simple_verification(c: &mut Criterion) {
     let insns = simple_program();
     
-    b.iter(|| {
-        let mut env = VerifierEnv::new(insns.clone(), BpfProgType::SocketFilter, false)
-            .expect("Failed to create env");
-        let mut verifier = MainVerifier::new(&mut env);
-        verifier.verify()
+    c.bench_function("simple_verification", |b| {
+        b.iter(|| {
+            let mut env = VerifierEnv::new(black_box(insns.clone()), BpfProgType::SocketFilter, false)
+                .expect("Failed to create env");
+            let mut verifier = MainVerifier::new(&mut env);
+            verifier.verify()
+        })
     });
 }
 
-#[bench]
-fn bench_medium_verification(b: &mut Bencher) {
+fn bench_medium_verification(c: &mut Criterion) {
     let insns = medium_program();
     
-    b.iter(|| {
-        let mut env = VerifierEnv::new(insns.clone(), BpfProgType::SocketFilter, false)
-            .expect("Failed to create env");
-        let mut verifier = MainVerifier::new(&mut env);
-        verifier.verify()
+    c.bench_function("medium_verification", |b| {
+        b.iter(|| {
+            let mut env = VerifierEnv::new(black_box(insns.clone()), BpfProgType::SocketFilter, false)
+                .expect("Failed to create env");
+            let mut verifier = MainVerifier::new(&mut env);
+            verifier.verify()
+        })
     });
 }
 
-#[bench]
-fn bench_complex_verification(b: &mut Bencher) {
+fn bench_complex_verification(c: &mut Criterion) {
     let insns = complex_program();
     
-    b.iter(|| {
-        let mut env = VerifierEnv::new(insns.clone(), BpfProgType::SocketFilter, false)
-            .expect("Failed to create env");
-        let mut verifier = MainVerifier::new(&mut env);
-        verifier.verify()
+    c.bench_function("complex_verification", |b| {
+        b.iter(|| {
+            let mut env = VerifierEnv::new(black_box(insns.clone()), BpfProgType::SocketFilter, false)
+                .expect("Failed to create env");
+            let mut verifier = MainVerifier::new(&mut env);
+            verifier.verify()
+        })
     });
 }
 
-#[bench]
-fn bench_state_creation(b: &mut Bencher) {
+fn bench_state_creation(c: &mut Criterion) {
     use bpf_verifier::state::verifier_state::BpfFuncState;
     
-    b.iter(|| {
-        BpfFuncState::new(0, 0, 0)
+    c.bench_function("state_creation", |b| {
+        b.iter(|| {
+            black_box(BpfFuncState::new(0, 0, 0))
+        })
     });
 }
 
-#[bench]
-fn bench_bounds_operations(b: &mut Bencher) {
+fn bench_bounds_operations(c: &mut Criterion) {
     use bpf_verifier::bounds::scalar::ScalarBounds;
     
     let a = ScalarBounds::known(1000);
     let b_bounds = ScalarBounds::known(42);
     
-    b.iter(|| {
-        let result = a.add(&b_bounds);
-        let result = result.sub(&b_bounds);
-        let result = result.mul(&b_bounds);
-        result.div(&b_bounds, true)
+    c.bench_function("bounds_operations", |b| {
+        b.iter(|| {
+            let result = a.add(black_box(&b_bounds), true).unwrap();
+            let result = result.sub(&b_bounds, true).unwrap();
+            let result = result.mul(&b_bounds, true).unwrap();
+            result.div(&b_bounds, true)
+        })
     });
 }
+
+criterion_group!(
+    benches,
+    bench_simple_verification,
+    bench_medium_verification,
+    bench_complex_verification,
+    bench_state_creation,
+    bench_bounds_operations,
+);
+
+criterion_main!(benches);
