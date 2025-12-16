@@ -1374,8 +1374,7 @@ pub struct SpectreV1Analyzer {
     path: SpeculativePathTracker,
     /// Detected gadgets
     gadgets: Vec<SpectreV1Gadget>,
-    /// Configuration (reserved for future use)
-    #[allow(dead_code)]
+    /// Configuration for Spectre mitigation behavior
     config: SpectreConfig,
 }
 
@@ -1398,6 +1397,11 @@ impl SpectreV1Analyzer {
         insn_idx: usize,
         is_taken: bool,
     ) {
+        // Skip analysis if Spectre v1 mitigations are disabled
+        if !self.config.mitigate_v1 {
+            return;
+        }
+        
         let dst_reg = insn.dst_reg as usize;
         
         // Enter speculative path
@@ -1416,10 +1420,13 @@ impl SpectreV1Analyzer {
         }
         
         // Check for wide bounds that suggest array indexing
+        // In aggressive mode, use a lower threshold
+        let range_threshold = if self.config.aggressive { 64 } else { 256 };
+        
         if let Some(reg) = state.reg(dst_reg) {
             if reg.reg_type == BpfRegType::ScalarValue {
                 let range = reg.umax_value.saturating_sub(reg.umin_value);
-                if range > 256 && self.taint.is_tainted(dst_reg) {
+                if range > range_threshold && self.taint.is_tainted(dst_reg) {
                     // This is a potential Spectre v1 gadget source
                     self.gadgets.push(SpectreV1Gadget {
                         gadget_type: SpectreV1GadgetType::BoundsCheckBypass,
@@ -1430,7 +1437,11 @@ impl SpectreV1Analyzer {
                             "bounds check on tainted R{} with range {}",
                             dst_reg, range
                         ),
-                        mitigation: MitigationStrategy::IndexMasking,
+                        mitigation: if self.config.aggressive {
+                            MitigationStrategy::SpeculationBarrier
+                        } else {
+                            MitigationStrategy::IndexMasking
+                        },
                         is_speculative: true,
                     });
                 }
@@ -1445,6 +1456,11 @@ impl SpectreV1Analyzer {
         insn: &BpfInsn,
         insn_idx: usize,
     ) {
+        // Skip analysis if Spectre v1 mitigations are disabled
+        if !self.config.mitigate_v1 {
+            return;
+        }
+        
         // Record this instruction on speculative path
         self.path.record_insn(insn_idx);
         

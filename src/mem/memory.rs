@@ -732,9 +732,11 @@ fn check_btf_id_access(
     Ok(BpfRegType::ScalarValue)
 }
 
-/// Check generic memory region access (legacy wrapper)
-#[allow(dead_code)]
-fn check_mem_region_access(
+/// Check generic memory region access
+/// 
+/// Simplified API for checking memory access without user memory context.
+/// For user memory validation, use `check_mem_region_access_with_ctx` instead.
+pub fn check_mem_region_access(
     reg: &BpfRegState,
     off: i32,
     size: u32,

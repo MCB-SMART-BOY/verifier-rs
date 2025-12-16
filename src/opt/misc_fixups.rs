@@ -693,8 +693,7 @@ pub mod map_types {
 /// Array map header size (kernel internal structure)
 const ARRAY_MAP_HEADER_SIZE: u32 = 64;
 
-/// Hash map bucket header size (reserved for hash map optimization)
-#[allow(dead_code)]
+/// Hash map bucket header size for bucket offset calculations
 const HASH_MAP_BUCKET_SIZE: u32 = 8;
 
 /// Try to inline a map lookup operation.
@@ -877,11 +876,17 @@ fn try_optimize_hash_lookup(
     // If key is constant, we can precompute hash
     if let Some(key_bytes) = key_setup.const_key {
         let hash = compute_jhash(&key_bytes, 0);
-        let _bucket_idx = hash % map_info.max_entries;
+        // Calculate bucket index - each bucket is HASH_MAP_BUCKET_SIZE bytes
+        let n_buckets = map_info.max_entries;
+        let bucket_idx = hash % n_buckets;
+        // Calculate approximate bucket offset (bucket_idx * bucket_size)
+        let bucket_offset = bucket_idx * HASH_MAP_BUCKET_SIZE;
+        // Use stack_offset for key location hint
+        let key_stack_off = key_setup.stack_offset;
         
         // Generate optimized lookup:
         //   r3 = precomputed_hash
-        //   r4 = bucket_idx
+        //   r4 = bucket_idx (for JIT optimization hint)
         //   call __htab_map_lookup_elem_optimized
         //
         // This is still a call but with precomputed values
@@ -895,8 +900,23 @@ fn try_optimize_hash_lookup(
             hash as i32,
         ));
         
+        // r4 = bucket offset hint for JIT
+        new_insns.push(BpfInsn::new(
+            BPF_ALU64 | BPF_MOV | BPF_K,
+            4, 0, 0,
+            bucket_offset as i32,
+        ));
+        
+        // r5 = key stack offset (negative value indicating FP-relative)
+        // This allows JIT to directly reference the key without pointer setup
+        new_insns.push(BpfInsn::new(
+            BPF_ALU64 | BPF_MOV | BPF_K,
+            5, 0, 0,
+            key_stack_off as i32,
+        ));
+        
         // Keep original call but mark as optimized via aux data
-        // The JIT can use the hash hint
+        // The JIT can use the hash, bucket, and key location hints
         
         let mut patches = Vec::new();
         patches.push(Patch::new(idx, PatchType::InsertBefore(new_insns)));
@@ -909,8 +929,7 @@ fn try_optimize_hash_lookup(
 
 /// Key setup information for hash map optimization
 struct KeySetupInfo {
-    /// Stack offset where key is stored (reserved for future optimization)
-    #[allow(dead_code)]
+    /// Stack offset where key is stored (FP-relative, usually negative)
     stack_offset: i16,
     /// Constant key bytes if detectable
     const_key: Option<Vec<u8>>,

@@ -1267,6 +1267,12 @@ impl<'a> MainVerifier<'a> {
 
         // Check if we're in a nested function (subprogram)
         if state.curframe > 0 {
+            // Validate subprogram return value
+            let r0 = state.reg(BPF_REG_0).ok_or(
+                VerifierError::Internal("no R0".into())
+            )?;
+            self.check_subprog_return(r0)?;
+            
             // Exit from nested function - prepare return
             return Ok(InsnResult::Return);
         }
@@ -1475,15 +1481,27 @@ impl<'a> MainVerifier<'a> {
     }
     
     /// Check return value for async callback
-    #[allow(dead_code)] // Reserved for async callback verification
+    /// 
+    /// Async callbacks (timer, workqueue, etc.) have specific return value requirements.
     fn check_async_callback_return(&self, r0: &BpfRegState, expected_range: (i64, i64)) -> Result<()> {
         self.check_retval_in_range(r0, expected_range.0, expected_range.1)
     }
     
     /// Check return value for subprogram
-    #[allow(dead_code)] // Reserved for subprogram verification
     fn check_subprog_return(&self, r0: &BpfRegState) -> Result<()> {
-        // Subprograms should return scalar values
+        let state = self.env.cur_state.as_ref().ok_or(
+            VerifierError::Internal("no state".into())
+        )?;
+        
+        // Check if current subprogram is an async callback
+        if let Some(subprog) = self.env.subprogs.get(state.curframe) {
+            if subprog.is_async_cb {
+                // Async callbacks typically expect return value 0 (success) or 1 (reschedule)
+                return self.check_async_callback_return(r0, (0, 1));
+            }
+        }
+        
+        // Regular subprograms should return scalar values
         if r0.reg_type != BpfRegType::ScalarValue && r0.reg_type != BpfRegType::NotInit {
             // Allow PTR types only if they're acquired references that will be returned
             if !r0.is_pointer() || r0.ref_obj_id == 0 {

@@ -21,12 +21,8 @@ use std::collections::HashMap;
 
 use crate::core::error::{Result, VerifierError};
 use crate::core::types::*;
-use super::btf::{Btf, BtfKind, BtfType, BtfMember};
+use super::btf::{Btf, BtfKind, BtfType, BtfMember, MAX_RESOLVE_DEPTH};
 use super::func_info::{BpfCoreRelo, BpfCoreReloKind};
-
-/// Maximum depth for type resolution to prevent infinite loops
-#[allow(dead_code)]
-const MAX_RESOLVE_DEPTH: usize = 32;
 
 /// Maximum number of access path components
 const MAX_ACCESS_DEPTH: usize = 256;
@@ -343,8 +339,19 @@ impl<'a> CoreReloContext<'a> {
         // Trace through access path in target BTF
         let mut current_type = target_id;
         let mut bit_offset = 0u64;
+        let mut depth = 0usize;
 
         for component in &local_spec.access {
+            // Prevent infinite loops in type resolution
+            depth += 1;
+            if depth > MAX_RESOLVE_DEPTH {
+                return Ok(CoreReloResult {
+                    success: false,
+                    new_val: 0,
+                    exists: false,
+                    error: Some("access path too deep".into()),
+                });
+            }
             match component {
                 CoreAccessComponent::Field { name, .. } => {
                     let field_name = match name {

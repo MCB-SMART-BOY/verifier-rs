@@ -133,6 +133,26 @@ pub fn check_arg_type_compat(
         BpfArgType::PtrToKptr => {
             check_ptr_to_kptr(reg, &mut result)?;
         }
+        
+        BpfArgType::PtrToIter => {
+            // Iterator pointer - checked via special_types module
+            if reg.reg_type != BpfRegType::PtrToStack {
+                return Err(VerifierError::TypeMismatch {
+                    expected: "PTR_TO_STACK (iterator)".into(),
+                    got: format!("{:?}", reg.reg_type),
+                });
+            }
+        }
+        
+        BpfArgType::PtrToArena => {
+            // Arena pointer - checked via special_types module
+            if reg.reg_type != BpfRegType::PtrToArena {
+                return Err(VerifierError::TypeMismatch {
+                    expected: "PTR_TO_ARENA".into(),
+                    got: format!("{:?}", reg.reg_type),
+                });
+            }
+        }
     }
     
     Ok(result)

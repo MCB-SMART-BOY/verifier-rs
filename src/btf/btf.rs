@@ -8,6 +8,9 @@
 #[cfg(not(feature = "std"))]
 use alloc::{format, string::{String, ToString}, vec::Vec};
 
+/// Maximum depth for type resolution to prevent infinite loops in typedef chains
+pub const MAX_RESOLVE_DEPTH: usize = 32;
+
 #[cfg(not(feature = "std"))]
 use alloc::collections::BTreeMap as HashMap;
 #[cfg(feature = "std")]
@@ -283,7 +286,7 @@ impl Btf {
         let mut current = id;
         let mut depth = 0;
         
-        while depth < 32 {
+        while depth < MAX_RESOLVE_DEPTH {
             let ty = self.types.get(&current)?;
             match ty.kind {
                 BtfKind::Typedef | BtfKind::Volatile | 

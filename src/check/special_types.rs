@@ -121,6 +121,12 @@ pub fn check_special_type_arg(
         BpfArgType::PtrToDynptr => {
             result = check_dynptr_arg(state, reg, false);
         }
+        BpfArgType::PtrToIter => {
+            result = check_iter_arg(state, reg);
+        }
+        BpfArgType::PtrToArena => {
+            result = check_arena_arg(state, reg, ctx);
+        }
         BpfArgType::PtrToMapValue => {
             // Map value pointers may need special handling
             let _ = (state, reg, ctx);
@@ -179,8 +185,7 @@ fn check_dynptr_arg(
     result
 }
 
-/// Check iterator argument
-#[allow(dead_code)] // Reserved for open-coded iterator support
+/// Check iterator argument for open-coded iterator support
 fn check_iter_arg(
     state: &BpfVerifierState,
     reg: &BpfRegState,
@@ -226,8 +231,7 @@ fn check_iter_arg(
     result
 }
 
-/// Check arena argument
-#[allow(dead_code)] // Reserved for BPF arena support
+/// Check arena argument for BPF arena support
 fn check_arena_arg(
     state: &BpfVerifierState,
     reg: &BpfRegState,

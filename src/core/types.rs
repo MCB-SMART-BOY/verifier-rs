@@ -400,6 +400,10 @@ pub enum BpfArgType {
     PtrToTimer = 17,
     /// Pointer to kptr
     PtrToKptr = 18,
+    /// Pointer to iterator
+    PtrToIter = 19,
+    /// Pointer to arena
+    PtrToArena = 20,
 }
 
 // ============================================================================

@@ -1091,20 +1091,6 @@ impl<'a> FullPrecisionTracker<'a> {
         preds
     }
 
-    /// Merge precision requirements from source to destination
-    #[allow(dead_code)] // Reserved for advanced precision propagation
-    fn merge_precision(&mut self, dst_idx: usize, src: &BacktrackState) {
-        if dst_idx >= self.insn_states.len() {
-            return;
-        }
-
-        let dst = &mut self.insn_states[dst_idx];
-        for frame in 0..MAX_BPF_STACK_FRAMES {
-            dst.reg_masks[frame] |= src.reg_masks[frame];
-            dst.stack_masks[frame] |= src.stack_masks[frame];
-        }
-    }
-
     /// Get the precision requirements for an instruction
     pub fn get_precision_at(&self, idx: usize) -> Option<&BacktrackState> {
         self.insn_states.get(idx)

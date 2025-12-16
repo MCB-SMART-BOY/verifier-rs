@@ -1682,6 +1682,33 @@ fn check_func_arg(
             check_mem_size_bounds(reg, meta, true)?;
             Ok(())
         }
+        BpfArgType::PtrToIter => {
+            // Iterator must be on stack
+            if reg.reg_type != BpfRegType::PtrToStack {
+                return Err(VerifierError::TypeMismatch {
+                    expected: "ptr_to_iter (stack)".into(),
+                    got: format!("{:?}", reg.reg_type),
+                });
+            }
+            // Iterator typically takes 24 bytes (3 stack slots)
+            let stack_off = reg.off;
+            if stack_off > 0 || stack_off < -(MAX_BPF_STACK as i32) + 24 {
+                return Err(VerifierError::InvalidHelperCall(
+                    format!("R{} iterator at invalid stack offset {}", regno, stack_off)
+                ));
+            }
+            Ok(())
+        }
+        BpfArgType::PtrToArena => {
+            // Arena pointer type
+            if reg.reg_type != BpfRegType::PtrToArena {
+                return Err(VerifierError::TypeMismatch {
+                    expected: "ptr_to_arena".into(),
+                    got: format!("{:?}", reg.reg_type),
+                });
+            }
+            Ok(())
+        }
     }
 }
 

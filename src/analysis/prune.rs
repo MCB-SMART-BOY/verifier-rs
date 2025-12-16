@@ -13,8 +13,7 @@
 //! the kernel verifier.
 
 use crate::state::reg_state::BpfRegState;
-use crate::state::verifier_state::{BpfVerifierState, BpfFuncState};
-use crate::state::stack_state::BpfStackState;
+use crate::state::verifier_state::BpfVerifierState;
 use crate::core::types::*;
 use crate::core::error::{Result, VerifierError};
 use crate::analysis::states_equal::{
@@ -761,162 +760,6 @@ pub fn states_equal_for_pruning(cur: &BpfVerifierState, old: &BpfVerifierState) 
     states_equal_with_config(cur, old, &config)
 }
 
-/// Check if two function states are equivalent for pruning
-#[allow(dead_code)]
-fn func_states_equal(cur: &BpfFuncState, old: &BpfFuncState) -> bool {
-    // Check all registers
-    for (i, (cur_reg, old_reg)) in cur.regs.iter().zip(old.regs.iter()).enumerate() {
-        if !regs_equal(cur_reg, old_reg, i) {
-            return false;
-        }
-    }
-
-    // Check stack - cur must have initialized everything old has
-    if cur.stack.allocated_stack < old.stack.allocated_stack {
-        return false;
-    }
-
-    for i in 0..old.stack.stack.len() {
-        let cur_slot = cur.stack.stack.get(i);
-        let old_slot = old.stack.stack.get(i);
-
-        match (cur_slot, old_slot) {
-            (Some(c), Some(o)) => {
-                if !stack_slots_equal(c, o) {
-                    return false;
-                }
-            }
-            (None, Some(_)) => return false,
-            _ => {}
-        }
-    }
-
-    true
-}
-
-/// Check if two registers are equivalent for pruning
-#[allow(dead_code)]
-fn regs_equal(cur: &BpfRegState, old: &BpfRegState, _regno: usize) -> bool {
-    // If old is uninitialized, cur can be anything
-    if old.reg_type == BpfRegType::NotInit {
-        return true;
-    }
-
-    // If old is initialized, cur must be too
-    if cur.reg_type == BpfRegType::NotInit {
-        return false;
-    }
-
-    // Types must match (with some flexibility for NULL pointers)
-    if cur.reg_type != old.reg_type {
-        // Special case: PTR_MAYBE_NULL can match non-null
-        if old.type_flags.contains(BpfTypeFlag::PTR_MAYBE_NULL) {
-            // old allows NULL, but cur might not - that's fine
-            let old_base = old.reg_type;
-            let cur_base = cur.reg_type;
-            if old_base != cur_base {
-                return false;
-            }
-        } else {
-            return false;
-        }
-    }
-
-    match cur.reg_type {
-        BpfRegType::ScalarValue => {
-            // For scalars, cur must have tighter or equal bounds
-            scalar_ranges_subsumed(cur, old)
-        }
-        BpfRegType::PtrToStack |
-        BpfRegType::PtrToMapValue |
-        BpfRegType::PtrToMapKey |
-        BpfRegType::PtrToCtx |
-        BpfRegType::PtrToPacket |
-        BpfRegType::PtrToMem => {
-            // For pointers, check ID matching for NULL tracking
-            if old.type_flags.contains(BpfTypeFlag::PTR_MAYBE_NULL) {
-                // If old could be NULL, cur's NULL-ness must be tracked
-                if cur.id != old.id && old.id != 0 {
-                    // Different IDs means we can't guarantee same NULL check path
-                    // This is conservative
-                    return false;
-                }
-            }
-            // Offsets must match or cur must be more constrained
-            cur.off == old.off
-        }
-        _ => {
-            // Other types: exact match required
-            cur.off == old.off
-        }
-    }
-}
-
-/// Check if cur's scalar range is subsumed by old's
-#[allow(dead_code)]
-fn scalar_ranges_subsumed(cur: &BpfRegState, old: &BpfRegState) -> bool {
-    // cur's bounds must be within old's bounds
-    // i.e., cur is more precise/restrictive
-
-    // Unsigned bounds
-    if cur.umin_value < old.umin_value {
-        return false;
-    }
-    if cur.umax_value > old.umax_value {
-        return false;
-    }
-
-    // Signed bounds
-    if cur.smin_value < old.smin_value {
-        return false;
-    }
-    if cur.smax_value > old.smax_value {
-        return false;
-    }
-
-    // If old is precise, cur must also be precise
-    if old.precise && !cur.precise {
-        return false;
-    }
-
-    true
-}
-
-/// Check if two stack slots are equivalent
-#[allow(dead_code)]
-fn stack_slots_equal(cur: &BpfStackState, old: &BpfStackState) -> bool {
-    // Check primary slot type (last byte indicates the slot's main type)
-    let cur_type = cur.slot_type[BPF_REG_SIZE - 1];
-    let old_type = old.slot_type[BPF_REG_SIZE - 1];
-
-    // If old is invalid/misc, cur can be anything
-    if old_type == BpfStackSlotType::Invalid || 
-       old_type == BpfStackSlotType::Misc {
-        return true;
-    }
-
-    // Types must match
-    if cur_type != old_type {
-        return false;
-    }
-
-    match cur_type {
-        BpfStackSlotType::Spill => {
-            // For spills, check the spilled register state
-            regs_equal(&cur.spilled_ptr, &old.spilled_ptr, 0)
-        }
-        BpfStackSlotType::Dynptr => {
-            // Dynptr type must match (stored in spilled_ptr.dynptr)
-            cur.spilled_ptr.dynptr.dynptr_type == old.spilled_ptr.dynptr.dynptr_type
-        }
-        BpfStackSlotType::Iter => {
-            // Iterator depth must match (stored in spilled_ptr.iter)
-            cur.spilled_ptr.iter.depth == old.spilled_ptr.iter.depth
-        }
-        _ => true,
-    }
-}
-
 /// Check if states might be in a loop (quick heuristic check)
 ///
 /// This is a fast check to see if two states *might* represent
@@ -987,9 +830,10 @@ pub fn iter_active_depths_differ(old: &BpfVerifierState, cur: &BpfVerifierState)
 /// Check for iterator convergence
 ///
 /// For open-coded iterators, we need to detect when the loop
-/// has converged to a fixpoint.
-#[allow(dead_code)] // Reserved for open-coded iterator support
-fn check_iter_convergence(cur: &BpfVerifierState, old: &BpfVerifierState) -> bool {
+/// has converged to a fixpoint. Returns true if the states are
+/// equivalent and contain an active iterator, indicating the
+/// loop can be safely terminated.
+pub fn check_iter_convergence(cur: &BpfVerifierState, old: &BpfVerifierState) -> bool {
     let config = CompareConfig::for_pruning();
     if !states_equal_with_config(cur, old, &config) {
         return false;
@@ -2525,6 +2369,28 @@ fn propagate_precision_internal(
 mod tests {
     use super::*;
     use crate::bounds::tnum::Tnum;
+
+    /// Check if cur's scalar range is subsumed by old's (test helper)
+    fn scalar_ranges_subsumed(cur: &BpfRegState, old: &BpfRegState) -> bool {
+        // cur's bounds must be within old's bounds
+        if cur.umin_value < old.umin_value { return false; }
+        if cur.umax_value > old.umax_value { return false; }
+        if cur.smin_value < old.smin_value { return false; }
+        if cur.smax_value > old.smax_value { return false; }
+        if old.precise && !cur.precise { return false; }
+        true
+    }
+
+    /// Check if two registers are equivalent for pruning (test helper)
+    fn regs_equal(cur: &BpfRegState, old: &BpfRegState, _regno: usize) -> bool {
+        if old.reg_type == BpfRegType::NotInit { return true; }
+        if cur.reg_type == BpfRegType::NotInit { return false; }
+        if cur.reg_type != old.reg_type { return false; }
+        match cur.reg_type {
+            BpfRegType::ScalarValue => scalar_ranges_subsumed(cur, old),
+            _ => cur.off == old.off,
+        }
+    }
 
     #[test]
     fn test_state_cache() {
