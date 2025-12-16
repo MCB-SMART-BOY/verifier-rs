@@ -1,0 +1,21 @@
+# SPDX-License-Identifier: GPL-2.0-only
+#
+# Kbuild file for the BPF Verifier Rust kernel module
+#
+
+# Module object
+obj-m := bpf_verifier_rs.o
+
+# Source files
+bpf_verifier_rs-y := src/bpf_verifier_mod.o
+
+# Include paths
+ccflags-y := -I$(src)/../include -I$(src)/include
+
+# Link with Rust static library
+# Note: The Rust library must be built first with:
+#   cargo build --release --features "kernel,ffi" --no-default-features
+RUST_LIB := $(src)/../target/release/libbpf_verifier.a
+
+# Add Rust library to linking
+$(MODULE_NAME)-y += $(RUST_LIB)

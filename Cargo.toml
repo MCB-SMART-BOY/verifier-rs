@@ -14,6 +14,7 @@ categories = ["development-tools", "parsing", "no-std"]
 [lib]
 name = "bpf_verifier"
 path = "src/lib.rs"
+crate-type = ["lib", "staticlib"]
 
 [[example]]
 name = "demo"
@@ -56,6 +57,13 @@ ffi = []
 verbose = []
 # Enable statistics collection
 stats = []
+
+# Profile for kernel builds (panic=abort required)
+[profile.release]
+panic = "abort"
+
+[profile.dev]
+panic = "abort"
 
 [package.metadata.docs.rs]
 all-features = true

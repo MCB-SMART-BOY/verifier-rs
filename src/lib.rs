@@ -67,7 +67,9 @@
 
 #![warn(missing_docs)]
 #![warn(rust_2018_idioms)]
-#![deny(unsafe_code)]
+// Allow unsafe in kernel mode for panic handler and FFI
+#![cfg_attr(feature = "std", deny(unsafe_code))]
+#![cfg_attr(not(feature = "std"), allow(unsafe_code))]
 
 // When no_std, use alloc crate for collections
 #[cfg(not(feature = "std"))]
@@ -148,3 +150,27 @@ pub mod prelude {
 
 // Re-export error types at crate root for convenience
 pub use core::error::{Result, VerifierError};
+
+// ============================================================================
+// Kernel mode support (no_std)
+// ============================================================================
+
+/// Panic handler for kernel mode (no_std)
+/// 
+/// When building for kernel integration, this provides the required panic
+/// handler. In a real kernel module, this would be replaced by linking
+/// with the kernel's panic infrastructure.
+#[cfg(all(not(feature = "std"), not(test), feature = "kernel"))]
+mod panic_impl {
+    use core::panic::PanicInfo;
+
+    #[panic_handler]
+    fn panic(_info: &PanicInfo<'_>) -> ! {
+        // In kernel mode, we should never panic
+        // If we do, halt the CPU or trigger a kernel panic
+        loop {
+            // Spin forever - the kernel will handle this
+            core::hint::spin_loop();
+        }
+    }
+}

@@ -28,7 +28,7 @@ use core::ptr;
 use core::slice;
 
 #[cfg(not(feature = "std"))]
-use alloc::{vec, vec::Vec, string::String, boxed::Box};
+use alloc::{vec::Vec, boxed::Box};
 
 use crate::core::types::*;
 use crate::core::error::VerifierError;

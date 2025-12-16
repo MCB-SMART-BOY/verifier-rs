@@ -20,3 +20,17 @@ Thumbs.db
 *.profraw
 *.profdata
 coverage/
+
+# Kernel module build artifacts
+kernel-module/*.ko
+kernel-module/*.o
+kernel-module/*.mod
+kernel-module/*.mod.c
+kernel-module/*.mod.o
+kernel-module/.*.cmd
+kernel-module/Module.symvers
+kernel-module/modules.order
+kernel-module/.tmp_versions/
+kernel-module/tests/test_loader
+kernel-module/tests/*.o
+kernel-module/src/*.o
