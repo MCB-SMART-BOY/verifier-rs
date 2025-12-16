@@ -731,6 +731,707 @@ impl KfuncRegistry {
             ..Default::default()
         })
         .ok();
+
+        // ====================================================================
+        // Kernel 6.x new kfuncs
+        // ====================================================================
+
+        // bpf_session_cookie - get/set session cookie for entry/exit probe pairs
+        self.register(KfuncDesc {
+            btf_id: 43,
+            name: "bpf_session_cookie".into(),
+            flags: KfuncFlags::default(),
+            ret_type: KfuncRetType::Scalar,
+            ..Default::default()
+        })
+        .ok();
+
+        // bpf_get_dentry_xattr - read extended attributes from dentry
+        self.register(KfuncDesc {
+            btf_id: 44,
+            name: "bpf_get_dentry_xattr".into(),
+            flags: KfuncFlags {
+                trusted_args: true,
+                ..Default::default()
+            },
+            params: vec![
+                KfuncParamDesc {
+                    name: Some("dentry".into()),
+                    arg_type: KfuncArgType::PtrToBtfId,
+                    ..Default::default()
+                },
+                KfuncParamDesc {
+                    name: Some("name".into()),
+                    arg_type: KfuncArgType::PtrToConstStr,
+                    ..Default::default()
+                },
+                KfuncParamDesc {
+                    name: Some("value_p".into()),
+                    arg_type: KfuncArgType::PtrToDynptr,
+                    ..Default::default()
+                },
+            ],
+            ret_type: KfuncRetType::Scalar,
+            ..Default::default()
+        })
+        .ok();
+
+        // bpf_get_file_xattr - read extended attributes from file
+        self.register(KfuncDesc {
+            btf_id: 45,
+            name: "bpf_get_file_xattr".into(),
+            flags: KfuncFlags {
+                trusted_args: true,
+                ..Default::default()
+            },
+            params: vec![
+                KfuncParamDesc {
+                    name: Some("file".into()),
+                    arg_type: KfuncArgType::PtrToBtfId,
+                    ..Default::default()
+                },
+                KfuncParamDesc {
+                    name: Some("name".into()),
+                    arg_type: KfuncArgType::PtrToConstStr,
+                    ..Default::default()
+                },
+                KfuncParamDesc {
+                    name: Some("value_p".into()),
+                    arg_type: KfuncArgType::PtrToDynptr,
+                    ..Default::default()
+                },
+            ],
+            ret_type: KfuncRetType::Scalar,
+            ..Default::default()
+        })
+        .ok();
+
+        // bpf_arena_alloc_pages - allocate pages in arena
+        self.register(KfuncDesc {
+            btf_id: 46,
+            name: "bpf_arena_alloc_pages".into(),
+            flags: KfuncFlags {
+                is_acquire: true,
+                ret_null: true,
+                ..Default::default()
+            },
+            params: vec![
+                KfuncParamDesc {
+                    name: Some("arena".into()),
+                    arg_type: KfuncArgType::PtrToMap,
+                    ..Default::default()
+                },
+                KfuncParamDesc {
+                    name: Some("addr".into()),
+                    arg_type: KfuncArgType::Scalar,
+                    nullable: true,
+                    ..Default::default()
+                },
+                KfuncParamDesc {
+                    name: Some("page_cnt".into()),
+                    arg_type: KfuncArgType::Scalar,
+                    ..Default::default()
+                },
+                KfuncParamDesc {
+                    name: Some("node_id".into()),
+                    arg_type: KfuncArgType::Scalar,
+                    ..Default::default()
+                },
+                KfuncParamDesc {
+                    name: Some("flags".into()),
+                    arg_type: KfuncArgType::Scalar,
+                    ..Default::default()
+                },
+            ],
+            ret_type: KfuncRetType::Ptr,
+            ..Default::default()
+        })
+        .ok();
+
+        // bpf_arena_free_pages - free pages in arena
+        self.register(KfuncDesc {
+            btf_id: 47,
+            name: "bpf_arena_free_pages".into(),
+            flags: KfuncFlags {
+                is_release: true,
+                ..Default::default()
+            },
+            params: vec![
+                KfuncParamDesc {
+                    name: Some("arena".into()),
+                    arg_type: KfuncArgType::PtrToMap,
+                    ..Default::default()
+                },
+                KfuncParamDesc {
+                    name: Some("ptr".into()),
+                    arg_type: KfuncArgType::AnyPtr,
+                    is_release: true,
+                    ..Default::default()
+                },
+                KfuncParamDesc {
+                    name: Some("page_cnt".into()),
+                    arg_type: KfuncArgType::Scalar,
+                    ..Default::default()
+                },
+            ],
+            ret_type: KfuncRetType::Void,
+            ..Default::default()
+        })
+        .ok();
+
+        // bpf_iter_task_new - create task iterator
+        self.register(KfuncDesc {
+            btf_id: 48,
+            name: "bpf_iter_task_new".into(),
+            flags: KfuncFlags::default(),
+            params: vec![
+                KfuncParamDesc {
+                    name: Some("it".into()),
+                    arg_type: KfuncArgType::PtrToIter,
+                    ..Default::default()
+                },
+                KfuncParamDesc {
+                    name: Some("task".into()),
+                    arg_type: KfuncArgType::PtrToBtfId,
+                    nullable: true,
+                    ..Default::default()
+                },
+                KfuncParamDesc {
+                    name: Some("flags".into()),
+                    arg_type: KfuncArgType::Scalar,
+                    ..Default::default()
+                },
+            ],
+            ret_type: KfuncRetType::Scalar,
+            ..Default::default()
+        })
+        .ok();
+
+        // bpf_iter_task_next - get next task from iterator
+        self.register(KfuncDesc {
+            btf_id: 49,
+            name: "bpf_iter_task_next".into(),
+            flags: KfuncFlags {
+                ret_null: true,
+                ..Default::default()
+            },
+            params: vec![KfuncParamDesc {
+                name: Some("it".into()),
+                arg_type: KfuncArgType::PtrToIter,
+                ..Default::default()
+            }],
+            ret_type: KfuncRetType::PtrToBtfId,
+            ..Default::default()
+        })
+        .ok();
+
+        // bpf_iter_task_destroy - destroy task iterator
+        self.register(KfuncDesc {
+            btf_id: 50,
+            name: "bpf_iter_task_destroy".into(),
+            flags: KfuncFlags::default(),
+            params: vec![KfuncParamDesc {
+                name: Some("it".into()),
+                arg_type: KfuncArgType::PtrToIter,
+                ..Default::default()
+            }],
+            ret_type: KfuncRetType::Void,
+            ..Default::default()
+        })
+        .ok();
+
+        // bpf_iter_css_new - create cgroup subsystem state iterator
+        self.register(KfuncDesc {
+            btf_id: 51,
+            name: "bpf_iter_css_new".into(),
+            flags: KfuncFlags::default(),
+            ret_type: KfuncRetType::Scalar,
+            ..Default::default()
+        })
+        .ok();
+
+        // bpf_iter_css_next - get next css from iterator
+        self.register(KfuncDesc {
+            btf_id: 52,
+            name: "bpf_iter_css_next".into(),
+            flags: KfuncFlags {
+                ret_null: true,
+                ..Default::default()
+            },
+            ret_type: KfuncRetType::PtrToBtfId,
+            ..Default::default()
+        })
+        .ok();
+
+        // bpf_iter_css_destroy - destroy css iterator
+        self.register(KfuncDesc {
+            btf_id: 53,
+            name: "bpf_iter_css_destroy".into(),
+            flags: KfuncFlags::default(),
+            ret_type: KfuncRetType::Void,
+            ..Default::default()
+        })
+        .ok();
+
+        // bpf_iter_css_task_new - create css task iterator
+        self.register(KfuncDesc {
+            btf_id: 54,
+            name: "bpf_iter_css_task_new".into(),
+            flags: KfuncFlags::default(),
+            ret_type: KfuncRetType::Scalar,
+            ..Default::default()
+        })
+        .ok();
+
+        // bpf_iter_css_task_next - get next task from css iterator
+        self.register(KfuncDesc {
+            btf_id: 55,
+            name: "bpf_iter_css_task_next".into(),
+            flags: KfuncFlags {
+                ret_null: true,
+                ..Default::default()
+            },
+            ret_type: KfuncRetType::PtrToBtfId,
+            ..Default::default()
+        })
+        .ok();
+
+        // bpf_iter_css_task_destroy - destroy css task iterator
+        self.register(KfuncDesc {
+            btf_id: 56,
+            name: "bpf_iter_css_task_destroy".into(),
+            flags: KfuncFlags::default(),
+            ret_type: KfuncRetType::Void,
+            ..Default::default()
+        })
+        .ok();
+
+        // bpf_copy_from_user_str - copy NUL-terminated string from user
+        self.register(KfuncDesc {
+            btf_id: 57,
+            name: "bpf_copy_from_user_str".into(),
+            flags: KfuncFlags {
+                sleepable: true,
+                ..Default::default()
+            },
+            params: vec![
+                KfuncParamDesc {
+                    name: Some("dst".into()),
+                    arg_type: KfuncArgType::PtrToMem,
+                    ..Default::default()
+                },
+                KfuncParamDesc {
+                    name: Some("dst_len".into()),
+                    arg_type: KfuncArgType::Scalar,
+                    ..Default::default()
+                },
+                KfuncParamDesc {
+                    name: Some("user_ptr".into()),
+                    arg_type: KfuncArgType::Scalar,
+                    ..Default::default()
+                },
+                KfuncParamDesc {
+                    name: Some("flags".into()),
+                    arg_type: KfuncArgType::Scalar,
+                    ..Default::default()
+                },
+            ],
+            ret_type: KfuncRetType::Scalar,
+            ..Default::default()
+        })
+        .ok();
+
+        // bpf_send_signal_task - send signal to specific task
+        self.register(KfuncDesc {
+            btf_id: 58,
+            name: "bpf_send_signal_task".into(),
+            flags: KfuncFlags {
+                trusted_args: true,
+                ..Default::default()
+            },
+            params: vec![
+                KfuncParamDesc {
+                    name: Some("task".into()),
+                    arg_type: KfuncArgType::PtrToBtfId,
+                    ..Default::default()
+                },
+                KfuncParamDesc {
+                    name: Some("sig".into()),
+                    arg_type: KfuncArgType::Scalar,
+                    ..Default::default()
+                },
+                KfuncParamDesc {
+                    name: Some("type".into()),
+                    arg_type: KfuncArgType::Scalar,
+                    ..Default::default()
+                },
+            ],
+            ret_type: KfuncRetType::Scalar,
+            ..Default::default()
+        })
+        .ok();
+
+        // bpf_task_from_vpid - get task from virtual PID
+        self.register(KfuncDesc {
+            btf_id: 59,
+            name: "bpf_task_from_vpid".into(),
+            flags: KfuncFlags {
+                is_acquire: true,
+                ret_null: true,
+                ..Default::default()
+            },
+            params: vec![KfuncParamDesc {
+                name: Some("vpid".into()),
+                arg_type: KfuncArgType::Scalar,
+                ..Default::default()
+            }],
+            ret_type: KfuncRetType::AcquiredPtr,
+            ..Default::default()
+        })
+        .ok();
+
+        // bpf_cgroup_from_id - get cgroup from ID
+        self.register(KfuncDesc {
+            btf_id: 60,
+            name: "bpf_cgroup_from_id".into(),
+            flags: KfuncFlags {
+                is_acquire: true,
+                ret_null: true,
+                ..Default::default()
+            },
+            params: vec![KfuncParamDesc {
+                name: Some("cgid".into()),
+                arg_type: KfuncArgType::Scalar,
+                ..Default::default()
+            }],
+            ret_type: KfuncRetType::AcquiredPtr,
+            ..Default::default()
+        })
+        .ok();
+
+        // bpf_cgroup_ancestor - get ancestor cgroup
+        self.register(KfuncDesc {
+            btf_id: 61,
+            name: "bpf_cgroup_ancestor".into(),
+            flags: KfuncFlags {
+                is_acquire: true,
+                ret_null: true,
+                trusted_args: true,
+                ..Default::default()
+            },
+            params: vec![
+                KfuncParamDesc {
+                    name: Some("cgrp".into()),
+                    arg_type: KfuncArgType::PtrToBtfId,
+                    ..Default::default()
+                },
+                KfuncParamDesc {
+                    name: Some("level".into()),
+                    arg_type: KfuncArgType::Scalar,
+                    ..Default::default()
+                },
+            ],
+            ret_type: KfuncRetType::AcquiredPtr,
+            ..Default::default()
+        })
+        .ok();
+
+        // bpf_sk_assign_tcp_reqsk - assign TCP request socket
+        self.register(KfuncDesc {
+            btf_id: 62,
+            name: "bpf_sk_assign_tcp_reqsk".into(),
+            flags: KfuncFlags::default(),
+            ret_type: KfuncRetType::Scalar,
+            ..Default::default()
+        })
+        .ok();
+
+        // bpf_verify_pkcs7_signature - verify PKCS#7 signature
+        self.register(KfuncDesc {
+            btf_id: 63,
+            name: "bpf_verify_pkcs7_signature".into(),
+            flags: KfuncFlags {
+                sleepable: true,
+                ..Default::default()
+            },
+            ret_type: KfuncRetType::Scalar,
+            ..Default::default()
+        })
+        .ok();
+
+        // bpf_key_lookup - lookup kernel keyring key
+        self.register(KfuncDesc {
+            btf_id: 64,
+            name: "bpf_lookup_user_key".into(),
+            flags: KfuncFlags {
+                is_acquire: true,
+                ret_null: true,
+                sleepable: true,
+                ..Default::default()
+            },
+            ret_type: KfuncRetType::AcquiredPtr,
+            ..Default::default()
+        })
+        .ok();
+
+        // bpf_lookup_system_key - lookup system keyring key
+        self.register(KfuncDesc {
+            btf_id: 65,
+            name: "bpf_lookup_system_key".into(),
+            flags: KfuncFlags {
+                is_acquire: true,
+                ret_null: true,
+                ..Default::default()
+            },
+            ret_type: KfuncRetType::AcquiredPtr,
+            ..Default::default()
+        })
+        .ok();
+
+        // bpf_key_put - release key reference
+        self.register(KfuncDesc {
+            btf_id: 66,
+            name: "bpf_key_put".into(),
+            flags: KfuncFlags {
+                is_release: true,
+                ..Default::default()
+            },
+            ret_type: KfuncRetType::Void,
+            ..Default::default()
+        })
+        .ok();
+
+        // bpf_sock_addr_set_sun_path - set UNIX socket path
+        self.register(KfuncDesc {
+            btf_id: 67,
+            name: "bpf_sock_addr_set_sun_path".into(),
+            flags: KfuncFlags::default(),
+            ret_type: KfuncRetType::Scalar,
+            ..Default::default()
+        })
+        .ok();
+
+        // bpf_sk_setsockopt - set socket option on socket
+        self.register(KfuncDesc {
+            btf_id: 68,
+            name: "bpf_sk_setsockopt".into(),
+            flags: KfuncFlags::default(),
+            ret_type: KfuncRetType::Scalar,
+            ..Default::default()
+        })
+        .ok();
+
+        // bpf_sk_getsockopt - get socket option from socket
+        self.register(KfuncDesc {
+            btf_id: 69,
+            name: "bpf_sk_getsockopt".into(),
+            flags: KfuncFlags::default(),
+            ret_type: KfuncRetType::Scalar,
+            ..Default::default()
+        })
+        .ok();
+
+        // bpf_ct_set_nat_info - set conntrack NAT info
+        self.register(KfuncDesc {
+            btf_id: 70,
+            name: "bpf_ct_set_nat_info".into(),
+            flags: KfuncFlags::default(),
+            ret_type: KfuncRetType::Scalar,
+            ..Default::default()
+        })
+        .ok();
+
+        // bpf_ct_change_status - change conntrack status
+        self.register(KfuncDesc {
+            btf_id: 71,
+            name: "bpf_ct_change_status".into(),
+            flags: KfuncFlags::default(),
+            ret_type: KfuncRetType::Scalar,
+            ..Default::default()
+        })
+        .ok();
+
+        // bpf_xdp_ct_lookup - lookup conntrack entry in XDP
+        self.register(KfuncDesc {
+            btf_id: 72,
+            name: "bpf_xdp_ct_lookup".into(),
+            flags: KfuncFlags {
+                is_acquire: true,
+                ret_null: true,
+                ..Default::default()
+            },
+            ret_type: KfuncRetType::AcquiredPtr,
+            ..Default::default()
+        })
+        .ok();
+
+        // bpf_skb_ct_lookup - lookup conntrack entry in SKB context
+        self.register(KfuncDesc {
+            btf_id: 73,
+            name: "bpf_skb_ct_lookup".into(),
+            flags: KfuncFlags {
+                is_acquire: true,
+                ret_null: true,
+                ..Default::default()
+            },
+            ret_type: KfuncRetType::AcquiredPtr,
+            ..Default::default()
+        })
+        .ok();
+
+        // bpf_ct_release - release conntrack entry
+        self.register(KfuncDesc {
+            btf_id: 74,
+            name: "bpf_ct_release".into(),
+            flags: KfuncFlags {
+                is_release: true,
+                ..Default::default()
+            },
+            ret_type: KfuncRetType::Void,
+            ..Default::default()
+        })
+        .ok();
+
+        // bpf_xdp_ct_alloc - allocate conntrack entry in XDP
+        self.register(KfuncDesc {
+            btf_id: 75,
+            name: "bpf_xdp_ct_alloc".into(),
+            flags: KfuncFlags {
+                is_acquire: true,
+                ret_null: true,
+                ..Default::default()
+            },
+            ret_type: KfuncRetType::AcquiredPtr,
+            ..Default::default()
+        })
+        .ok();
+
+        // bpf_skb_ct_alloc - allocate conntrack entry in SKB context
+        self.register(KfuncDesc {
+            btf_id: 76,
+            name: "bpf_skb_ct_alloc".into(),
+            flags: KfuncFlags {
+                is_acquire: true,
+                ret_null: true,
+                ..Default::default()
+            },
+            ret_type: KfuncRetType::AcquiredPtr,
+            ..Default::default()
+        })
+        .ok();
+
+        // bpf_ct_insert_entry - insert conntrack entry
+        self.register(KfuncDesc {
+            btf_id: 77,
+            name: "bpf_ct_insert_entry".into(),
+            flags: KfuncFlags {
+                is_release: true, // Takes ownership of entry
+                ..Default::default()
+            },
+            ret_type: KfuncRetType::PtrToBtfId,
+            ..Default::default()
+        })
+        .ok();
+
+        // bpf_ct_set_timeout - set conntrack timeout
+        self.register(KfuncDesc {
+            btf_id: 78,
+            name: "bpf_ct_set_timeout".into(),
+            flags: KfuncFlags::default(),
+            ret_type: KfuncRetType::Scalar,
+            ..Default::default()
+        })
+        .ok();
+
+        // bpf_xdp_get_xfrm_state - get XFRM/IPsec state
+        self.register(KfuncDesc {
+            btf_id: 79,
+            name: "bpf_xdp_get_xfrm_state".into(),
+            flags: KfuncFlags {
+                is_acquire: true,
+                ret_null: true,
+                ..Default::default()
+            },
+            ret_type: KfuncRetType::AcquiredPtr,
+            ..Default::default()
+        })
+        .ok();
+
+        // bpf_xfrm_state_release - release XFRM state
+        self.register(KfuncDesc {
+            btf_id: 80,
+            name: "bpf_xfrm_state_release".into(),
+            flags: KfuncFlags {
+                is_release: true,
+                ..Default::default()
+            },
+            ret_type: KfuncRetType::Void,
+            ..Default::default()
+        })
+        .ok();
+
+        // bpf_iter_scx_dsq_new - sched_ext DSQ iterator (kernel 6.12)
+        self.register(KfuncDesc {
+            btf_id: 81,
+            name: "bpf_iter_scx_dsq_new".into(),
+            flags: KfuncFlags::default(),
+            ret_type: KfuncRetType::Scalar,
+            ..Default::default()
+        })
+        .ok();
+
+        // bpf_iter_scx_dsq_next
+        self.register(KfuncDesc {
+            btf_id: 82,
+            name: "bpf_iter_scx_dsq_next".into(),
+            flags: KfuncFlags {
+                ret_null: true,
+                ..Default::default()
+            },
+            ret_type: KfuncRetType::PtrToBtfId,
+            ..Default::default()
+        })
+        .ok();
+
+        // bpf_iter_scx_dsq_destroy
+        self.register(KfuncDesc {
+            btf_id: 83,
+            name: "bpf_iter_scx_dsq_destroy".into(),
+            flags: KfuncFlags::default(),
+            ret_type: KfuncRetType::Void,
+            ..Default::default()
+        })
+        .ok();
+
+        // bpf_local_irq_save - save and disable local IRQs (already handled but register explicitly)
+        self.register(KfuncDesc {
+            btf_id: 84,
+            name: "bpf_local_irq_save".into(),
+            flags: KfuncFlags::default(),
+            params: vec![KfuncParamDesc {
+                name: Some("flags".into()),
+                arg_type: KfuncArgType::PtrToIrqFlag,
+                ..Default::default()
+            }],
+            ret_type: KfuncRetType::Void,
+            ..Default::default()
+        })
+        .ok();
+
+        // bpf_local_irq_restore - restore local IRQs
+        self.register(KfuncDesc {
+            btf_id: 85,
+            name: "bpf_local_irq_restore".into(),
+            flags: KfuncFlags::default(),
+            params: vec![KfuncParamDesc {
+                name: Some("flags".into()),
+                arg_type: KfuncArgType::PtrToIrqFlag,
+                ..Default::default()
+            }],
+            ret_type: KfuncRetType::Void,
+            ..Default::default()
+        })
+        .ok();
     }
 }
 
@@ -1635,32 +2336,65 @@ pub fn is_kfunc_call(insn: &BpfInsn) -> bool {
 /// Special kfunc IDs for well-known functions
 #[allow(missing_docs)]
 pub mod special_kfuncs {
+    // Core RCU kfuncs
     pub const BPF_RCU_READ_LOCK: u32 = 1;
     pub const BPF_RCU_READ_UNLOCK: u32 = 2;
+    // Object allocation kfuncs
     pub const BPF_OBJ_NEW: u32 = 3;
     pub const BPF_OBJ_DROP: u32 = 4;
+    // List kfuncs
     pub const BPF_LIST_PUSH_FRONT: u32 = 5;
     pub const BPF_LIST_PUSH_BACK: u32 = 6;
     pub const BPF_LIST_POP_FRONT: u32 = 7;
     pub const BPF_LIST_POP_BACK: u32 = 8;
+    // Spin lock kfuncs
     pub const BPF_RES_SPIN_LOCK: u32 = 9;
     pub const BPF_RES_SPIN_UNLOCK: u32 = 10;
-    pub const BPF_PREEMPT_DISABLE: u32 = 11;
-    pub const BPF_PREEMPT_ENABLE: u32 = 12;
-    pub const BPF_THROW: u32 = 13;
-    pub const BPF_ITER_NUM_NEW: u32 = 14;
-    pub const BPF_ITER_NUM_NEXT: u32 = 15;
-    pub const BPF_ITER_NUM_DESTROY: u32 = 16;
-    pub const BPF_RBTREE_ADD: u32 = 17;
-    pub const BPF_RBTREE_REMOVE: u32 = 18;
-    pub const BPF_RBTREE_FIRST: u32 = 19;
-    pub const BPF_WQ_SET_CALLBACK: u32 = 20;
-    pub const BPF_TASK_WORK_ADD: u32 = 21;
+    // Preemption kfuncs
+    pub const BPF_PREEMPT_DISABLE: u32 = 36;
+    pub const BPF_PREEMPT_ENABLE: u32 = 37;
+    // Exception kfuncs
+    pub const BPF_THROW: u32 = 32;
+    // Numeric iterator kfuncs
+    pub const BPF_ITER_NUM_NEW: u32 = 29;
+    pub const BPF_ITER_NUM_NEXT: u32 = 30;
+    pub const BPF_ITER_NUM_DESTROY: u32 = 31;
+    // Rbtree kfuncs
+    pub const BPF_RBTREE_ADD: u32 = 16;
+    pub const BPF_RBTREE_REMOVE: u32 = 17;
+    pub const BPF_RBTREE_FIRST: u32 = 18;
+    // Callback kfuncs
+    pub const BPF_WQ_SET_CALLBACK: u32 = 34;
+    pub const BPF_TASK_WORK_ADD: u32 = 35;
     // IRQ-related kfuncs
-    pub const BPF_LOCAL_IRQ_SAVE: u32 = 22;
-    pub const BPF_LOCAL_IRQ_RESTORE: u32 = 23;
-    pub const BPF_SPIN_LOCK_IRQSAVE: u32 = 24;
-    pub const BPF_SPIN_UNLOCK_IRQRESTORE: u32 = 25;
+    pub const BPF_LOCAL_IRQ_SAVE: u32 = 84;
+    pub const BPF_LOCAL_IRQ_RESTORE: u32 = 85;
+    pub const BPF_SPIN_LOCK_IRQSAVE: u32 = 86;
+    pub const BPF_SPIN_UNLOCK_IRQRESTORE: u32 = 87;
+    // Arena kfuncs (kernel 6.9+)
+    pub const BPF_ARENA_ALLOC_PAGES: u32 = 46;
+    pub const BPF_ARENA_FREE_PAGES: u32 = 47;
+    // Session cookie (kernel 6.10+)
+    pub const BPF_SESSION_COOKIE: u32 = 43;
+    // Xattr kfuncs (kernel 6.10+)
+    pub const BPF_GET_DENTRY_XATTR: u32 = 44;
+    pub const BPF_GET_FILE_XATTR: u32 = 45;
+    // Task iterator kfuncs
+    pub const BPF_ITER_TASK_NEW: u32 = 48;
+    pub const BPF_ITER_TASK_NEXT: u32 = 49;
+    pub const BPF_ITER_TASK_DESTROY: u32 = 50;
+    // CSS iterator kfuncs
+    pub const BPF_ITER_CSS_NEW: u32 = 51;
+    pub const BPF_ITER_CSS_NEXT: u32 = 52;
+    pub const BPF_ITER_CSS_DESTROY: u32 = 53;
+    // Conntrack kfuncs
+    pub const BPF_CT_RELEASE: u32 = 74;
+    pub const BPF_XDP_CT_LOOKUP: u32 = 72;
+    pub const BPF_SKB_CT_LOOKUP: u32 = 73;
+    // Sched_ext DSQ iterator (kernel 6.12+)
+    pub const BPF_ITER_SCX_DSQ_NEW: u32 = 81;
+    pub const BPF_ITER_SCX_DSQ_NEXT: u32 = 82;
+    pub const BPF_ITER_SCX_DSQ_DESTROY: u32 = 83;
 }
 
 /// Check if kfunc is bpf_rcu_read_lock
