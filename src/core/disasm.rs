@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0
+
 //! BPF program disassembler
 //!
 //! This module provides disassembly of BPF bytecode into human-readable
@@ -6,8 +8,10 @@
 use crate::core::types::*;
 use core::fmt::Write;
 
-
-use alloc::{string::{String, ToString}, format};
+use alloc::{
+    format,
+    string::{String, ToString},
+};
 
 use alloc::collections::BTreeSet as HashSet;
 
@@ -62,10 +66,16 @@ pub fn disasm_insn(insn: &BpfInsn, idx: usize, opts: &DisasmOptions) -> String {
 
     // Raw bytecode
     if opts.show_bytecode {
-        write!(s, "{:02x} {:02x} {:02x} {:02x} {:08x}  ",
-               insn.code, insn.dst_reg | (insn.src_reg << 4),
-               insn.off as u8, (insn.off >> 8) as u8,
-               insn.imm as u32).unwrap();
+        write!(
+            s,
+            "{:02x} {:02x} {:02x} {:02x} {:08x}  ",
+            insn.code,
+            insn.dst_reg | (insn.src_reg << 4),
+            insn.off as u8,
+            (insn.off >> 8) as u8,
+            insn.imm as u32
+        )
+        .unwrap();
     }
 
     // Mnemonic
@@ -146,9 +156,15 @@ fn disasm_ldx(insn: &BpfInsn) -> String {
     let mode = insn.code & 0xe0;
     if mode == BPF_MEM {
         if insn.off >= 0 {
-            format!("ldx{} r{}, [r{}+{}]", size, insn.dst_reg, insn.src_reg, insn.off)
+            format!(
+                "ldx{} r{}, [r{}+{}]",
+                size, insn.dst_reg, insn.src_reg, insn.off
+            )
         } else {
-            format!("ldx{} r{}, [r{}{}]", size, insn.dst_reg, insn.src_reg, insn.off)
+            format!(
+                "ldx{} r{}, [r{}{}]",
+                size, insn.dst_reg, insn.src_reg, insn.off
+            )
         }
     } else {
         format!(".ldx {:#04x}", insn.code)
@@ -166,12 +182,18 @@ fn disasm_stx(insn: &BpfInsn) -> String {
     };
 
     let mode = insn.code & 0xe0;
-    
+
     if mode == BPF_MEM {
         if insn.off >= 0 {
-            format!("stx{} [r{}+{}], r{}", size, insn.dst_reg, insn.off, insn.src_reg)
+            format!(
+                "stx{} [r{}+{}], r{}",
+                size, insn.dst_reg, insn.off, insn.src_reg
+            )
         } else {
-            format!("stx{} [r{}{}], r{}", size, insn.dst_reg, insn.off, insn.src_reg)
+            format!(
+                "stx{} [r{}{}], r{}",
+                size, insn.dst_reg, insn.off, insn.src_reg
+            )
         }
     } else if mode == BPF_ATOMIC {
         disasm_atomic(insn, size)
@@ -183,8 +205,12 @@ fn disasm_stx(insn: &BpfInsn) -> String {
 /// Disassemble atomic operation
 fn disasm_atomic(insn: &BpfInsn, size: &str) -> String {
     let atomic_op = insn.imm as u32;
-    let fetch = if atomic_op & BPF_FETCH != 0 { "_fetch" } else { "" };
-    
+    let fetch = if atomic_op & BPF_FETCH != 0 {
+        "_fetch"
+    } else {
+        ""
+    };
+
     let base_op = atomic_op & !BPF_FETCH;
     let op_name = match base_op {
         x if x == BPF_ADD as u32 => "add",
@@ -197,11 +223,15 @@ fn disasm_atomic(insn: &BpfInsn, size: &str) -> String {
     };
 
     if insn.off >= 0 {
-        format!("atomic{}{}{} [r{}+{}], r{}", size, op_name, fetch,
-                insn.dst_reg, insn.off, insn.src_reg)
+        format!(
+            "atomic{}{}{} [r{}+{}], r{}",
+            size, op_name, fetch, insn.dst_reg, insn.off, insn.src_reg
+        )
     } else {
-        format!("atomic{}{}{} [r{}{}], r{}", size, op_name, fetch,
-                insn.dst_reg, insn.off, insn.src_reg)
+        format!(
+            "atomic{}{}{} [r{}{}], r{}",
+            size, op_name, fetch, insn.dst_reg, insn.off, insn.src_reg
+        )
     }
 }
 
@@ -231,13 +261,13 @@ fn disasm_ld(insn: &BpfInsn) -> String {
         // For LD_IMM64, we interpret these as map-related pseudo values
         let src_name = match src {
             0 => "",
-            1 => "map_fd",           // BPF_PSEUDO_MAP_FD
-            2 => "map_value",        // BPF_PSEUDO_MAP_VALUE
+            1 => "map_fd",    // BPF_PSEUDO_MAP_FD
+            2 => "map_value", // BPF_PSEUDO_MAP_VALUE
             BPF_PSEUDO_MAP_IDX => "map_idx",
             BPF_PSEUDO_MAP_IDX_VALUE => "map_idx_value",
             _ => "?",
         };
-        
+
         if src_name.is_empty() {
             format!("lddw r{}, {:#x}", insn.dst_reg, insn.imm as u32)
         } else {
@@ -289,11 +319,15 @@ fn disasm_jmp(insn: &BpfInsn, idx: usize, is_64: bool, opts: &DisasmOptions) -> 
             };
 
             if src_type == BPF_X {
-                format!("{}{} r{}, r{}, +{}{}", op_name, suffix,
-                        insn.dst_reg, insn.src_reg, insn.off, target_str)
+                format!(
+                    "{}{} r{}, r{}, +{}{}",
+                    op_name, suffix, insn.dst_reg, insn.src_reg, insn.off, target_str
+                )
             } else {
-                format!("{}{} r{}, {}, +{}{}", op_name, suffix,
-                        insn.dst_reg, insn.imm, insn.off, target_str)
+                format!(
+                    "{}{} r{}, {}, +{}{}",
+                    op_name, suffix, insn.dst_reg, insn.imm, insn.off, target_str
+                )
             }
         }
     }
@@ -316,7 +350,7 @@ fn disasm_call(insn: &BpfInsn, idx: usize, opts: &DisasmOptions) -> String {
         } else {
             None
         };
-        
+
         match helper_name {
             Some(name) => format!("call {}", name),
             None => format!("call #{}", insn.imm),
@@ -377,10 +411,16 @@ pub fn disasm_program(insns: &[BpfInsn], opts: &DisasmOptions) -> String {
                     write!(output, "{:4}: ", i).unwrap();
                 }
                 if opts.show_bytecode {
-                    write!(output, "{:02x} {:02x} {:02x} {:02x} {:08x}  ",
-                           next.code, next.dst_reg | (next.src_reg << 4),
-                           next.off as u8, (next.off >> 8) as u8,
-                           next.imm as u32).unwrap();
+                    write!(
+                        output,
+                        "{:02x} {:02x} {:02x} {:02x} {:08x}  ",
+                        next.code,
+                        next.dst_reg | (next.src_reg << 4),
+                        next.off as u8,
+                        (next.off >> 8) as u8,
+                        next.imm as u32
+                    )
+                    .unwrap();
                 }
                 // Show the upper 32 bits
                 output.push_str(&format!("     ; hi32={:#x}\n", next.imm as u32));
@@ -505,14 +545,22 @@ impl<'a> ProgramDumper<'a> {
         // Stats
         let stats = self.stats();
         output.push_str(&"; Statistics:\n".to_string());
-        output.push_str(&format!(";   ALU64: {}, ALU32: {}\n", 
-                                 stats.alu64_insns, stats.alu32_insns));
-        output.push_str(&format!(";   Loads: {}, Stores: {}\n",
-                                 stats.load_insns, stats.store_insns));
-        output.push_str(&format!(";   Branches: {}, Jumps: {}\n",
-                                 stats.branch_insns, stats.jump_insns));
-        output.push_str(&format!(";   Calls: {}, Exits: {}\n\n",
-                                 stats.call_insns, stats.exit_insns));
+        output.push_str(&format!(
+            ";   ALU64: {}, ALU32: {}\n",
+            stats.alu64_insns, stats.alu32_insns
+        ));
+        output.push_str(&format!(
+            ";   Loads: {}, Stores: {}\n",
+            stats.load_insns, stats.store_insns
+        ));
+        output.push_str(&format!(
+            ";   Branches: {}, Jumps: {}\n",
+            stats.branch_insns, stats.jump_insns
+        ));
+        output.push_str(&format!(
+            ";   Calls: {}, Exits: {}\n\n",
+            stats.call_insns, stats.exit_insns
+        ));
 
         // Disassembly
         output.push_str(&disasm_program(self.insns, &self.opts));

@@ -1,17 +1,18 @@
+// SPDX-License-Identifier: GPL-2.0
+
 //! Comprehensive instruction verification
 //!
 //! This module provides complete instruction decoding and verification,
 //! dispatching to appropriate handlers for each instruction class.
 
-
 use alloc::format;
 
+use crate::core::error::{Result, VerifierError};
+use crate::core::insn::{check_alu_op, check_call, check_cond_jmp_op, check_exit, check_ld_imm64};
+use crate::core::types::*;
+use crate::mem::memory::check_mem_access;
 use crate::state::reg_state::BpfRegState;
 use crate::state::verifier_state::BpfVerifierState;
-use crate::core::types::*;
-use crate::core::error::{Result, VerifierError};
-use crate::core::insn::{check_alu_op, check_cond_jmp_op, check_ld_imm64, check_call, check_exit};
-use crate::mem::memory::check_mem_access;
 
 /// Result of verifying a single instruction
 #[derive(Debug, Clone)]
@@ -145,7 +146,11 @@ impl<'a> InsnVerifier<'a> {
         let size = insn_access_size(insn);
 
         // Check source register is valid pointer
-        let src = self.state.reg(src_reg).ok_or(VerifierError::InvalidRegister(src_reg as u8))?.clone();
+        let src = self
+            .state
+            .reg(src_reg)
+            .ok_or(VerifierError::InvalidRegister(src_reg as u8))?
+            .clone();
 
         if src.reg_type == BpfRegType::NotInit {
             return Err(VerifierError::UninitializedRegister(src_reg as u8));
@@ -183,14 +188,22 @@ impl<'a> InsnVerifier<'a> {
         let size = insn_access_size(insn);
 
         // Check destination register is valid pointer
-        let dst = self.state.reg(dst_reg).ok_or(VerifierError::InvalidRegister(dst_reg as u8))?.clone();
+        let dst = self
+            .state
+            .reg(dst_reg)
+            .ok_or(VerifierError::InvalidRegister(dst_reg as u8))?
+            .clone();
 
         if dst.reg_type == BpfRegType::NotInit {
             return Err(VerifierError::UninitializedRegister(dst_reg as u8));
         }
 
         // Check source register is initialized
-        let src = self.state.reg(src_reg).ok_or(VerifierError::InvalidRegister(src_reg as u8))?.clone();
+        let src = self
+            .state
+            .reg(src_reg)
+            .ok_or(VerifierError::InvalidRegister(src_reg as u8))?
+            .clone();
 
         if src.reg_type == BpfRegType::NotInit {
             return Err(VerifierError::UninitializedRegister(src_reg as u8));
@@ -226,7 +239,11 @@ impl<'a> InsnVerifier<'a> {
         let size = insn_access_size(insn);
 
         // Check destination register is valid pointer
-        let dst = self.state.reg(dst_reg).ok_or(VerifierError::InvalidRegister(dst_reg as u8))?.clone();
+        let dst = self
+            .state
+            .reg(dst_reg)
+            .ok_or(VerifierError::InvalidRegister(dst_reg as u8))?
+            .clone();
 
         if dst.reg_type == BpfRegType::NotInit {
             return Err(VerifierError::UninitializedRegister(dst_reg as u8));
@@ -342,7 +359,10 @@ impl<'a> InsnVerifier<'a> {
         if mode == BPF_IND {
             // Check source register for indirect access
             let src_reg = insn.src_reg as usize;
-            let src = self.state.reg(src_reg).ok_or(VerifierError::InvalidRegister(src_reg as u8))?;
+            let src = self
+                .state
+                .reg(src_reg)
+                .ok_or(VerifierError::InvalidRegister(src_reg as u8))?;
 
             if src.reg_type != BpfRegType::ScalarValue {
                 return Err(VerifierError::InvalidInstruction(insn_idx));
@@ -385,12 +405,8 @@ impl<'a> InsnVerifier<'a> {
             }
             _ => {
                 // Conditional jump
-                let (next, branch) = check_cond_jmp_op(
-                    self.state,
-                    insn,
-                    insn_idx,
-                    self.allow_ptr_leaks,
-                )?;
+                let (next, branch) =
+                    check_cond_jmp_op(self.state, insn, insn_idx, self.allow_ptr_leaks)?;
 
                 match (next, branch) {
                     (Some(n), Some(b)) => Ok(InsnVerifyResult::conditional(n, b)),
@@ -434,7 +450,11 @@ impl<'a> InsnVerifier<'a> {
         let atomic_op = insn.imm as u32;
 
         // Check destination register is valid pointer
-        let dst = self.state.reg(dst_reg).ok_or(VerifierError::InvalidRegister(dst_reg as u8))?.clone();
+        let dst = self
+            .state
+            .reg(dst_reg)
+            .ok_or(VerifierError::InvalidRegister(dst_reg as u8))?
+            .clone();
 
         if dst.reg_type == BpfRegType::NotInit {
             return Err(VerifierError::UninitializedRegister(dst_reg as u8));
@@ -452,7 +472,10 @@ impl<'a> InsnVerifier<'a> {
         }
 
         // Check source register
-        let src = self.state.reg(src_reg).ok_or(VerifierError::InvalidRegister(src_reg as u8))?;
+        let src = self
+            .state
+            .reg(src_reg)
+            .ok_or(VerifierError::InvalidRegister(src_reg as u8))?;
 
         if src.reg_type == BpfRegType::NotInit {
             return Err(VerifierError::UninitializedRegister(src_reg as u8));
@@ -507,7 +530,10 @@ impl<'a> InsnVerifier<'a> {
         size: u32,
         result_type: BpfRegType,
     ) -> Result<()> {
-        let dst = self.state.reg_mut(dst_reg).ok_or(VerifierError::InvalidRegister(dst_reg as u8))?;
+        let dst = self
+            .state
+            .reg_mut(dst_reg)
+            .ok_or(VerifierError::InvalidRegister(dst_reg as u8))?;
 
         match result_type {
             BpfRegType::ScalarValue => {
@@ -570,9 +596,10 @@ impl<'a> InsnVerifier<'a> {
         }
 
         // Ensure stack is allocated to this depth
-        let func = self.state.cur_func_mut().ok_or(VerifierError::Internal(
-            "no current function".into(),
-        ))?;
+        let func = self
+            .state
+            .cur_func_mut()
+            .ok_or(VerifierError::Internal("no current function".into()))?;
 
         if stack_off as usize > func.stack.allocated_stack {
             func.stack.grow(stack_off as usize)?;
@@ -607,7 +634,7 @@ pub fn verify_program(
     }
 
     let mut state = BpfVerifierState::new();
-    
+
     // Initialize R1 as context pointer
     if let Some(r1) = state.reg_mut(1) {
         r1.reg_type = BpfRegType::PtrToCtx;

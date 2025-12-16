@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0
+
 //! Map-Function Compatibility Checking
 //!
 //! This module provides comprehensive type checking for BPF map operations,
@@ -8,8 +10,12 @@
 //! 1. From the map perspective: what helper functions can this map be used with?
 //! 2. From the function perspective: what map types can this helper accept?
 
-
-use alloc::{format, string::{String, ToString}, vec, vec::Vec};
+use alloc::{
+    format,
+    string::{String, ToString},
+    vec,
+    vec::Vec,
+};
 
 use crate::core::error::{Result, VerifierError};
 use crate::core::types::{BpfFuncId, BpfMapType, BpfProgType, BpfRegType};
@@ -356,7 +362,10 @@ fn check_func_requires_map(
         BpfFuncId::RedirectMap => {
             if !matches!(
                 map_type,
-                BpfMapType::Devmap | BpfMapType::DevmapHash | BpfMapType::Cpumap | BpfMapType::Xskmap
+                BpfMapType::Devmap
+                    | BpfMapType::DevmapHash
+                    | BpfMapType::Cpumap
+                    | BpfMapType::Xskmap
             ) {
                 return Err(func_map_compat_error(func_id, map_type));
             }
@@ -516,9 +525,7 @@ pub fn get_allowed_funcs_for_map(map_type: BpfMapType) -> &'static [BpfFuncId] {
         ],
         BpfMapType::UserRingbuf => &[BpfFuncId::UserRingbufDrain],
         BpfMapType::StackTrace => &[BpfFuncId::GetStackid],
-        BpfMapType::CgroupArray => {
-            &[BpfFuncId::SkbUnderCgroup, BpfFuncId::CurrentTaskUnderCgroup]
-        }
+        BpfMapType::CgroupArray => &[BpfFuncId::SkbUnderCgroup, BpfFuncId::CurrentTaskUnderCgroup],
         BpfMapType::CgroupStorage | BpfMapType::PercpuCgroupStorage => {
             &[BpfFuncId::GetLocalStorage]
         }
@@ -987,7 +994,9 @@ pub fn validate_map_operation(
             validation.valid = false;
         }
     } else if !matches!(signature.key_req, KeyTypeReq::None) {
-        validation.errors.push("key argument required but not provided".to_string());
+        validation
+            .errors
+            .push("key argument required but not provided".to_string());
         validation.valid = false;
     }
 
@@ -1001,9 +1010,8 @@ pub fn validate_map_operation(
 
     // Add warnings for potentially dangerous operations
     if signature.modifies_map && checker.map_info().map_type == BpfMapType::ProgArray {
-        validation = validation.with_warning(
-            "modifying prog_array may affect tail call behavior".to_string(),
-        );
+        validation = validation
+            .with_warning("modifying prog_array may affect tail call behavior".to_string());
     }
 
     validation
@@ -1038,10 +1046,7 @@ pub fn map_types_compatible(src: BpfMapType, dst: BpfMapType) -> bool {
 
 /// Get the expected return type for a map operation.
 /// Returns (register type, can_be_null).
-pub fn get_map_op_return_type(
-    op: BpfFuncId,
-    map_info: &MapInfo,
-) -> (BpfRegType, bool) {
+pub fn get_map_op_return_type(op: BpfFuncId, map_info: &MapInfo) -> (BpfRegType, bool) {
     match op {
         BpfFuncId::MapLookupElem => {
             // Returns pointer to map value or NULL
@@ -1052,9 +1057,7 @@ pub fn get_map_op_return_type(
             // Returns 0 on success, negative error on failure
             (BpfRegType::ScalarValue, false)
         }
-        BpfFuncId::MapPushElem
-        | BpfFuncId::MapPopElem
-        | BpfFuncId::MapPeekElem => {
+        BpfFuncId::MapPushElem | BpfFuncId::MapPopElem | BpfFuncId::MapPeekElem => {
             // Returns 0 on success, negative error on failure
             (BpfRegType::ScalarValue, false)
         }

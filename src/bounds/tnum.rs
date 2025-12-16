@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0
+
 //! Tracked numbers (tnum) - representing partially known values
 //!
 //! A tnum represents a value where some bits are known and others are unknown.
@@ -48,7 +50,11 @@ impl Tnum {
 
         let chi = min ^ max;
         // Find the position of the highest differing bit
-        let bits = if chi == 0 { 0 } else { 64 - chi.leading_zeros() };
+        let bits = if chi == 0 {
+            0
+        } else {
+            64 - chi.leading_zeros()
+        };
 
         // All bits below this position are unknown
         let mask = if bits == 64 {
@@ -130,7 +136,7 @@ impl Tnum {
         // self is a subset of other if:
         // 1. self has no unknown bits that other doesn't have
         // 2. where other has known bits, self must match
-        
+
         // All bits unknown in other must also be unknown in self for this to be a subset
         // Actually the opposite: self must have FEWER unknowns
         // self.mask must have 0s everywhere other.mask has 0s
@@ -139,11 +145,11 @@ impl Tnum {
             // Wait, that's wrong. If self knows a bit and other doesn't, that's fine.
             // The issue is if self could have a value that other can't.
         }
-        
+
         // For self to be a subset:
         // - Where other knows a bit (mask=0), self must have the same value or also know it
         // - self's possible value range must be within other's range
-        
+
         // Check that self's known bits match other's known bits where other knows them
         let other_known_mask = !other.mask;
         if (self.value & other_known_mask) != (other.value & other_known_mask) {
@@ -157,7 +163,7 @@ impl Tnum {
                 }
             }
         }
-        
+
         // self's range must be within other's range
         self.min() >= other.min() && self.max() <= other.max()
     }
@@ -299,7 +305,7 @@ impl Tnum {
     pub fn s32_bounds(&self) -> (i32, i32) {
         let subreg_mask = self.mask as u32;
         let subreg_value = self.value as u32;
-        
+
         // If sign bit of 32-bit value is known
         if subreg_mask & (1u32 << 31) == 0 {
             (subreg_value as i32, (subreg_value | subreg_mask) as i32)
@@ -330,7 +336,6 @@ impl Tnum {
     pub fn and(self, other: Tnum) -> Self {
         self & other
     }
-
 }
 
 impl BitAnd for Tnum {
@@ -366,6 +371,9 @@ impl BitXor for Tnum {
     fn bitxor(self, other: Self) -> Self {
         let v = self.value ^ other.value;
         let mu = self.mask | other.mask;
-        Self { value: v & !mu, mask: mu }
+        Self {
+            value: v & !mu,
+            mask: mu,
+        }
     }
 }

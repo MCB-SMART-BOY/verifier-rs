@@ -1,17 +1,18 @@
+// SPDX-License-Identifier: GPL-2.0
+
 //! Dynptr support for BPF programs.
 //!
 //! Dynptrs are BPF primitives that provide safe access to dynamically-sized memory.
 //! They can point to local stack memory, ringbuf entries, SKB/XDP data, etc.
 
-
 use alloc::{format, vec::Vec};
 
-use crate::stdlib::BTreeMap;
-use crate::state::reg_state::BpfRegState;
-use crate::state::stack_state::{StackManager, dynptr_get_spi};
-use crate::state::reference::ReferenceManager;
-use crate::core::types::*;
 use crate::core::error::{Result, VerifierError};
+use crate::core::types::*;
+use crate::state::reference::ReferenceManager;
+use crate::state::reg_state::BpfRegState;
+use crate::state::stack_state::{dynptr_get_spi, StackManager};
+use crate::stdlib::BTreeMap;
 
 /// Helper to convert argument type to dynptr type
 pub fn arg_to_dynptr_type(arg_type: BpfArgType) -> Option<BpfDynptrType> {
@@ -70,9 +71,11 @@ pub fn unmark_stack_slots_dynptr(
     }
 
     let spi = dynptr_get_spi(reg, stack.allocated_stack)?;
-    let slot = stack.get_slot_by_spi(spi).ok_or(VerifierError::StackOutOfBounds(
-        -(spi as i32 + 1) * BPF_REG_SIZE as i32,
-    ))?;
+    let slot = stack
+        .get_slot_by_spi(spi)
+        .ok_or(VerifierError::StackOutOfBounds(
+            -(spi as i32 + 1) * BPF_REG_SIZE as i32,
+        ))?;
 
     // Check if refcounted
     if !slot.spilled_ptr.dynptr.dynptr_type.is_refcounted() {
@@ -91,14 +94,17 @@ pub fn unmark_stack_slots_dynptr(
         .iter()
         .enumerate()
         .filter(|(_, s)| {
-            s.spilled_ptr.ref_obj_id == ref_obj_id
-                && s.get_type() == BpfStackSlotType::Dynptr
+            s.spilled_ptr.ref_obj_id == ref_obj_id && s.get_type() == BpfStackSlotType::Dynptr
         })
         .map(|(i, _)| i)
         .collect();
 
     for slot_spi in slots_to_invalidate {
-        if stack.get_slot_by_spi(slot_spi).map(|s| s.spilled_ptr.dynptr.first_slot).unwrap_or(false) {
+        if stack
+            .get_slot_by_spi(slot_spi)
+            .map(|s| s.spilled_ptr.dynptr.first_slot)
+            .unwrap_or(false)
+        {
             stack.invalidate_dynptr(slot_spi);
         }
     }
@@ -138,10 +144,7 @@ pub fn destroy_if_dynptr_stack_slot(stack: &mut StackManager, spi: usize) -> Res
 }
 
 /// Check if a dynptr register is valid for uninitialized use
-pub fn is_dynptr_reg_valid_uninit(
-    reg: &BpfRegState,
-    stack: &StackManager,
-) -> bool {
+pub fn is_dynptr_reg_valid_uninit(reg: &BpfRegState, stack: &StackManager) -> bool {
     if reg.reg_type == BpfRegType::ConstPtrToDynptr {
         return false;
     }
@@ -156,10 +159,7 @@ pub fn is_dynptr_reg_valid_uninit(
 }
 
 /// Check if a dynptr register is valid for initialized use
-pub fn is_dynptr_reg_valid_init(
-    reg: &BpfRegState,
-    stack: &StackManager,
-) -> bool {
+pub fn is_dynptr_reg_valid_init(reg: &BpfRegState, stack: &StackManager) -> bool {
     // CONST_PTR_TO_DYNPTR is always valid if it exists
     if reg.reg_type == BpfRegType::ConstPtrToDynptr {
         return true;
@@ -212,12 +212,10 @@ pub fn is_dynptr_type_expected(
         reg.dynptr.dynptr_type
     } else {
         match dynptr_get_spi(reg, stack.allocated_stack) {
-            Ok(spi) => {
-                match stack.get_slot_by_spi(spi) {
-                    Some(slot) => slot.spilled_ptr.dynptr.dynptr_type,
-                    None => return false,
-                }
-            }
+            Ok(spi) => match stack.get_slot_by_spi(spi) {
+                Some(slot) => slot.spilled_ptr.dynptr.dynptr_type,
+                None => return false,
+            },
             Err(_) => return false,
         }
     };
@@ -232,9 +230,9 @@ pub fn dynptr_id(reg: &BpfRegState, stack: &StackManager) -> Result<u32> {
     }
 
     let spi = dynptr_get_spi(reg, stack.allocated_stack)?;
-    let slot = stack.get_slot_by_spi(spi).ok_or(VerifierError::InvalidDynptr(
-        "dynptr slot not found".into(),
-    ))?;
+    let slot = stack
+        .get_slot_by_spi(spi)
+        .ok_or(VerifierError::InvalidDynptr("dynptr slot not found".into()))?;
 
     Ok(slot.spilled_ptr.id)
 }
@@ -246,9 +244,9 @@ pub fn dynptr_ref_obj_id(reg: &BpfRegState, stack: &StackManager) -> Result<u32>
     }
 
     let spi = dynptr_get_spi(reg, stack.allocated_stack)?;
-    let slot = stack.get_slot_by_spi(spi).ok_or(VerifierError::InvalidDynptr(
-        "dynptr slot not found".into(),
-    ))?;
+    let slot = stack
+        .get_slot_by_spi(spi)
+        .ok_or(VerifierError::InvalidDynptr("dynptr slot not found".into()))?;
 
     Ok(slot.spilled_ptr.ref_obj_id)
 }
@@ -260,18 +258,15 @@ pub fn dynptr_get_type(reg: &BpfRegState, stack: &StackManager) -> Result<BpfDyn
     }
 
     let spi = dynptr_get_spi(reg, stack.allocated_stack)?;
-    let slot = stack.get_slot_by_spi(spi).ok_or(VerifierError::InvalidDynptr(
-        "dynptr slot not found".into(),
-    ))?;
+    let slot = stack
+        .get_slot_by_spi(spi)
+        .ok_or(VerifierError::InvalidDynptr("dynptr slot not found".into()))?;
 
     Ok(slot.spilled_ptr.dynptr.dynptr_type)
 }
 
 /// Mark a dynptr read (for tracking)
-pub fn mark_dynptr_read(
-    stack: &mut StackManager,
-    reg: &BpfRegState,
-) -> Result<()> {
+pub fn mark_dynptr_read(stack: &mut StackManager, reg: &BpfRegState) -> Result<()> {
     if reg.reg_type == BpfRegType::ConstPtrToDynptr {
         return Ok(());
     }
@@ -310,7 +305,13 @@ pub struct DynptrSlice {
 
 impl DynptrSlice {
     /// Create a new slice
-    pub fn new(parent_id: u32, offset: u32, len: u32, rdwr: bool, parent_type: BpfDynptrType) -> Self {
+    pub fn new(
+        parent_id: u32,
+        offset: u32,
+        len: u32,
+        rdwr: bool,
+        parent_type: BpfDynptrType,
+    ) -> Self {
         Self {
             parent_id,
             offset,
@@ -330,7 +331,7 @@ impl DynptrSlice {
 }
 
 /// Validate bpf_dynptr_slice call
-/// 
+///
 /// Returns (is_rdonly, may_return_null, return_size)
 pub fn validate_dynptr_slice(
     reg: &BpfRegState,
@@ -343,7 +344,7 @@ pub fn validate_dynptr_slice(
     // Check dynptr is valid
     if !is_dynptr_reg_valid_init(reg, stack) {
         return Err(VerifierError::InvalidDynptr(
-            "dynptr not initialized for slice".into()
+            "dynptr not initialized for slice".into(),
         ));
     }
 
@@ -361,9 +362,7 @@ pub fn validate_dynptr_slice(
             // SKB/XDP support slice, may need to copy to buffer
         }
         BpfDynptrType::Invalid => {
-            return Err(VerifierError::InvalidDynptr(
-                "invalid dynptr type".into()
-            ));
+            return Err(VerifierError::InvalidDynptr("invalid dynptr type".into()));
         }
         _ => {
             // Other types may or may not support slice
@@ -374,8 +373,8 @@ pub fn validate_dynptr_slice(
     let is_rdonly = !rdwr;
 
     // For SKB/XDP, may need to return pointer to user buffer (can be null if buffer not provided)
-    let may_return_null = matches!(dynptr_type, BpfDynptrType::Skb | BpfDynptrType::Xdp) 
-        && !buffer_provided;
+    let may_return_null =
+        matches!(dynptr_type, BpfDynptrType::Skb | BpfDynptrType::Xdp) && !buffer_provided;
 
     // Return size is the requested length
     Ok((is_rdonly, may_return_null, len))
@@ -394,11 +393,11 @@ pub fn create_slice_result_reg(
     let parent_type = dynptr_get_type(parent_reg, stack)?;
 
     let mut result = BpfRegState::default();
-    
+
     // Slice returns PTR_TO_MEM or NULL
     result.reg_type = BpfRegType::PtrToMem;
     result.mem_size = len;
-    
+
     // Mark as maybe null for SKB/XDP without buffer
     if matches!(parent_type, BpfDynptrType::Skb | BpfDynptrType::Xdp) && buffer_reg.is_none() {
         result.type_flags.insert(BpfTypeFlag::PTR_MAYBE_NULL);
@@ -425,14 +424,14 @@ pub fn validate_dynptr_clone(
     // Source must be valid initialized dynptr
     if !is_dynptr_reg_valid_init(src_reg, stack) {
         return Err(VerifierError::InvalidDynptr(
-            "source dynptr not initialized".into()
+            "source dynptr not initialized".into(),
         ));
     }
 
     // Destination must be valid for uninitialized use
     if !is_dynptr_reg_valid_uninit(dst_reg, stack) {
         return Err(VerifierError::InvalidDynptr(
-            "destination not valid for dynptr".into()
+            "destination not valid for dynptr".into(),
         ));
     }
 
@@ -459,14 +458,7 @@ pub fn process_dynptr_clone(
     };
 
     // Mark destination slots as dynptr
-    let new_id = mark_stack_slots_dynptr(
-        stack,
-        refs,
-        dst_reg,
-        src_type,
-        insn_idx,
-        clone_ref_id,
-    )?;
+    let new_id = mark_stack_slots_dynptr(stack, refs, dst_reg, src_type, insn_idx, clone_ref_id)?;
 
     Ok(new_id)
 }
@@ -480,14 +472,14 @@ pub fn validate_dynptr_adjust(
 ) -> Result<()> {
     if !is_dynptr_reg_valid_init(reg, stack) {
         return Err(VerifierError::InvalidDynptr(
-            "dynptr not initialized for adjust".into()
+            "dynptr not initialized for adjust".into(),
         ));
     }
 
     // Start must be <= end
     if start_offset > end_offset {
         return Err(VerifierError::InvalidDynptr(
-            "adjust: start_offset > end_offset".into()
+            "adjust: start_offset > end_offset".into(),
         ));
     }
 
@@ -495,39 +487,30 @@ pub fn validate_dynptr_adjust(
 }
 
 /// Validate bpf_dynptr_is_null call
-pub fn validate_dynptr_is_null(
-    reg: &BpfRegState,
-    stack: &StackManager,
-) -> Result<()> {
+pub fn validate_dynptr_is_null(reg: &BpfRegState, stack: &StackManager) -> Result<()> {
     if !is_dynptr_reg_valid_init(reg, stack) {
         return Err(VerifierError::InvalidDynptr(
-            "dynptr not initialized for is_null check".into()
+            "dynptr not initialized for is_null check".into(),
         ));
     }
     Ok(())
 }
 
 /// Validate bpf_dynptr_is_rdonly call  
-pub fn validate_dynptr_is_rdonly(
-    reg: &BpfRegState,
-    stack: &StackManager,
-) -> Result<()> {
+pub fn validate_dynptr_is_rdonly(reg: &BpfRegState, stack: &StackManager) -> Result<()> {
     if !is_dynptr_reg_valid_init(reg, stack) {
         return Err(VerifierError::InvalidDynptr(
-            "dynptr not initialized for is_rdonly check".into()
+            "dynptr not initialized for is_rdonly check".into(),
         ));
     }
     Ok(())
 }
 
 /// Validate bpf_dynptr_size call
-pub fn validate_dynptr_size(
-    reg: &BpfRegState,
-    stack: &StackManager,
-) -> Result<()> {
+pub fn validate_dynptr_size(reg: &BpfRegState, stack: &StackManager) -> Result<()> {
     if !is_dynptr_reg_valid_init(reg, stack) {
         return Err(VerifierError::InvalidDynptr(
-            "dynptr not initialized for size check".into()
+            "dynptr not initialized for size check".into(),
         ));
     }
     Ok(())
@@ -543,7 +526,7 @@ pub fn validate_dynptr_data(
 ) -> Result<BpfRegState> {
     if !is_dynptr_reg_valid_init(reg, stack) {
         return Err(VerifierError::InvalidDynptr(
-            "dynptr not initialized for data access".into()
+            "dynptr not initialized for data access".into(),
         ));
     }
 
@@ -557,7 +540,7 @@ pub fn validate_dynptr_data(
         BpfDynptrType::Skb | BpfDynptrType::Xdp => {
             // Need to use slice for these
             return Err(VerifierError::InvalidDynptr(
-                "use bpf_dynptr_slice for SKB/XDP".into()
+                "use bpf_dynptr_slice for SKB/XDP".into(),
             ));
         }
         _ => {}
@@ -567,7 +550,7 @@ pub fn validate_dynptr_data(
     result.reg_type = BpfRegType::PtrToMem;
     result.mem_size = len;
     result.off = offset as i32;
-    
+
     if !rdwr {
         result.type_flags.insert(BpfTypeFlag::MEM_RDONLY);
     }
@@ -699,7 +682,7 @@ impl NestedDynptrContext {
             (DynptrState::Uninit, DynptrTransition::Init) => DynptrState::Valid,
             (DynptrState::Uninit, _) => {
                 return Err(VerifierError::InvalidDynptr(
-                    "dynptr not initialized".into()
+                    "dynptr not initialized".into(),
                 ));
             }
 
@@ -724,7 +707,7 @@ impl NestedDynptrContext {
                 self.depth += 1;
                 if self.depth > MAX_NESTED_DYNPTR_DEPTH {
                     return Err(VerifierError::InvalidDynptr(
-                        "nested dynptr slice depth exceeded".into()
+                        "nested dynptr slice depth exceeded".into(),
                     ));
                 }
                 DynptrState::Sliced
@@ -733,7 +716,7 @@ impl NestedDynptrContext {
             (DynptrState::Sliced, DynptrTransition::Check) => DynptrState::Sliced,
             (DynptrState::Sliced, DynptrTransition::GetData) => {
                 return Err(VerifierError::InvalidDynptr(
-                    "cannot get data from sliced dynptr, use slice pointer".into()
+                    "cannot get data from sliced dynptr, use slice pointer".into(),
                 ));
             }
 
@@ -747,22 +730,23 @@ impl NestedDynptrContext {
             // From Released - nothing allowed
             (DynptrState::Released, _) => {
                 return Err(VerifierError::InvalidDynptr(
-                    "dynptr already released".into()
+                    "dynptr already released".into(),
                 ));
             }
 
             // From Invalid
             (DynptrState::Invalid, _) => {
                 return Err(VerifierError::InvalidDynptr(
-                    "dynptr in invalid state".into()
+                    "dynptr in invalid state".into(),
                 ));
             }
 
             // Default: invalid transition
             (state, trans) => {
-                return Err(VerifierError::InvalidDynptr(
-                    format!("invalid dynptr transition {:?} from state {:?}", trans, state)
-                ));
+                return Err(VerifierError::InvalidDynptr(format!(
+                    "invalid dynptr transition {:?} from state {:?}",
+                    trans, state
+                )));
             }
         };
 
@@ -772,7 +756,10 @@ impl NestedDynptrContext {
 
     /// Check if dynptr can be used in current context
     pub fn can_use(&self) -> bool {
-        matches!(self.state, DynptrState::Valid | DynptrState::Sliced | DynptrState::Adjusted)
+        matches!(
+            self.state,
+            DynptrState::Valid | DynptrState::Sliced | DynptrState::Adjusted
+        )
     }
 
     /// Add child dynptr
@@ -931,7 +918,7 @@ impl DynptrIteratorContext {
         self.current_iteration += 1;
         if self.current_iteration > self.max_iterations {
             return Err(VerifierError::InvalidDynptr(
-                "dynptr used in too many iterations".into()
+                "dynptr used in too many iterations".into(),
             ));
         }
         Ok(())
@@ -1023,7 +1010,7 @@ impl DynptrTracker {
             ctx.depth = 1;
         }
         self.nested_ctx.insert(id, ctx);
-        
+
         self.active.insert(id, info);
         self.total_created += 1;
     }
@@ -1031,22 +1018,23 @@ impl DynptrTracker {
     /// Register derived dynptr (clone, slice result, etc.)
     pub fn register_derived(&mut self, id: u32, parent_id: u32, info: DynptrInfo) {
         self.active.insert(id, info);
-        
+
         // Get parent depth
-        let parent_depth = self.nested_ctx
+        let parent_depth = self
+            .nested_ctx
             .get(&parent_id)
             .map(|c| c.depth)
             .unwrap_or(0);
-        
+
         // Create derived context
         let ctx = NestedDynptrContext::derived(parent_id, parent_depth + 1);
         self.nested_ctx.insert(id, ctx);
-        
+
         // Add child to parent
         if let Some(parent_ctx) = self.nested_ctx.get_mut(&parent_id) {
             parent_ctx.add_child(id);
         }
-        
+
         self.total_created += 1;
     }
 
@@ -1067,9 +1055,10 @@ impl DynptrTracker {
 
     /// Apply transition to dynptr
     pub fn apply_transition(&mut self, id: u32, trans: DynptrTransition) -> Result<()> {
-        let ctx = self.nested_ctx.get_mut(&id).ok_or_else(|| {
-            VerifierError::InvalidDynptr(format!("dynptr {} not found", id))
-        })?;
+        let ctx = self
+            .nested_ctx
+            .get_mut(&id)
+            .ok_or_else(|| VerifierError::InvalidDynptr(format!("dynptr {} not found", id)))?;
         ctx.transition(trans)
     }
 
@@ -1079,12 +1068,12 @@ impl DynptrTracker {
         if let Some(ctx) = self.nested_ctx.get_mut(&id) {
             ctx.transition(DynptrTransition::Release)?;
         }
-        
+
         let info = self.active.remove(&id);
         if info.is_some() {
             self.total_released += 1;
         }
-        
+
         // Also release any child dynptrs
         if let Some(ctx) = self.nested_ctx.get(&id) {
             let children: Vec<u32> = ctx.children.clone();
@@ -1092,7 +1081,7 @@ impl DynptrTracker {
                 let _ = self.release(child_id);
             }
         }
-        
+
         Ok(info)
     }
 
@@ -1103,7 +1092,10 @@ impl DynptrTracker {
 
     /// Check if dynptr is usable
     pub fn is_usable(&self, id: u32) -> bool {
-        self.nested_ctx.get(&id).map(|c| c.can_use()).unwrap_or(false)
+        self.nested_ctx
+            .get(&id)
+            .map(|c| c.can_use())
+            .unwrap_or(false)
     }
 
     /// Get count of active dynptrs
@@ -1120,9 +1112,10 @@ impl DynptrTracker {
     pub fn check_depth_limit(&self, id: u32) -> Result<()> {
         let depth = self.get_depth(id);
         if depth > MAX_NESTED_DYNPTR_DEPTH {
-            return Err(VerifierError::InvalidDynptr(
-                format!("dynptr nesting depth {} exceeds limit {}", depth, MAX_NESTED_DYNPTR_DEPTH)
-            ));
+            return Err(VerifierError::InvalidDynptr(format!(
+                "dynptr nesting depth {} exceeds limit {}",
+                depth, MAX_NESTED_DYNPTR_DEPTH
+            )));
         }
         Ok(())
     }
@@ -1134,7 +1127,7 @@ impl DynptrTracker {
     /// Enter try block - save all active dynptr states
     pub fn enter_try_block(&mut self) {
         self.exception_state.enter_try();
-        
+
         // Save current states of all active dynptrs
         for (id, ctx) in &self.nested_ctx {
             if ctx.can_use() {
@@ -1152,7 +1145,7 @@ impl DynptrTracker {
     /// Exit try block via exception
     pub fn exit_try_block_exception(&mut self) -> Result<()> {
         self.exception_state.exit_try();
-        
+
         // Release all dynptrs marked for cleanup
         let cleanup_list: Vec<u32> = self.exception_state.cleanup_required.clone();
         for id in cleanup_list {
@@ -1163,7 +1156,7 @@ impl DynptrTracker {
                 }
             }
         }
-        
+
         self.exception_state.clear_cleanup();
         Ok(())
     }
@@ -1181,7 +1174,7 @@ impl DynptrTracker {
     }
 
     // ========================================================================
-    // Iterator Integration  
+    // Iterator Integration
     // ========================================================================
 
     /// Enter iterator context
@@ -1203,18 +1196,19 @@ impl DynptrTracker {
         };
 
         // Check if dynptr is safe for iteration
-        let nested_ctx = self.nested_ctx.get(&id).ok_or_else(|| {
-            VerifierError::InvalidDynptr(format!("dynptr {} not found", id))
-        })?;
+        let nested_ctx = self
+            .nested_ctx
+            .get(&id)
+            .ok_or_else(|| VerifierError::InvalidDynptr(format!("dynptr {} not found", id)))?;
 
         if !iter_ctx.is_safe_for_iteration(id, nested_ctx) {
             return Err(VerifierError::InvalidDynptr(
-                "dynptr not safe for use in iteration".into()
+                "dynptr not safe for use in iteration".into(),
             ));
         }
 
         iter_ctx.register_dynptr(id);
-        
+
         // Mark in nested context
         if let Some(ctx) = self.nested_ctx.get_mut(&id) {
             ctx.in_iterator = true;
@@ -1242,16 +1236,18 @@ impl DynptrTracker {
 
     /// Validate all dynptrs are released
     pub fn validate_cleanup(&self) -> Result<()> {
-        let unreleased: Vec<u32> = self.active
+        let unreleased: Vec<u32> = self
+            .active
             .iter()
             .filter(|(_, info)| info.dynptr_type.is_refcounted())
             .map(|(id, _)| *id)
             .collect();
 
         if !unreleased.is_empty() {
-            return Err(VerifierError::InvalidDynptr(
-                format!("unreleased refcounted dynptrs: {:?}", unreleased)
-            ));
+            return Err(VerifierError::InvalidDynptr(format!(
+                "unreleased refcounted dynptrs: {:?}",
+                unreleased
+            )));
         }
         Ok(())
     }
@@ -1260,7 +1256,7 @@ impl DynptrTracker {
     pub fn validate_no_iterator_leak(&self) -> Result<()> {
         if self.iterator_ctx.is_some() {
             return Err(VerifierError::InvalidDynptr(
-                "iterator context not properly closed".into()
+                "iterator context not properly closed".into(),
             ));
         }
         Ok(())
@@ -1270,7 +1266,7 @@ impl DynptrTracker {
     pub fn validate_no_exception_leak(&self) -> Result<()> {
         if self.exception_state.in_try_block {
             return Err(VerifierError::InvalidDynptr(
-                "exception context not properly closed".into()
+                "exception context not properly closed".into(),
             ));
         }
         Ok(())
@@ -1297,7 +1293,7 @@ impl DynptrTracker {
     pub fn get_parent_chain(&self, id: u32) -> Vec<u32> {
         let mut chain = Vec::new();
         let mut current = id;
-        
+
         while let Some(ctx) = self.nested_ctx.get(&current) {
             if let Some(parent) = ctx.parent_id {
                 chain.push(parent);
@@ -1306,7 +1302,7 @@ impl DynptrTracker {
                 break;
             }
         }
-        
+
         chain
     }
 }

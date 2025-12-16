@@ -1,15 +1,16 @@
+// SPDX-License-Identifier: GPL-2.0
+
 //! Register liveness tracking
 //!
 //! This module implements register liveness analysis for the BPF verifier.
 //! It tracks which registers are read, written, and whether they need
 //! precise tracking for verification correctness.
 
-
 use alloc::{vec, vec::Vec};
 
+use crate::core::error::{Result, VerifierError};
 use crate::core::types::*;
 use crate::state::reg_state::RegLiveness;
-use crate::core::error::{Result, VerifierError};
 
 /// Liveness states for registers
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -42,10 +43,26 @@ impl From<RegLiveness> for LiveState {
 impl From<LiveState> for RegLiveness {
     fn from(state: LiveState) -> Self {
         match state {
-            LiveState::None => RegLiveness { read: false, written: false, done: false },
-            LiveState::Written => RegLiveness { read: false, written: true, done: false },
-            LiveState::Read => RegLiveness { read: true, written: false, done: false },
-            LiveState::Done => RegLiveness { read: true, written: true, done: true },
+            LiveState::None => RegLiveness {
+                read: false,
+                written: false,
+                done: false,
+            },
+            LiveState::Written => RegLiveness {
+                read: false,
+                written: true,
+                done: false,
+            },
+            LiveState::Read => RegLiveness {
+                read: true,
+                written: false,
+                done: false,
+            },
+            LiveState::Done => RegLiveness {
+                read: true,
+                written: true,
+                done: true,
+            },
         }
     }
 }
@@ -71,9 +88,10 @@ impl LivenessState {
     /// Mark register as read
     pub fn mark_reg_read(&mut self, regno: usize) {
         if regno < MAX_BPF_REG
-            && (self.regs[regno] == LiveState::None || self.regs[regno] == LiveState::Written) {
-                self.regs[regno] = LiveState::Read;
-            }
+            && (self.regs[regno] == LiveState::None || self.regs[regno] == LiveState::Written)
+        {
+            self.regs[regno] = LiveState::Read;
+        }
     }
 
     /// Mark register as written
@@ -152,7 +170,9 @@ fn merge_live_state(a: LiveState, b: LiveState) -> LiveState {
         (LiveState::Done, _) | (_, LiveState::Done) => LiveState::Done,
         (LiveState::Read, _) | (_, LiveState::Read) => LiveState::Read,
         (LiveState::Written, LiveState::Written) => LiveState::Written,
-        (LiveState::Written, LiveState::None) | (LiveState::None, LiveState::Written) => LiveState::Written,
+        (LiveState::Written, LiveState::None) | (LiveState::None, LiveState::Written) => {
+            LiveState::Written
+        }
         (LiveState::None, LiveState::None) => LiveState::None,
     }
 }

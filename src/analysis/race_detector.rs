@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0
+
 //! Data Race Detection for BPF Programs
 //!
 //! This module implements static analysis to detect potential data races in BPF programs.
@@ -7,13 +9,11 @@
 //! - RCU and lock interactions
 //! - Per-CPU data access patterns
 
-
 use alloc::{format, string::String, vec::Vec};
 
-use crate::stdlib::{BTreeMap, BTreeSet};
 use crate::core::error::{Result, VerifierError};
 use crate::core::types::*;
-
+use crate::stdlib::{BTreeMap, BTreeSet};
 
 // ============================================================================
 // Access Types and Tracking
@@ -37,12 +37,18 @@ pub enum AccessType {
 impl AccessType {
     /// Check if this is a write access
     pub fn is_write(&self) -> bool {
-        matches!(self, AccessType::Write | AccessType::AtomicWrite | AccessType::ReadModifyWrite)
+        matches!(
+            self,
+            AccessType::Write | AccessType::AtomicWrite | AccessType::ReadModifyWrite
+        )
     }
 
     /// Check if this is atomic
     pub fn is_atomic(&self) -> bool {
-        matches!(self, AccessType::AtomicRead | AccessType::AtomicWrite | AccessType::ReadModifyWrite)
+        matches!(
+            self,
+            AccessType::AtomicRead | AccessType::AtomicWrite | AccessType::ReadModifyWrite
+        )
     }
 
     /// Check if two access types can race
@@ -156,9 +162,10 @@ impl LockState {
     /// Release spin lock
     pub fn release_spin(&mut self, lock_id: u32) -> Result<()> {
         if !self.spin_locks.remove(&lock_id) {
-            return Err(VerifierError::InvalidState(
-                format!("releasing unheld spin lock {}", lock_id)
-            ));
+            return Err(VerifierError::InvalidState(format!(
+                "releasing unheld spin lock {}",
+                lock_id
+            )));
         }
         Ok(())
     }
@@ -172,7 +179,7 @@ impl LockState {
     pub fn rcu_read_unlock(&mut self) -> Result<()> {
         if self.rcu_read_depth == 0 {
             return Err(VerifierError::InvalidState(
-                "rcu_read_unlock without matching lock".into()
+                "rcu_read_unlock without matching lock".into(),
             ));
         }
         self.rcu_read_depth -= 1;
@@ -281,10 +288,9 @@ impl RaceDetector {
 
     /// Check if program type is preemptible
     fn is_preemptible_prog_type(prog_type: BpfProgType) -> bool {
-        matches!(prog_type, 
-            BpfProgType::Tracing |
-            BpfProgType::Lsm |
-            BpfProgType::StructOps
+        matches!(
+            prog_type,
+            BpfProgType::Tracing | BpfProgType::Lsm | BpfProgType::StructOps
         )
     }
 
@@ -406,7 +412,7 @@ impl RaceDetector {
     pub fn preempt_enable(&mut self) -> Result<()> {
         if self.lock_state.preempt_disabled == 0 {
             return Err(VerifierError::InvalidState(
-                "preempt_enable without matching disable".into()
+                "preempt_enable without matching disable".into(),
             ));
         }
         self.lock_state.preempt_disabled -= 1;
@@ -471,8 +477,8 @@ impl RaceDetector {
         match (&access1.location, &access2.location) {
             (MemoryLocation::Global { btf_id, .. }, _) if self.shared_globals.contains(btf_id) => {
                 // Shared global needs synchronization
-                if !access1.lock_state.has_synchronization() 
-                    && !access2.lock_state.has_synchronization() 
+                if !access1.lock_state.has_synchronization()
+                    && !access2.lock_state.has_synchronization()
                 {
                     return Some(RaceReason::NoSynchronization);
                 }
@@ -480,8 +486,8 @@ impl RaceDetector {
                     return Some(RaceReason::RcuMismatch);
                 }
             }
-            (MemoryLocation::MapElement { map_id, .. }, _) 
-                if self.concurrent_maps.contains(map_id) => 
+            (MemoryLocation::MapElement { map_id, .. }, _)
+                if self.concurrent_maps.contains(map_id) =>
             {
                 // Concurrent map access
                 if !access1.access_type.is_atomic() && access1.access_type.is_write() {
@@ -582,9 +588,7 @@ impl RaceDetector {
             let first = &errors[0];
             return Err(VerifierError::InvalidMemoryAccess(format!(
                 "data race detected at insn {} and {}: {:?}",
-                first.access1.insn_idx,
-                first.access2.insn_idx,
-                first.reason
+                first.access1.insn_idx, first.access2.insn_idx, first.reason
             )));
         }
         Ok(())

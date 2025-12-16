@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0
+
 //! Context access optimization for BPF programs
 //!
 //! This module converts context field accesses to actual memory operations.
@@ -13,14 +15,13 @@
 //! - **Cache-aware ordering**: Reorders accesses for better cache behavior
 //! - **Dead access elimination**: Removes accesses whose results are unused
 
-
 use alloc::{format, vec, vec::Vec};
 
 use alloc::collections::{BTreeMap as HashMap, BTreeSet as HashSet};
 
-use crate::core::types::*;
+use super::patching::{Patch, PatchManager, PatchType};
 use crate::core::error::{Result, VerifierError};
-use super::patching::{Patch, PatchType, PatchManager};
+use crate::core::types::*;
 
 /// Context field access information
 #[derive(Debug, Clone)]
@@ -94,7 +95,7 @@ impl CtxConvConfig {
             field_map: vec![
                 // __sk_buff fields -> sk_buff fields
                 CtxFieldMapping {
-                    ctx_off: 0,  // len
+                    ctx_off: 0, // len
                     ctx_size: 4,
                     target_off: offset_of_skb_len(),
                     target_size: 4,
@@ -102,7 +103,7 @@ impl CtxConvConfig {
                     conv: CtxConvType::Direct,
                 },
                 CtxFieldMapping {
-                    ctx_off: 4,  // pkt_type
+                    ctx_off: 4, // pkt_type
                     ctx_size: 4,
                     target_off: offset_of_skb_pkt_type(),
                     target_size: 1,
@@ -110,7 +111,7 @@ impl CtxConvConfig {
                     conv: CtxConvType::Direct,
                 },
                 CtxFieldMapping {
-                    ctx_off: 8,  // mark
+                    ctx_off: 8, // mark
                     ctx_size: 4,
                     target_off: offset_of_skb_mark(),
                     target_size: 4,
@@ -195,7 +196,7 @@ impl CtxConvConfig {
             field_map: vec![
                 // xdp_md fields -> xdp_buff fields
                 CtxFieldMapping {
-                    ctx_off: 0,  // data
+                    ctx_off: 0, // data
                     ctx_size: 4,
                     target_off: 0, // xdp_buff.data
                     target_size: 8,
@@ -203,7 +204,7 @@ impl CtxConvConfig {
                     conv: CtxConvType::Direct,
                 },
                 CtxFieldMapping {
-                    ctx_off: 4,  // data_end
+                    ctx_off: 4, // data_end
                     ctx_size: 4,
                     target_off: 8, // xdp_buff.data_end
                     target_size: 8,
@@ -211,7 +212,7 @@ impl CtxConvConfig {
                     conv: CtxConvType::Direct,
                 },
                 CtxFieldMapping {
-                    ctx_off: 8,  // data_meta
+                    ctx_off: 8, // data_meta
                     ctx_size: 4,
                     target_off: 16, // xdp_buff.data_meta
                     target_size: 8,
@@ -271,11 +272,11 @@ impl CtxConvConfig {
         let mut config = Self::for_socket_filter();
         config.prog_type = BpfProgType::SchedCls;
         config.write_ok = true; // Can modify packet
-        
+
         // Add TC-specific fields
         config.field_map.extend(vec![
             CtxFieldMapping {
-                ctx_off: 36,  // tc_index
+                ctx_off: 36, // tc_index
                 ctx_size: 4,
                 target_off: offset_of_skb_tc_index(),
                 target_size: 2,
@@ -283,7 +284,7 @@ impl CtxConvConfig {
                 conv: CtxConvType::Direct,
             },
             CtxFieldMapping {
-                ctx_off: 40,  // cb[0]
+                ctx_off: 40, // cb[0]
                 ctx_size: 4,
                 target_off: offset_of_skb_cb(),
                 target_size: 4,
@@ -291,7 +292,7 @@ impl CtxConvConfig {
                 conv: CtxConvType::Direct,
             },
             CtxFieldMapping {
-                ctx_off: 44,  // cb[1]
+                ctx_off: 44, // cb[1]
                 ctx_size: 4,
                 target_off: offset_of_skb_cb() + 4,
                 target_size: 4,
@@ -299,7 +300,7 @@ impl CtxConvConfig {
                 conv: CtxConvType::Direct,
             },
             CtxFieldMapping {
-                ctx_off: 48,  // cb[2]
+                ctx_off: 48, // cb[2]
                 ctx_size: 4,
                 target_off: offset_of_skb_cb() + 8,
                 target_size: 4,
@@ -307,7 +308,7 @@ impl CtxConvConfig {
                 conv: CtxConvType::Direct,
             },
             CtxFieldMapping {
-                ctx_off: 52,  // cb[3]
+                ctx_off: 52, // cb[3]
                 ctx_size: 4,
                 target_off: offset_of_skb_cb() + 12,
                 target_size: 4,
@@ -315,7 +316,7 @@ impl CtxConvConfig {
                 conv: CtxConvType::Direct,
             },
             CtxFieldMapping {
-                ctx_off: 56,  // cb[4]
+                ctx_off: 56, // cb[4]
                 ctx_size: 4,
                 target_off: offset_of_skb_cb() + 16,
                 target_size: 4,
@@ -323,7 +324,7 @@ impl CtxConvConfig {
                 conv: CtxConvType::Direct,
             },
             CtxFieldMapping {
-                ctx_off: 60,  // hash
+                ctx_off: 60, // hash
                 ctx_size: 4,
                 target_off: offset_of_skb_hash(),
                 target_size: 4,
@@ -331,7 +332,7 @@ impl CtxConvConfig {
                 conv: CtxConvType::Direct,
             },
             CtxFieldMapping {
-                ctx_off: 64,  // tc_classid
+                ctx_off: 64, // tc_classid
                 ctx_size: 4,
                 target_off: offset_of_skb_tc_classid(),
                 target_size: 4,
@@ -368,7 +369,7 @@ impl CtxConvConfig {
             field_map: vec![
                 // bpf_sock_ops fields
                 CtxFieldMapping {
-                    ctx_off: 0,  // op
+                    ctx_off: 0, // op
                     ctx_size: 4,
                     target_off: 0,
                     target_size: 4,
@@ -376,7 +377,7 @@ impl CtxConvConfig {
                     conv: CtxConvType::Direct,
                 },
                 CtxFieldMapping {
-                    ctx_off: 4,  // family
+                    ctx_off: 4, // family
                     ctx_size: 4,
                     target_off: 4,
                     target_size: 4,
@@ -384,7 +385,7 @@ impl CtxConvConfig {
                     conv: CtxConvType::Computed, // From socket
                 },
                 CtxFieldMapping {
-                    ctx_off: 8,  // remote_ip4
+                    ctx_off: 8, // remote_ip4
                     ctx_size: 4,
                     target_off: 8,
                     target_size: 4,
@@ -652,7 +653,7 @@ impl CtxConvConfig {
             field_map: vec![
                 // sk_msg_md fields
                 CtxFieldMapping {
-                    ctx_off: 0,  // data
+                    ctx_off: 0, // data
                     ctx_size: 8,
                     target_off: 0,
                     target_size: 8,
@@ -660,7 +661,7 @@ impl CtxConvConfig {
                     conv: CtxConvType::Computed,
                 },
                 CtxFieldMapping {
-                    ctx_off: 8,  // data_end
+                    ctx_off: 8, // data_end
                     ctx_size: 8,
                     target_off: 8,
                     target_size: 8,
@@ -753,7 +754,7 @@ impl CtxConvConfig {
             field_map: vec![
                 // bpf_sock fields
                 CtxFieldMapping {
-                    ctx_off: 0,  // bound_dev_if
+                    ctx_off: 0, // bound_dev_if
                     ctx_size: 4,
                     target_off: 0,
                     target_size: 4,
@@ -761,7 +762,7 @@ impl CtxConvConfig {
                     conv: CtxConvType::Computed,
                 },
                 CtxFieldMapping {
-                    ctx_off: 4,  // family
+                    ctx_off: 4, // family
                     ctx_size: 4,
                     target_off: 4,
                     target_size: 4,
@@ -769,7 +770,7 @@ impl CtxConvConfig {
                     conv: CtxConvType::Computed,
                 },
                 CtxFieldMapping {
-                    ctx_off: 8,  // type
+                    ctx_off: 8, // type
                     ctx_size: 4,
                     target_off: 8,
                     target_size: 4,
@@ -877,7 +878,7 @@ impl CtxConvConfig {
             field_map: vec![
                 // bpf_sock_addr fields
                 CtxFieldMapping {
-                    ctx_off: 0,  // user_family
+                    ctx_off: 0, // user_family
                     ctx_size: 4,
                     target_off: 0,
                     target_size: 4,
@@ -885,7 +886,7 @@ impl CtxConvConfig {
                     conv: CtxConvType::Direct,
                 },
                 CtxFieldMapping {
-                    ctx_off: 4,  // user_ip4
+                    ctx_off: 4, // user_ip4
                     ctx_size: 4,
                     target_off: 4,
                     target_size: 4,
@@ -893,7 +894,7 @@ impl CtxConvConfig {
                     conv: CtxConvType::Direct,
                 },
                 CtxFieldMapping {
-                    ctx_off: 8,  // user_ip6[0]
+                    ctx_off: 8, // user_ip6[0]
                     ctx_size: 16,
                     target_off: 8,
                     target_size: 16,
@@ -961,7 +962,7 @@ impl CtxConvConfig {
             field_map: vec![
                 // __sk_buff subset for flow dissector
                 CtxFieldMapping {
-                    ctx_off: 0,  // data
+                    ctx_off: 0, // data
                     ctx_size: 8,
                     target_off: 0,
                     target_size: 8,
@@ -969,7 +970,7 @@ impl CtxConvConfig {
                     conv: CtxConvType::Computed,
                 },
                 CtxFieldMapping {
-                    ctx_off: 8,  // data_end
+                    ctx_off: 8, // data_end
                     ctx_size: 8,
                     target_off: 8,
                     target_size: 8,
@@ -1001,8 +1002,10 @@ impl CtxConvConfig {
             BpfProgType::SockOps => Some(Self::for_sock_ops()),
             BpfProgType::SkSkb => Some(Self::for_sk_skb()),
             BpfProgType::SkMsg => Some(Self::for_sk_msg()),
-            BpfProgType::LwtIn | BpfProgType::LwtOut | 
-            BpfProgType::LwtXmit | BpfProgType::LwtSeg6local => Some(Self::for_lwt()),
+            BpfProgType::LwtIn
+            | BpfProgType::LwtOut
+            | BpfProgType::LwtXmit
+            | BpfProgType::LwtSeg6local => Some(Self::for_lwt()),
             BpfProgType::FlowDissector => Some(Self::for_flow_dissector()),
             BpfProgType::Tracing => Some(Self::for_tracing()),
             _ => None, // Other types use BTF-based access or don't have context
@@ -1011,9 +1014,9 @@ impl CtxConvConfig {
 
     /// Find field mapping for a given offset and size
     pub fn find_mapping(&self, off: u32, size: u32) -> Option<&CtxFieldMapping> {
-        self.field_map.iter().find(|m| {
-            off >= m.ctx_off && off + size <= m.ctx_off + m.ctx_size
-        })
+        self.field_map
+            .iter()
+            .find(|m| off >= m.ctx_off && off + size <= m.ctx_off + m.ctx_size)
     }
 }
 
@@ -1065,7 +1068,7 @@ impl SkbOffsets {
     pub const fn linux_6_x_x86_64() -> Self {
         Self {
             len: 104,
-            pkt_type: 108,  // Part of bitfield at offset 108
+            pkt_type: 108, // Part of bitfield at offset 108
             mark: 112,
             queue_mapping: 116,
             protocol: 118,
@@ -1077,8 +1080,8 @@ impl SkbOffsets {
             tail: 200,
             tc_index: 130,
             hash: 132,
-            cb: 40,          // Control buffer starts at offset 40
-            tc_classid: 60,  // Part of cb area, offset 40 + 20
+            cb: 40,         // Control buffer starts at offset 40
+            tc_classid: 60, // Part of cb area, offset 40 + 20
         }
     }
 
@@ -1267,21 +1270,51 @@ impl KernelOffsets {
 
 // Helper functions that use thread-local or global configuration
 // For now, use defaults. In production, these would be configurable.
-fn offset_of_skb_len() -> i32 { SkbOffsets::default().len }
-fn offset_of_skb_pkt_type() -> i32 { SkbOffsets::default().pkt_type }
-fn offset_of_skb_mark() -> i32 { SkbOffsets::default().mark }
-fn offset_of_skb_queue_mapping() -> i32 { SkbOffsets::default().queue_mapping }
-fn offset_of_skb_protocol() -> i32 { SkbOffsets::default().protocol }
-fn offset_of_skb_vlan_present() -> i32 { SkbOffsets::default().vlan_present }
-fn offset_of_skb_vlan_tci() -> i32 { SkbOffsets::default().vlan_tci }
-fn offset_of_skb_vlan_proto() -> i32 { SkbOffsets::default().vlan_proto }
-fn offset_of_skb_priority() -> i32 { SkbOffsets::default().priority }
-fn offset_of_skb_data() -> i32 { SkbOffsets::default().data }
-fn offset_of_skb_data_end() -> i32 { SkbOffsets::default().tail }
-fn offset_of_skb_tc_index() -> i32 { SkbOffsets::default().tc_index }
-fn offset_of_skb_hash() -> i32 { SkbOffsets::default().hash }
-fn offset_of_skb_cb() -> i32 { SkbOffsets::default().cb }
-fn offset_of_skb_tc_classid() -> i32 { SkbOffsets::default().tc_classid }
+fn offset_of_skb_len() -> i32 {
+    SkbOffsets::default().len
+}
+fn offset_of_skb_pkt_type() -> i32 {
+    SkbOffsets::default().pkt_type
+}
+fn offset_of_skb_mark() -> i32 {
+    SkbOffsets::default().mark
+}
+fn offset_of_skb_queue_mapping() -> i32 {
+    SkbOffsets::default().queue_mapping
+}
+fn offset_of_skb_protocol() -> i32 {
+    SkbOffsets::default().protocol
+}
+fn offset_of_skb_vlan_present() -> i32 {
+    SkbOffsets::default().vlan_present
+}
+fn offset_of_skb_vlan_tci() -> i32 {
+    SkbOffsets::default().vlan_tci
+}
+fn offset_of_skb_vlan_proto() -> i32 {
+    SkbOffsets::default().vlan_proto
+}
+fn offset_of_skb_priority() -> i32 {
+    SkbOffsets::default().priority
+}
+fn offset_of_skb_data() -> i32 {
+    SkbOffsets::default().data
+}
+fn offset_of_skb_data_end() -> i32 {
+    SkbOffsets::default().tail
+}
+fn offset_of_skb_tc_index() -> i32 {
+    SkbOffsets::default().tc_index
+}
+fn offset_of_skb_hash() -> i32 {
+    SkbOffsets::default().hash
+}
+fn offset_of_skb_cb() -> i32 {
+    SkbOffsets::default().cb
+}
+fn offset_of_skb_tc_classid() -> i32 {
+    SkbOffsets::default().tc_classid
+}
 
 /// Result of context access conversion
 #[derive(Debug, Clone, Default)]
@@ -1313,7 +1346,7 @@ pub fn convert_ctx_accesses(
         }
 
         let insn = &insns[idx];
-        
+
         // Find the field mapping
         let mapping = match config.find_mapping(access.off, access.size) {
             Some(m) => m,
@@ -1325,16 +1358,15 @@ pub fn convert_ctx_accesses(
 
         // Check write permission
         if access.is_write && mapping.read_only {
-            return Err(VerifierError::InvalidMemoryAccess(
-                format!("write to read-only context field at offset {}", access.off)
-            ));
+            return Err(VerifierError::InvalidMemoryAccess(format!(
+                "write to read-only context field at offset {}",
+                access.off
+            )));
         }
 
         // Generate conversion patches based on conversion type
         let patches = match mapping.conv {
-            CtxConvType::Direct => {
-                convert_direct_access(insn, idx, access, mapping)?
-            }
+            CtxConvType::Direct => convert_direct_access(insn, idx, access, mapping)?,
             CtxConvType::LoadOffset(extra_off) => {
                 convert_offset_access(insn, idx, access, mapping, extra_off)?
             }
@@ -1346,13 +1378,12 @@ pub fn convert_ctx_accesses(
                 result.helper_calls_added += 1;
                 convert_helper_access(insn, idx, access, helper_id)?
             }
-            CtxConvType::Computed => {
-                convert_computed_access(insn, idx, access, mapping)?
-            }
+            CtxConvType::Computed => convert_computed_access(insn, idx, access, mapping)?,
             CtxConvType::Denied => {
-                return Err(VerifierError::InvalidMemoryAccess(
-                    format!("access to denied context field at offset {}", access.off)
-                ));
+                return Err(VerifierError::InvalidMemoryAccess(format!(
+                    "access to denied context field at offset {}",
+                    access.off
+                )));
             }
         };
 
@@ -1396,7 +1427,7 @@ fn convert_direct_access(
     // Calculate the new offset
     let delta = access.off as i32 - mapping.ctx_off as i32;
     let new_off = mapping.target_off + delta;
-    
+
     // Handle size mismatch (narrow load)
     let new_size = if access.size < mapping.target_size {
         // Narrow load - keep original size
@@ -1404,18 +1435,21 @@ fn convert_direct_access(
     } else {
         mapping.target_size
     };
-    
+
     // Create new instruction with adjusted offset
     let size_code = match new_size {
         1 => BPF_B,
         2 => BPF_H,
         4 => BPF_W,
         8 => BPF_DW,
-        _ => return Err(VerifierError::InvalidMemoryAccess(
-            format!("invalid access size {}", new_size)
-        )),
+        _ => {
+            return Err(VerifierError::InvalidMemoryAccess(format!(
+                "invalid access size {}",
+                new_size
+            )))
+        }
     };
-    
+
     let class = insn.class();
     let new_insn = BpfInsn::new(
         class | BPF_MEM | size_code,
@@ -1424,7 +1458,7 @@ fn convert_direct_access(
         new_off as i16,
         insn.imm,
     );
-    
+
     Ok(vec![Patch::new(idx, PatchType::Replace(new_insn))])
 }
 
@@ -1438,7 +1472,7 @@ fn convert_offset_access(
 ) -> Result<Vec<Patch>> {
     let delta = access.off as i32 - mapping.ctx_off as i32;
     let new_off = mapping.target_off + delta + extra_off;
-    
+
     let new_insn = BpfInsn::new(
         insn.code,
         insn.dst_reg,
@@ -1446,7 +1480,7 @@ fn convert_offset_access(
         new_off as i16,
         insn.imm,
     );
-    
+
     Ok(vec![Patch::new(idx, PatchType::Replace(new_insn))])
 }
 
@@ -1459,17 +1493,20 @@ fn convert_swap_access(
 ) -> Result<Vec<Patch>> {
     let delta = access.off as i32 - mapping.ctx_off as i32;
     let new_off = mapping.target_off + delta;
-    
+
     // Generate: load, then byte swap
     let size_code = match access.size {
         2 => BPF_H,
         4 => BPF_W,
         8 => BPF_DW,
-        _ => return Err(VerifierError::InvalidMemoryAccess(
-            format!("byte swap not supported for size {}", access.size)
-        )),
+        _ => {
+            return Err(VerifierError::InvalidMemoryAccess(format!(
+                "byte swap not supported for size {}",
+                access.size
+            )))
+        }
     };
-    
+
     let load_insn = BpfInsn::new(
         BPF_LDX | BPF_MEM | size_code,
         insn.dst_reg,
@@ -1477,25 +1514,22 @@ fn convert_swap_access(
         new_off as i16,
         0,
     );
-    
+
     // Byte swap instruction (endianness conversion)
     let swap_size: i32 = match access.size {
         2 => 16,
         4 => 32,
         8 => 64,
-        _ => return Err(VerifierError::InvalidMemoryAccess(
-            format!("byte swap not supported for size {}", access.size)
-        )),
+        _ => {
+            return Err(VerifierError::InvalidMemoryAccess(format!(
+                "byte swap not supported for size {}",
+                access.size
+            )))
+        }
     };
-    
-    let swap_insn = BpfInsn::new(
-        BPF_ALU64 | BPF_END | BPF_X,
-        insn.dst_reg,
-        0,
-        0,
-        swap_size,
-    );
-    
+
+    let swap_insn = BpfInsn::new(BPF_ALU64 | BPF_END | BPF_X, insn.dst_reg, 0, 0, swap_size);
+
     Ok(vec![
         Patch::new(idx, PatchType::Replace(load_insn)),
         Patch::new(idx, PatchType::InsertAfter(vec![swap_insn])),
@@ -1514,9 +1548,9 @@ fn convert_helper_access(
     // r2 = offset
     // call helper_id
     // (result in r0, may need to move to dst_reg)
-    
+
     let mut insns = Vec::new();
-    
+
     // r1 = ctx_reg (if not already r1)
     if access.ctx_reg != 1 {
         insns.push(BpfInsn::new(
@@ -1527,7 +1561,7 @@ fn convert_helper_access(
             0,
         ));
     }
-    
+
     // r2 = offset
     insns.push(BpfInsn::new(
         BPF_ALU64 | BPF_MOV | BPF_K,
@@ -1536,18 +1570,14 @@ fn convert_helper_access(
         0,
         access.off as i32,
     ));
-    
+
     // call helper
-    insns.push(BpfInsn::new(
-        BPF_JMP | BPF_CALL,
-        0,
-        0,
-        0,
-        helper_id as i32,
-    ));
-    
-    Ok(vec![Patch::new(idx, PatchType::Replace(insns[0])),
-            Patch::new(idx, PatchType::InsertAfter(insns[1..].to_vec()))])
+    insns.push(BpfInsn::new(BPF_JMP | BPF_CALL, 0, 0, 0, helper_id as i32));
+
+    Ok(vec![
+        Patch::new(idx, PatchType::Replace(insns[0])),
+        Patch::new(idx, PatchType::InsertAfter(insns[1..].to_vec())),
+    ])
 }
 
 /// Convert computed access (requires runtime calculation)
@@ -1559,11 +1589,11 @@ fn convert_computed_access(
 ) -> Result<Vec<Patch>> {
     // Computed accesses are for fields that require dereferencing
     // intermediate pointers (e.g., skb->data comes from skb->head + offset)
-    
+
     // This is a simplified version - actual implementation depends on field
     let delta = access.off as i32 - mapping.ctx_off as i32;
     let new_off = mapping.target_off + delta;
-    
+
     // For now, just adjust offset (proper implementation would add
     // intermediate load and add instructions)
     let new_insn = BpfInsn::new(
@@ -1573,7 +1603,7 @@ fn convert_computed_access(
         new_off as i16,
         insn.imm,
     );
-    
+
     Ok(vec![Patch::new(idx, PatchType::Replace(new_insn))])
 }
 
@@ -1583,22 +1613,22 @@ pub fn collect_ctx_accesses(
     ctx_reg_at_insn: &[Option<u8>],
 ) -> Vec<CtxAccessInfo> {
     let mut accesses = Vec::new();
-    
+
     for (idx, insn) in insns.iter().enumerate() {
         let class = insn.class();
-        
+
         // Check for memory access
         if class != BPF_LDX && class != BPF_STX && class != BPF_ST {
             continue;
         }
-        
+
         // Check if src register (for LDX) or dst register (for STX/ST) is context
         let ctx_reg = match class {
             BPF_LDX => insn.src_reg,
             BPF_STX | BPF_ST => insn.dst_reg,
             _ => continue,
         };
-        
+
         // Check if this register holds context pointer
         if let Some(Some(expected_ctx_reg)) = ctx_reg_at_insn.get(idx) {
             if ctx_reg != *expected_ctx_reg {
@@ -1608,7 +1638,7 @@ pub fn collect_ctx_accesses(
             // No context info available for this instruction
             continue;
         }
-        
+
         let size = match insn.code & 0x18 {
             BPF_B => 1,
             BPF_H => 2,
@@ -1616,7 +1646,7 @@ pub fn collect_ctx_accesses(
             BPF_DW => 8,
             _ => continue,
         };
-        
+
         accesses.push(CtxAccessInfo {
             insn_idx: idx,
             off: insn.off as u32,
@@ -1625,7 +1655,7 @@ pub fn collect_ctx_accesses(
             ctx_reg,
         });
     }
-    
+
     accesses
 }
 
@@ -1688,66 +1718,66 @@ impl AccessHeuristics {
     /// Analyze accesses and compute heuristics.
     pub fn analyze(accesses: &[CtxAccessInfo]) -> Self {
         let mut heuristics = Self::default();
-        
+
         if accesses.is_empty() {
             return heuristics;
         }
-        
+
         // Compute access frequency
         for access in accesses {
             *heuristics.access_frequency.entry(access.off).or_insert(0) += 1;
         }
-        
+
         // Detect pattern
         heuristics.pattern = Self::detect_pattern(accesses);
-        
+
         // Find field affinity (fields accessed together)
         heuristics.field_affinity = Self::find_affinity(accesses);
-        
+
         // Compute cache line usage
         heuristics.cache_lines_touched = Self::compute_cache_lines(accesses);
-        
+
         // Determine hot/cold fields
         Self::classify_fields(&mut heuristics);
-        
+
         // Determine optimization benefits
         heuristics.coalesce_benefit = Self::should_coalesce(accesses);
         heuristics.prefetch_benefit = heuristics.cache_lines_touched > 2;
-        
+
         heuristics
     }
-    
+
     /// Detect the access pattern.
     fn detect_pattern(accesses: &[CtxAccessInfo]) -> AccessPattern {
         if accesses.len() == 1 {
             return AccessPattern::Single;
         }
-        
+
         // Sort by offset
         let mut sorted: Vec<_> = accesses.iter().collect();
         sorted.sort_by_key(|a| a.off);
-        
+
         // Check for sequential pattern
         let mut is_sequential = true;
         let mut strides = Vec::new();
-        
+
         for window in sorted.windows(2) {
             let off1 = window[0].off + window[0].size;
             let off2 = window[1].off;
-            
+
             if off1 != off2 {
                 is_sequential = false;
             }
-            
+
             if window[1].off > window[0].off {
                 strides.push(window[1].off - window[0].off);
             }
         }
-        
+
         if is_sequential {
             return AccessPattern::Sequential;
         }
-        
+
         // Check for strided pattern
         if !strides.is_empty() {
             let first_stride = strides[0];
@@ -1755,24 +1785,23 @@ impl AccessHeuristics {
                 return AccessPattern::Strided(first_stride);
             }
         }
-        
+
         // Check for loop-based pattern (same offsets repeated)
-        let unique_offsets: HashSet<_> = 
-            accesses.iter().map(|a| a.off).collect();
+        let unique_offsets: HashSet<_> = accesses.iter().map(|a| a.off).collect();
         if unique_offsets.len() < accesses.len() / 2 {
             return AccessPattern::LoopBased;
         }
-        
+
         AccessPattern::Random
     }
-    
+
     /// Find fields that are often accessed together.
     fn find_affinity(accesses: &[CtxAccessInfo]) -> Vec<(u32, u32)> {
         let mut affinity = Vec::new();
-        
+
         // Look for accesses within a small window of instructions
         const WINDOW_SIZE: usize = 5;
-        
+
         for i in 0..accesses.len() {
             for j in (i + 1)..accesses.len().min(i + WINDOW_SIZE) {
                 if accesses[i].off != accesses[j].off {
@@ -1787,16 +1816,16 @@ impl AccessHeuristics {
                 }
             }
         }
-        
+
         affinity
     }
-    
+
     /// Compute number of cache lines touched.
     fn compute_cache_lines(accesses: &[CtxAccessInfo]) -> usize {
         const CACHE_LINE_SIZE: u32 = 64;
-        
+
         let mut lines: HashSet<u32> = HashSet::new();
-        
+
         for access in accesses {
             let start_line = access.off / CACHE_LINE_SIZE;
             let end_line = (access.off + access.size - 1) / CACHE_LINE_SIZE;
@@ -1804,19 +1833,19 @@ impl AccessHeuristics {
                 lines.insert(line);
             }
         }
-        
+
         lines.len()
     }
-    
+
     /// Classify fields as hot or cold based on frequency.
     fn classify_fields(heuristics: &mut AccessHeuristics) {
         if heuristics.access_frequency.is_empty() {
             return;
         }
-        
+
         let total: u32 = heuristics.access_frequency.values().sum();
         let threshold_hot = total / heuristics.access_frequency.len() as u32;
-        
+
         for (&off, &count) in &heuristics.access_frequency {
             if count >= threshold_hot * 2 {
                 heuristics.hot_fields.push(off);
@@ -1824,39 +1853,37 @@ impl AccessHeuristics {
                 heuristics.cold_fields.push(off);
             }
         }
-        
+
         heuristics.hot_fields.sort();
         heuristics.cold_fields.sort();
     }
-    
+
     /// Determine if field coalescing would be beneficial.
     fn should_coalesce(accesses: &[CtxAccessInfo]) -> bool {
         // Coalescing is beneficial when:
         // 1. Multiple adjacent small accesses exist
         // 2. Accesses are reads (writes can't always be coalesced)
-        
-        let reads: Vec<_> = accesses.iter()
-            .filter(|a| !a.is_write)
-            .collect();
-        
+
+        let reads: Vec<_> = accesses.iter().filter(|a| !a.is_write).collect();
+
         if reads.len() < 2 {
             return false;
         }
-        
+
         // Check for adjacent accesses
         let mut sorted = reads;
         sorted.sort_by_key(|a| a.off);
-        
+
         for window in sorted.windows(2) {
             let end1 = window[0].off + window[0].size;
             let start2 = window[1].off;
-            
+
             // Adjacent or overlapping
             if end1 >= start2 && window[0].size < 8 && window[1].size < 8 {
                 return true;
             }
         }
-        
+
         false
     }
 }
@@ -1883,7 +1910,7 @@ impl Default for CtxOptConfig {
         Self {
             enable_coalescing: true,
             enable_dce: true,
-            enable_reordering: false,  // Conservative by default
+            enable_reordering: false, // Conservative by default
             enable_speculation: false,
             max_coalesce_size: 8,
             coalesce_threshold: 2,
@@ -1903,7 +1930,7 @@ impl CtxOptConfig {
             coalesce_threshold: 1,
         }
     }
-    
+
     /// Conservative configuration (minimal changes).
     pub fn conservative() -> Self {
         Self {
@@ -1927,7 +1954,7 @@ pub struct CoalescedAccess {
     /// Original accesses that were coalesced.
     pub original_accesses: Vec<usize>,
     /// Extraction masks for each original value.
-    pub extract_masks: Vec<(u32, u32)>,  // (shift, mask)
+    pub extract_masks: Vec<(u32, u32)>, // (shift, mask)
 }
 
 /// Result of context optimization.
@@ -1948,28 +1975,25 @@ pub struct CtxOptResult {
 }
 
 /// Optimize context accesses using heuristics.
-pub fn optimize_ctx_accesses(
-    accesses: &[CtxAccessInfo],
-    config: &CtxOptConfig,
-) -> CtxOptResult {
+pub fn optimize_ctx_accesses(accesses: &[CtxAccessInfo], config: &CtxOptConfig) -> CtxOptResult {
     let mut result = CtxOptResult::default();
-    
+
     if accesses.is_empty() {
         return result;
     }
-    
+
     // Analyze access patterns
     let heuristics = AccessHeuristics::analyze(accesses);
     result.pattern = Some(heuristics.pattern);
     result.heuristics = Some(heuristics.clone());
-    
+
     // Apply coalescing if beneficial
     if config.enable_coalescing && heuristics.coalesce_benefit {
         let coalesced = find_coalesce_opportunities(accesses, config);
         result.accesses_coalesced = coalesced.len();
         result.insns_saved += coalesced.len() as i32;
     }
-    
+
     result
 }
 
@@ -1979,33 +2003,34 @@ pub fn find_coalesce_opportunities(
     config: &CtxOptConfig,
 ) -> Vec<CoalescedAccess> {
     let mut coalesced = Vec::new();
-    
+
     // Only coalesce reads
-    let reads: Vec<_> = accesses.iter()
+    let reads: Vec<_> = accesses
+        .iter()
         .enumerate()
         .filter(|(_, a)| !a.is_write)
         .collect();
-    
+
     if reads.len() < 2 {
         return coalesced;
     }
-    
+
     // Sort by offset
     let mut sorted = reads;
     sorted.sort_by_key(|(_, a)| a.off);
-    
+
     let mut i = 0;
     while i < sorted.len() {
         let mut group = vec![sorted[i]];
         let start_off = sorted[i].1.off;
         let mut end_off = start_off + sorted[i].1.size;
-        
+
         // Find adjacent accesses
         let mut j = i + 1;
         while j < sorted.len() {
             let next_off = sorted[j].1.off;
             let next_end = next_off + sorted[j].1.size;
-            
+
             // Check if adjacent and within max size
             if next_off <= end_off && next_end - start_off <= config.max_coalesce_size {
                 group.push(sorted[j]);
@@ -2015,18 +2040,21 @@ pub fn find_coalesce_opportunities(
                 break;
             }
         }
-        
+
         // Only coalesce if we have enough accesses
         if group.len() >= config.coalesce_threshold as usize {
             let total_size = end_off - start_off;
-            
+
             // Calculate extraction masks
-            let extract_masks: Vec<_> = group.iter().map(|(_, a)| {
-                let shift = (a.off - start_off) * 8;
-                let mask = (1u64 << (a.size * 8)) - 1;
-                (shift, mask as u32)
-            }).collect();
-            
+            let extract_masks: Vec<_> = group
+                .iter()
+                .map(|(_, a)| {
+                    let shift = (a.off - start_off) * 8;
+                    let mask = (1u64 << (a.size * 8)) - 1;
+                    (shift, mask as u32)
+                })
+                .collect();
+
             coalesced.push(CoalescedAccess {
                 start_off,
                 total_size,
@@ -2034,10 +2062,10 @@ pub fn find_coalesce_opportunities(
                 extract_masks,
             });
         }
-        
+
         i = j;
     }
-    
+
     coalesced
 }
 
@@ -2062,77 +2090,78 @@ pub enum DeadAccessReason {
 }
 
 /// Find dead context accesses that can be eliminated.
-pub fn find_dead_accesses(
-    accesses: &[CtxAccessInfo],
-    insns: &[BpfInsn],
-) -> Vec<DeadAccessInfo> {
+pub fn find_dead_accesses(accesses: &[CtxAccessInfo], insns: &[BpfInsn]) -> Vec<DeadAccessInfo> {
     let mut dead = Vec::new();
-    
+
     for (i, access) in accesses.iter().enumerate() {
         if access.is_write {
-            continue;  // Only analyze reads
+            continue; // Only analyze reads
         }
-        
+
         let insn_idx = access.insn_idx;
         if insn_idx >= insns.len() {
             continue;
         }
-        
+
         let dst_reg = insns[insn_idx].dst_reg;
-        
+
         // Check if this register is overwritten before being used
         let mut used = false;
         let mut overwritten = false;
-        
+
         for j in (insn_idx + 1)..insns.len().min(insn_idx + 20) {
             let check_insn = &insns[j];
-            
+
             // Check if register is used as source
             if check_insn.src_reg == dst_reg {
                 used = true;
                 break;
             }
-            
+
             // Check if register is used in memory access
             let class = check_insn.class();
             if (class == BPF_STX || class == BPF_ST) && check_insn.src_reg == dst_reg {
                 used = true;
                 break;
             }
-            
+
             // Check if register is overwritten
             if check_insn.dst_reg == dst_reg {
                 let check_class = check_insn.class();
-                if check_class == BPF_ALU || check_class == BPF_ALU64 || 
-                   check_class == BPF_LDX || check_class == BPF_LD {
+                if check_class == BPF_ALU
+                    || check_class == BPF_ALU64
+                    || check_class == BPF_LDX
+                    || check_class == BPF_LD
+                {
                     overwritten = true;
                     break;
                 }
             }
-            
+
             // Stop at control flow
             if class == BPF_JMP || class == BPF_JMP32 {
                 break;
             }
         }
-        
+
         if overwritten && !used {
             dead.push(DeadAccessInfo {
                 insn_idx,
                 reason: DeadAccessReason::OverwrittenBeforeUse,
             });
         }
-        
+
         // Check for redundant loads (same field loaded into different register
         // when previous register still valid)
         for j in 0..i {
-            if accesses[j].off == access.off && 
-               accesses[j].size == access.size &&
-               !accesses[j].is_write {
+            if accesses[j].off == access.off
+                && accesses[j].size == access.size
+                && !accesses[j].is_write
+            {
                 // Check if original register is still valid
                 let orig_insn = accesses[j].insn_idx;
                 let orig_dst = insns[orig_insn].dst_reg;
-                
+
                 // Simple check: if no intervening write to that register
                 let mut still_valid = true;
                 for k in (orig_insn + 1)..insn_idx {
@@ -2141,7 +2170,7 @@ pub fn find_dead_accesses(
                         break;
                     }
                 }
-                
+
                 if still_valid {
                     dead.push(DeadAccessInfo {
                         insn_idx,
@@ -2152,7 +2181,7 @@ pub fn find_dead_accesses(
             }
         }
     }
-    
+
     dead
 }
 
@@ -2172,7 +2201,7 @@ impl CtxAccessCache {
     pub fn new() -> Self {
         Self::default()
     }
-    
+
     /// Look up a cached conversion.
     pub fn get(&mut self, off: u32, size: u32) -> Option<&CtxFieldAccess> {
         if self.cache.contains_key(&(off, size)) {
@@ -2183,48 +2212,45 @@ impl CtxAccessCache {
             None
         }
     }
-    
+
     /// Insert a conversion into the cache.
     pub fn insert(&mut self, off: u32, size: u32, access: CtxFieldAccess) {
         self.cache.insert((off, size), access);
     }
-    
+
     /// Clear the cache.
     pub fn clear(&mut self) {
         self.cache.clear();
         self.hits = 0;
         self.misses = 0;
     }
-    
-    /// Get cache hit rate.
-    pub fn hit_rate(&self) -> f64 {
+
+    /// Get cache hit rate as percentage (0-100).
+    pub fn hit_rate_percent(&self) -> u32 {
         let total = self.hits + self.misses;
         if total == 0 {
-            0.0
+            0
         } else {
-            self.hits as f64 / total as f64
+            ((self.hits as u64 * 100) / total as u64) as u32
         }
     }
 }
 
 /// Speculative field pre-conversion based on program type.
-/// 
+///
 /// Some fields are commonly accessed together. Pre-converting them
 /// can reduce conversion overhead at runtime.
-pub fn speculative_preconvert(
-    prog_type: BpfProgType,
-    heuristics: &AccessHeuristics,
-) -> Vec<u32> {
+pub fn speculative_preconvert(prog_type: BpfProgType, heuristics: &AccessHeuristics) -> Vec<u32> {
     let mut fields_to_preconvert = Vec::new();
-    
+
     // Add hot fields
     fields_to_preconvert.extend(&heuristics.hot_fields);
-    
+
     // Add commonly co-accessed fields based on program type
     match prog_type {
         BpfProgType::SocketFilter | BpfProgType::SchedCls | BpfProgType::SchedAct => {
             // Network programs often access: len, protocol, mark
-            let common = [0, 16, 8];  // len, protocol, mark offsets
+            let common = [0, 16, 8]; // len, protocol, mark offsets
             for &off in &common {
                 if !fields_to_preconvert.contains(&off) {
                     fields_to_preconvert.push(off);
@@ -2251,7 +2277,7 @@ pub fn speculative_preconvert(
         }
         _ => {}
     }
-    
+
     // Add fields with high affinity
     for &(f1, f2) in &heuristics.field_affinity {
         if fields_to_preconvert.contains(&f1) && !fields_to_preconvert.contains(&f2) {
@@ -2261,7 +2287,7 @@ pub fn speculative_preconvert(
             fields_to_preconvert.push(f1);
         }
     }
-    
+
     fields_to_preconvert.sort();
     fields_to_preconvert.dedup();
     fields_to_preconvert

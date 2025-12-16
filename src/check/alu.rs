@@ -1,10 +1,11 @@
+// SPDX-License-Identifier: GPL-2.0
+
 //! ALU instruction verification
 //!
 //! This module implements comprehensive verification of BPF ALU and ALU64 instructions,
 //! including MOV, arithmetic operations, bitwise operations, and shifts.
 //!
 //! Corresponds to check_alu_op() in Linux kernel verifier.c (lines 15744-16200)
-
 
 use alloc::format;
 
@@ -71,11 +72,7 @@ fn check_end_neg_op(
     // Validate reserved fields
     if opcode == BPF_NEG {
         // NEG: src must be K, src_reg=0, off=0, imm=0
-        if (insn.code & 0x08) != BPF_K
-            || insn.src_reg != 0
-            || insn.off != 0
-            || insn.imm != 0
-        {
+        if (insn.code & 0x08) != BPF_K || insn.src_reg != 0 || insn.off != 0 || insn.imm != 0 {
             return Err(VerifierError::InvalidInstruction(insn_idx));
         }
     } else {
@@ -93,9 +90,9 @@ fn check_end_neg_op(
     check_reg_arg(state, dst_reg, true)?;
 
     // Pointer arithmetic not allowed
-    let dst = state.reg(dst_reg).ok_or(VerifierError::Internal(
-        "no dst register".into(),
-    ))?;
+    let dst = state
+        .reg(dst_reg)
+        .ok_or(VerifierError::Internal("no dst register".into()))?;
     if dst.is_pointer() {
         return Err(VerifierError::InvalidPointerArithmetic(format!(
             "R{} pointer arithmetic prohibited",
@@ -310,8 +307,7 @@ fn check_arithmetic_op(
     // Validate reserved fields
     if src_type == BPF_X {
         // For signed div/mod, off can be 1
-        let off_ok = insn.off == 0
-            || (insn.off == 1 && matches!(opcode, BPF_DIV | BPF_MOD));
+        let off_ok = insn.off == 0 || (insn.off == 1 && matches!(opcode, BPF_DIV | BPF_MOD));
         if insn.imm != 0 || !off_ok {
             return Err(VerifierError::InvalidInstruction(insn_idx));
         }
@@ -320,8 +316,7 @@ fn check_arithmetic_op(
         if insn.src_reg != 0 {
             return Err(VerifierError::InvalidInstruction(insn_idx));
         }
-        let off_ok = insn.off == 0
-            || (insn.off == 1 && matches!(opcode, BPF_DIV | BPF_MOD));
+        let off_ok = insn.off == 0 || (insn.off == 1 && matches!(opcode, BPF_DIV | BPF_MOD));
         if !off_ok {
             return Err(VerifierError::InvalidInstruction(insn_idx));
         }
@@ -432,22 +427,27 @@ fn adjust_ptr_min_max_vals(
 
     // Compute new bounds
     let (new_smin, new_smax, new_umin, new_umax, new_off, new_var_off) = if opcode == BPF_ADD {
-        compute_ptr_add_bounds(ptr_reg, off_reg, smin_ptr, smax_ptr, smin_off, smax_off, umin_off, umax_off)
+        compute_ptr_add_bounds(
+            ptr_reg, off_reg, smin_ptr, smax_ptr, smin_off, smax_off, umin_off, umax_off,
+        )
     } else {
-        compute_ptr_sub_bounds(ptr_reg, off_reg, smin_ptr, smax_ptr, smin_off, smax_off, umin_off, umax_off, ptr_is_dst)
+        compute_ptr_sub_bounds(
+            ptr_reg, off_reg, smin_ptr, smax_ptr, smin_off, smax_off, umin_off, umax_off,
+            ptr_is_dst,
+        )
     };
 
     // Update destination register
     if let Some(dst) = state.reg_mut(dst_reg) {
         *dst = ptr_reg.clone();
-        
+
         dst.off = new_off;
         dst.var_off = new_var_off;
         dst.smin_value = new_smin;
         dst.smax_value = new_smax;
         dst.umin_value = new_umin;
         dst.umax_value = new_umax;
-        
+
         // Sync 32-bit bounds
         dst.u32_min_value = new_umin as u32;
         dst.u32_max_value = new_umax.min(u32::MAX as u64) as u32;
@@ -482,7 +482,10 @@ fn handle_ptr_sub_ptr(
     }
 
     // For packet pointers, they should have the same base
-    if matches!(dst_state.reg_type, BpfRegType::PtrToPacket | BpfRegType::PtrToPacketMeta) {
+    if matches!(
+        dst_state.reg_type,
+        BpfRegType::PtrToPacket | BpfRegType::PtrToPacketMeta
+    ) {
         if dst_state.id != src_state.id && dst_state.id != 0 && src_state.id != 0 {
             return Err(VerifierError::InvalidPointerArithmetic(
                 "packet pointer subtraction requires same packet".into(),
@@ -494,11 +497,11 @@ fn handle_ptr_sub_ptr(
     if let Some(dst) = state.reg_mut(dst_reg) {
         dst.reg_type = BpfRegType::ScalarValue;
         dst.type_flags = BpfTypeFlag::empty();
-        
+
         // If both have constant offsets, compute exactly
         if dst_state.var_off.is_const() && src_state.var_off.is_const() {
             let diff = (dst_state.off as i64 + dst_state.var_off.value as i64)
-                     - (src_state.off as i64 + src_state.var_off.value as i64);
+                - (src_state.off as i64 + src_state.var_off.value as i64);
             dst.mark_known(diff as u64);
         } else {
             // Variable offsets - compute bounds
@@ -506,7 +509,7 @@ fn handle_ptr_sub_ptr(
             let dst_max = dst_state.smax_value + dst_state.off as i64;
             let src_min = src_state.smin_value + src_state.off as i64;
             let src_max = src_state.smax_value + src_state.off as i64;
-            
+
             dst.smin_value = dst_min.saturating_sub(src_max);
             dst.smax_value = dst_max.saturating_sub(src_min);
             dst.umin_value = 0; // Can't determine unsigned bounds for difference
@@ -567,16 +570,23 @@ fn compute_ptr_add_bounds(
     if off_reg.is_const() {
         let off = off_reg.const_value() as i64;
         let new_off = ptr_reg.off.saturating_add(off as i32);
-        return (smin_ptr, smax_ptr, ptr_reg.umin_value, ptr_reg.umax_value, new_off, ptr_reg.var_off);
+        return (
+            smin_ptr,
+            smax_ptr,
+            ptr_reg.umin_value,
+            ptr_reg.umax_value,
+            new_off,
+            ptr_reg.var_off,
+        );
     }
 
     // Variable offset - update var_off and bounds
     let new_var_off = ptr_reg.var_off.add(off_reg.var_off);
-    
+
     // Check for overflow in signed addition
     let (new_smin, smin_of) = smin_ptr.overflowing_add(smin_off);
     let (new_smax, smax_of) = smax_ptr.overflowing_add(smax_off);
-    
+
     let (new_smin, new_smax) = if smin_of || smax_of {
         (i64::MIN, i64::MAX)
     } else {
@@ -586,14 +596,21 @@ fn compute_ptr_add_bounds(
     // Unsigned bounds
     let (new_umin, umin_of) = ptr_reg.umin_value.overflowing_add(umin_off);
     let (new_umax, umax_of) = ptr_reg.umax_value.overflowing_add(umax_off);
-    
+
     let (new_umin, new_umax) = if umin_of || umax_of {
         (0, u64::MAX)
     } else {
         (new_umin, new_umax)
     };
 
-    (new_smin, new_smax, new_umin, new_umax, ptr_reg.off, new_var_off)
+    (
+        new_smin,
+        new_smax,
+        new_umin,
+        new_umax,
+        ptr_reg.off,
+        new_var_off,
+    )
 }
 
 /// Compute bounds for pointer - scalar
@@ -617,7 +634,14 @@ fn compute_ptr_sub_bounds(
     if off_reg.is_const() {
         let off = off_reg.const_value() as i64;
         let new_off = ptr_reg.off.saturating_sub(off as i32);
-        return (smin_ptr, smax_ptr, ptr_reg.umin_value, ptr_reg.umax_value, new_off, ptr_reg.var_off);
+        return (
+            smin_ptr,
+            smax_ptr,
+            ptr_reg.umin_value,
+            ptr_reg.umax_value,
+            new_off,
+            ptr_reg.var_off,
+        );
     }
 
     // Variable offset - update var_off and bounds
@@ -627,7 +651,7 @@ fn compute_ptr_sub_bounds(
     // min = ptr_min - off_max, max = ptr_max - off_min
     let (new_smin, smin_of) = smin_ptr.overflowing_sub(smax_off);
     let (new_smax, smax_of) = smax_ptr.overflowing_sub(smin_off);
-    
+
     let (new_smin, new_smax) = if smin_of || smax_of {
         (i64::MIN, i64::MAX)
     } else {
@@ -646,7 +670,14 @@ fn compute_ptr_sub_bounds(
         u64::MAX
     };
 
-    (new_smin, new_smax, new_umin, new_umax, ptr_reg.off, new_var_off)
+    (
+        new_smin,
+        new_smax,
+        new_umin,
+        new_umax,
+        ptr_reg.off,
+        new_var_off,
+    )
 }
 
 /// Validate that pointer bounds are sane after arithmetic
@@ -655,16 +686,18 @@ fn validate_ptr_bounds(reg: &BpfRegState) -> Result<()> {
     if reg.reg_type == BpfRegType::PtrToStack {
         let max_off = reg.off as i64 + reg.smax_value;
         let min_off = reg.off as i64 + reg.smin_value;
-        
+
         if max_off > 0 {
-            return Err(VerifierError::InvalidPointerArithmetic(
-                format!("stack pointer offset {} exceeds frame", max_off),
-            ));
+            return Err(VerifierError::InvalidPointerArithmetic(format!(
+                "stack pointer offset {} exceeds frame",
+                max_off
+            )));
         }
         if min_off < -(MAX_BPF_STACK as i64) {
-            return Err(VerifierError::InvalidPointerArithmetic(
-                format!("stack pointer offset {} below stack limit", min_off),
-            ));
+            return Err(VerifierError::InvalidPointerArithmetic(format!(
+                "stack pointer offset {} below stack limit",
+                min_off
+            )));
         }
     }
 
@@ -673,9 +706,10 @@ fn validate_ptr_bounds(reg: &BpfRegState) -> Result<()> {
         if let Some(ref map_info) = reg.map_ptr {
             let max_off = reg.off as i64 + reg.smax_value;
             if max_off > map_info.value_size as i64 {
-                return Err(VerifierError::InvalidPointerArithmetic(
-                    format!("map value access {} exceeds value_size {}", max_off, map_info.value_size),
-                ));
+                return Err(VerifierError::InvalidPointerArithmetic(format!(
+                    "map value access {} exceeds value_size {}",
+                    max_off, map_info.value_size
+                )));
             }
         }
     }
@@ -1197,14 +1231,10 @@ fn adjust_neg_bounds(state: &mut BpfVerifierState, regno: usize, is_64bit: bool)
 fn reg_bounds_sanity_check(reg: &BpfRegState, _context: &str) -> Result<()> {
     // Check that bounds are sane
     if reg.umin_value > reg.umax_value {
-        return Err(VerifierError::Internal(
-            "umin > umax after ALU op".into(),
-        ));
+        return Err(VerifierError::Internal("umin > umax after ALU op".into()));
     }
     if reg.smin_value > reg.smax_value {
-        return Err(VerifierError::Internal(
-            "smin > smax after ALU op".into(),
-        ));
+        return Err(VerifierError::Internal("smin > smax after ALU op".into()));
     }
     if reg.u32_min_value > reg.u32_max_value {
         return Err(VerifierError::Internal(

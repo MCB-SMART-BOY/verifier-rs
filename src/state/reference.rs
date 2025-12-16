@@ -1,14 +1,15 @@
+// SPDX-License-Identifier: GPL-2.0
+
 //! Reference tracking system
 //!
 //! This module implements reference tracking for the BPF verifier.
 //! It handles acquired references (pointers that must be released),
 //! locks, RCU read-side critical sections, and IRQ state.
 
-
 use alloc::{format, vec::Vec};
 
-use crate::core::types::*;
 use crate::core::error::{Result, VerifierError};
+use crate::core::types::*;
 
 /// State of an acquired reference
 #[derive(Debug, Clone)]
@@ -41,7 +42,12 @@ impl BpfReferenceState {
     }
 
     /// Create a new pointer reference with BTF type info
-    pub fn new_ptr_typed(id: u32, insn_idx: usize, btf_id: u32, acquire_func: &'static str) -> Self {
+    pub fn new_ptr_typed(
+        id: u32,
+        insn_idx: usize,
+        btf_id: u32,
+        acquire_func: &'static str,
+    ) -> Self {
         Self {
             id,
             insn_idx,
@@ -165,16 +171,27 @@ impl ReferenceManager {
     }
 
     /// Acquire a new pointer reference with BTF type info
-    pub fn acquire_ptr_typed(&mut self, insn_idx: usize, btf_id: u32, acquire_func: &'static str) -> u32 {
+    pub fn acquire_ptr_typed(
+        &mut self,
+        insn_idx: usize,
+        btf_id: u32,
+        acquire_func: &'static str,
+    ) -> u32 {
         let id = self.gen_id();
-        self.refs.push(BpfReferenceState::new_ptr_typed(id, insn_idx, btf_id, acquire_func));
+        self.refs.push(BpfReferenceState::new_ptr_typed(
+            id,
+            insn_idx,
+            btf_id,
+            acquire_func,
+        ));
         id
     }
 
     /// Acquire a new lock reference
     pub fn acquire_lock(&mut self, insn_idx: usize, ptr: usize) -> u32 {
         let id = self.gen_id();
-        self.refs.push(BpfReferenceState::new_lock(id, insn_idx, ptr));
+        self.refs
+            .push(BpfReferenceState::new_lock(id, insn_idx, ptr));
         self.active_locks += 1;
         self.active_lock_id = id;
         self.active_lock_ptr = Some(ptr);
@@ -184,7 +201,8 @@ impl ReferenceManager {
     /// Acquire a new resource lock reference
     pub fn acquire_res_lock(&mut self, insn_idx: usize, ptr: usize) -> u32 {
         let id = self.gen_id();
-        self.refs.push(BpfReferenceState::new_res_lock(id, insn_idx, ptr));
+        self.refs
+            .push(BpfReferenceState::new_res_lock(id, insn_idx, ptr));
         self.active_locks += 1;
         self.active_lock_id = id;
         self.active_lock_ptr = Some(ptr);
@@ -211,7 +229,10 @@ impl ReferenceManager {
 
     /// Release a pointer reference by ID
     pub fn release_ptr(&mut self, id: u32) -> Result<()> {
-        let idx = self.refs.iter().position(|r| r.id == id && r.ref_type == RefStateType::Ptr);
+        let idx = self
+            .refs
+            .iter()
+            .position(|r| r.id == id && r.ref_type == RefStateType::Ptr);
         match idx {
             Some(i) => {
                 self.refs.remove(i);
@@ -222,15 +243,23 @@ impl ReferenceManager {
     }
 
     /// Release a pointer reference with type checking
-    /// 
+    ///
     /// This ensures that the release function matches the type of the acquired reference.
     /// For example, bpf_task_release should only release task_struct references.
-    pub fn release_ptr_typed(&mut self, id: u32, expected_btf_id: u32, release_func: &str) -> Result<()> {
-        let idx = self.refs.iter().position(|r| r.id == id && r.ref_type == RefStateType::Ptr);
+    pub fn release_ptr_typed(
+        &mut self,
+        id: u32,
+        expected_btf_id: u32,
+        release_func: &str,
+    ) -> Result<()> {
+        let idx = self
+            .refs
+            .iter()
+            .position(|r| r.id == id && r.ref_type == RefStateType::Ptr);
         match idx {
             Some(i) => {
                 let ref_state = &self.refs[i];
-                
+
                 // If the reference has type info, verify it matches
                 if ref_state.has_type_info() && expected_btf_id != 0 {
                     if ref_state.btf_id != expected_btf_id {
@@ -241,7 +270,7 @@ impl ReferenceManager {
                         });
                     }
                 }
-                
+
                 self.refs.remove(i);
                 Ok(())
             }
@@ -251,7 +280,8 @@ impl ReferenceManager {
 
     /// Get type info for a reference
     pub fn get_ref_type_info(&self, id: u32) -> Option<(u32, Option<&'static str>)> {
-        self.refs.iter()
+        self.refs
+            .iter()
             .find(|r| r.id == id)
             .map(|r| (r.btf_id, r.acquire_func))
     }
@@ -259,9 +289,10 @@ impl ReferenceManager {
     /// Release a lock reference
     pub fn release_lock(&mut self, id: u32, ptr: usize) -> Result<()> {
         // Find the lock with matching ID and pointer
-        let idx = self.refs.iter().position(|r| {
-            r.id == id && r.is_lock() && r.ptr == Some(ptr)
-        });
+        let idx = self
+            .refs
+            .iter()
+            .position(|r| r.id == id && r.is_lock() && r.ptr == Some(ptr));
 
         match idx {
             Some(i) => {
@@ -296,13 +327,20 @@ impl ReferenceManager {
             )));
         }
 
-        let idx = self.refs.iter().position(|r| r.id == id && r.ref_type == RefStateType::Irq);
+        let idx = self
+            .refs
+            .iter()
+            .position(|r| r.id == id && r.ref_type == RefStateType::Irq);
         match idx {
             Some(i) => {
                 self.refs.remove(i);
 
                 // Find the previous IRQ state (if any)
-                let prev_irq = self.refs.iter().rev().find(|r| r.ref_type == RefStateType::Irq);
+                let prev_irq = self
+                    .refs
+                    .iter()
+                    .rev()
+                    .find(|r| r.ref_type == RefStateType::Irq);
                 self.active_irq_id = prev_irq.map(|r| r.id).unwrap_or(0);
                 Ok(())
             }
@@ -343,9 +381,7 @@ impl ReferenceManager {
         }
 
         if self.active_preempt_locks > 0 {
-            return Err(VerifierError::InvalidLock(
-                "preempt not re-enabled".into(),
-            ));
+            return Err(VerifierError::InvalidLock("preempt not re-enabled".into()));
         }
 
         Ok(())
@@ -359,9 +395,7 @@ impl ReferenceManager {
     /// Exit RCU read-side critical section
     pub fn rcu_unlock(&mut self) -> Result<()> {
         if self.active_rcu_locks == 0 {
-            return Err(VerifierError::InvalidLock(
-                "RCU unlock without lock".into(),
-            ));
+            return Err(VerifierError::InvalidLock("RCU unlock without lock".into()));
         }
         self.active_rcu_locks -= 1;
         Ok(())
@@ -417,9 +451,9 @@ impl ReferenceManager {
 
     /// Find a lock state by type, id, and pointer
     pub fn find_lock(&self, id: u32, ptr: usize) -> Option<&BpfReferenceState> {
-        self.refs.iter().find(|r| {
-            r.id == id && r.is_lock() && r.ptr == Some(ptr)
-        })
+        self.refs
+            .iter()
+            .find(|r| r.id == id && r.is_lock() && r.ptr == Some(ptr))
     }
 
     /// Invalidate non-owning references (after lock release in certain contexts)

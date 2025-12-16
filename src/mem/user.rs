@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0
+
 //! User memory access verification for BPF programs.
 //!
 //! This module implements validation for user-space memory access from BPF programs.
@@ -7,12 +9,11 @@
 //! 3. Special helpers like bpf_probe_read_user must be used for safe access
 //! 4. Speculation attacks must be mitigated
 
-
 use alloc::{format, string::String};
 
+use crate::core::error::{Result, VerifierError};
 use crate::core::types::*;
 use crate::state::reg_state::BpfRegState;
-use crate::core::error::{Result, VerifierError};
 
 // ============================================================================
 // User Memory Access Types
@@ -38,7 +39,10 @@ pub enum UserMemAccessType {
 impl UserMemAccessType {
     /// Check if this access type is safe
     pub fn is_safe(&self) -> bool {
-        !matches!(self, UserMemAccessType::DirectLoad | UserMemAccessType::DirectStore)
+        !matches!(
+            self,
+            UserMemAccessType::DirectLoad | UserMemAccessType::DirectStore
+        )
     }
 
     /// Check if this access type requires privilege
@@ -206,9 +210,7 @@ pub fn check_user_mem_direct_access(
                 "use bpf_probe_write_user() helper",
             );
         } else {
-            return UserMemValidation::denied(
-                "write to user memory requires CAP_SYS_ADMIN",
-            );
+            return UserMemValidation::denied("write to user memory requires CAP_SYS_ADMIN");
         }
     }
 
@@ -297,7 +299,9 @@ pub fn check_user_mem_helper_access(
 
             if !validation.allowed {
                 return Err(VerifierError::InvalidMemoryAccess(
-                    validation.warning.unwrap_or_else(|| "direct user memory access not allowed".into()),
+                    validation
+                        .warning
+                        .unwrap_or_else(|| "direct user memory access not allowed".into()),
                 ));
             }
 
@@ -323,10 +327,7 @@ fn can_write_user_mem(prog_type: BpfProgType) -> bool {
 // ============================================================================
 
 /// Validate that a user pointer argument is properly tagged
-pub fn validate_user_ptr_arg(
-    reg: &BpfRegState,
-    arg_name: &str,
-) -> Result<()> {
+pub fn validate_user_ptr_arg(reg: &BpfRegState, arg_name: &str) -> Result<()> {
     // User pointer arguments should be scalar values (addresses)
     // or properly tagged pointer types
     match reg.reg_type {
@@ -371,10 +372,7 @@ pub fn clear_reg_user_mem(reg: &mut BpfRegState) {
 // ============================================================================
 
 /// Validate destination buffer for probe_read_user
-pub fn validate_probe_read_user_dst(
-    dst_reg: &BpfRegState,
-    size: u32,
-) -> Result<()> {
+pub fn validate_probe_read_user_dst(dst_reg: &BpfRegState, size: u32) -> Result<()> {
     // Destination must be writable memory
     match dst_reg.reg_type {
         BpfRegType::PtrToStack => {
@@ -416,9 +414,7 @@ pub fn validate_probe_read_user_dst(
 }
 
 /// Validate source address for probe_read_user (the user address)
-pub fn validate_probe_read_user_src(
-    src_reg: &BpfRegState,
-) -> Result<()> {
+pub fn validate_probe_read_user_src(src_reg: &BpfRegState) -> Result<()> {
     // Source is a user address - can be:
     // 1. Scalar value (arbitrary user address)
     // 2. User-tagged pointer (from arena or previous operation)
@@ -451,7 +447,7 @@ pub fn validate_probe_read_user_src(
 // ============================================================================
 
 /// Check arena user pointer access
-/// 
+///
 /// Arena pointers can be cast between kernel and user address spaces.
 /// When in user address space (MEM_USER flag set), they require
 /// speculation protection.
@@ -562,14 +558,11 @@ impl UserMemCopyTracker {
 // ============================================================================
 
 /// Check if speculation barrier is needed for user memory access
-pub fn needs_speculation_barrier(
-    reg: &BpfRegState,
-    is_load: bool,
-) -> bool {
+pub fn needs_speculation_barrier(reg: &BpfRegState, is_load: bool) -> bool {
     // Speculation protection is needed for:
     // 1. User memory loads (to prevent speculative kernel address leaks)
     // 2. Untrusted pointer dereferences
-    
+
     if !is_load {
         return false;
     }
@@ -626,10 +619,7 @@ pub fn get_speculation_protection(
 // ============================================================================
 
 /// Get the appropriate helper for reading user memory
-pub fn get_user_read_helper(
-    ctx: &UserMemContext,
-    is_string: bool,
-) -> BpfFuncId {
+pub fn get_user_read_helper(ctx: &UserMemContext, is_string: bool) -> BpfFuncId {
     if ctx.sleepable {
         BpfFuncId::CopyFromUser
     } else if is_string {
@@ -682,11 +672,7 @@ pub enum UserPtrPropagation {
 }
 
 /// Determine how user pointer property propagates through ALU operation
-pub fn propagate_user_ptr_alu(
-    op: u8,
-    dst_is_user: bool,
-    src_is_user: bool,
-) -> UserPtrPropagation {
+pub fn propagate_user_ptr_alu(op: u8, dst_is_user: bool, src_is_user: bool) -> UserPtrPropagation {
     // ALU operation codes
     const BPF_ADD: u8 = 0x00;
     const BPF_SUB: u8 = 0x10;
@@ -735,10 +721,7 @@ pub fn propagate_user_ptr_alu(
 }
 
 /// Apply user pointer propagation to a register
-pub fn apply_user_ptr_propagation(
-    reg: &mut BpfRegState,
-    propagation: UserPtrPropagation,
-) {
+pub fn apply_user_ptr_propagation(reg: &mut BpfRegState, propagation: UserPtrPropagation) {
     match propagation {
         UserPtrPropagation::Preserve => {
             // Keep MEM_USER flag
@@ -978,10 +961,7 @@ pub fn check_user_ptr_store(
 }
 
 /// Check if loading from user memory into kernel structure is safe
-pub fn check_user_to_kernel_load(
-    src_reg: &BpfRegState,
-    dst_type: BpfRegType,
-) -> Result<()> {
+pub fn check_user_to_kernel_load(src_reg: &BpfRegState, dst_type: BpfRegType) -> Result<()> {
     if !src_reg.type_flags.contains(BpfTypeFlag::MEM_USER) {
         return Ok(());
     }
@@ -1000,11 +980,9 @@ pub fn check_user_to_kernel_load(
         BpfRegType::PtrToMapValue
         | BpfRegType::PtrToMapKey
         | BpfRegType::PtrToBtfId
-        | BpfRegType::PtrToCtx => {
-            Err(VerifierError::InvalidMemoryAccess(
-                "cannot load kernel pointer from user memory".into(),
-            ))
-        }
+        | BpfRegType::PtrToCtx => Err(VerifierError::InvalidMemoryAccess(
+            "cannot load kernel pointer from user memory".into(),
+        )),
         _ => Ok(()),
     }
 }
@@ -1212,7 +1190,7 @@ impl UserMemTaintTracker {
 }
 
 // ============================================================================
-// User Memory Access Pattern Validation  
+// User Memory Access Pattern Validation
 // ============================================================================
 
 /// Common user memory access patterns
@@ -1334,10 +1312,7 @@ pub fn get_fault_behavior(access_type: UserMemAccessType) -> UserMemFaultBehavio
 }
 
 /// Check if fault behavior is safe for context
-pub fn validate_fault_behavior(
-    behavior: UserMemFaultBehavior,
-    ctx: &UserMemContext,
-) -> Result<()> {
+pub fn validate_fault_behavior(behavior: UserMemFaultBehavior, ctx: &UserMemContext) -> Result<()> {
     match behavior {
         UserMemFaultBehavior::Abort => {
             // Only allowed for arena with nospec
@@ -1394,7 +1369,10 @@ pub fn validate_user_mem_access_complete(
     }
 
     // 4. Check alignment for direct access
-    if matches!(access_type, UserMemAccessType::DirectLoad | UserMemAccessType::DirectStore) {
+    if matches!(
+        access_type,
+        UserMemAccessType::DirectLoad | UserMemAccessType::DirectStore
+    ) {
         check_user_mem_alignment(src_reg, off, size, true)?;
     }
 

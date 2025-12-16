@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0
+
 //! BTF (BPF Type Format) support for the BPF verifier.
 //!
 //! This module contains BTF type parsing, validation, and CO-RE support.
@@ -21,29 +23,25 @@ pub use btf::Btf;
 
 // Re-export from core module (CO-RE support)
 pub use core::{
-    CoreAccessSpec, CoreAccessComponent, CoreReloResult, CoreReloContext,
-    CoreReloStats, apply_core_relos,
+    apply_core_relos, CoreAccessComponent, CoreAccessSpec, CoreReloContext, CoreReloResult,
+    CoreReloStats,
 };
 
 // Re-export from func_info module (BTF verification)
 pub use func_info::{
-    BpfFuncInfo, BpfLineInfo, BpfCoreRelo, BpfCoreReloKind,
-    BtfInfoVerifier, VerifiedFuncInfo, SubprogInfo,
-    adjust_btf_func,
-    MIN_BPF_FUNCINFO_SIZE, MAX_FUNCINFO_REC_SIZE,
-    MIN_BPF_LINEINFO_SIZE, MAX_LINEINFO_REC_SIZE,
-    MIN_CORE_RELO_SIZE, MAX_CORE_RELO_SIZE,
+    adjust_btf_func, BpfCoreRelo, BpfCoreReloKind, BpfFuncInfo, BpfLineInfo, BtfInfoVerifier,
+    SubprogInfo, VerifiedFuncInfo, MAX_CORE_RELO_SIZE, MAX_FUNCINFO_REC_SIZE,
+    MAX_LINEINFO_REC_SIZE, MIN_BPF_FUNCINFO_SIZE, MIN_BPF_LINEINFO_SIZE, MIN_CORE_RELO_SIZE,
 };
 
 // Re-export from validation module (validation types and logic)
 pub use validation::{
-    BtfKind, BtfIntEncoding, BtfType, BtfMember, BtfParam, BtfArray,
-    BtfEnumValue, BtfEnum64Value, BtfVarLinkage, BtfTypes, BtfValidator,
-    AccessInfo, create_kernel_btf,
+    create_kernel_btf, AccessInfo, BtfArray, BtfEnum64Value, BtfEnumValue, BtfIntEncoding, BtfKind,
+    BtfMember, BtfParam, BtfType, BtfTypes, BtfValidator, BtfVarLinkage,
 };
 
 // Re-export from integration module (verifier integration)
 pub use integration::{
-    SourceLocation, LineInfoDb, BtfContext, BtfAccessResult,
-    KfuncValidation, FuncProtoInfo, ErrorFormatter, RegBtfInfo,
+    BtfAccessResult, BtfContext, ErrorFormatter, FuncProtoInfo, KfuncValidation, LineInfoDb,
+    RegBtfInfo, SourceLocation,
 };

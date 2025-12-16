@@ -1,18 +1,17 @@
+// SPDX-License-Identifier: GPL-2.0
+
 //! Arena and memory arena support
 //!
 //! This module implements arena-based memory management verification for BPF programs.
 //! Arenas provide user-space addressable memory regions for BPF programs.
 
-
 use alloc::{format, vec::Vec};
 
+use alloc::collections::BTreeMap as HashMap;
 
-use alloc::collections::{BTreeMap as HashMap};
-
+use crate::core::error::{Result, VerifierError};
 use crate::core::types::*;
 use crate::state::reg_state::BpfRegState;
-use crate::core::error::{Result, VerifierError};
-
 
 /// Maximum number of arenas per program
 pub const MAX_ARENAS: usize = 64;
@@ -52,9 +51,7 @@ impl ArenaState {
     /// Register a new arena
     pub fn register(&mut self, info: ArenaInfo) -> Result<u32> {
         if self.arenas.len() >= MAX_ARENAS {
-            return Err(VerifierError::TooComplex(
-                "too many arenas".into()
-            ));
+            return Err(VerifierError::TooComplex("too many arenas".into()));
         }
 
         let id = self.next_id;
@@ -150,7 +147,7 @@ impl MemRegion {
 
         if is_write && !self.writable {
             return Err(VerifierError::InvalidMemoryAccess(
-                "write to read-only region".into()
+                "write to read-only region".into(),
             ));
         }
 
@@ -175,14 +172,11 @@ pub fn check_arena_access(
     }
 
     // Get arena info from type flags or BTF
-    let arena_id = reg.btf_info.as_ref()
-        .map(|b| b.btf_id)
-        .unwrap_or(0);
+    let arena_id = reg.btf_info.as_ref().map(|b| b.btf_id).unwrap_or(0);
 
-    let arena = arena_state.get(arena_id)
-        .ok_or_else(|| VerifierError::InvalidMemoryAccess(
-            "unknown arena".into()
-        ))?;
+    let arena = arena_state
+        .get(arena_id)
+        .ok_or_else(|| VerifierError::InvalidMemoryAccess("unknown arena".into()))?;
 
     // Check bounds
     let access_start = reg.off as i64 + off as i64;
@@ -198,7 +192,7 @@ pub fn check_arena_access(
     // Check write permission
     if is_write && arena.readonly {
         return Err(VerifierError::InvalidMemoryAccess(
-            "write to read-only arena".into()
+            "write to read-only arena".into(),
         ));
     }
 
@@ -251,24 +245,19 @@ pub fn resolve_mem_access(
     _is_write: bool,
 ) -> Result<MemRegion> {
     match reg.reg_type {
-        BpfRegType::PtrToStack => {
-            Ok(MemRegion::new(
-                MemRegionType::Stack,
-                -(MAX_BPF_STACK as i64),
-                0,
-                true,
-            ))
-        }
+        BpfRegType::PtrToStack => Ok(MemRegion::new(
+            MemRegionType::Stack,
+            -(MAX_BPF_STACK as i64),
+            0,
+            true,
+        )),
         BpfRegType::PtrToMapValue => {
-            let map_size = reg.map_ptr.as_ref()
+            let map_size = reg
+                .map_ptr
+                .as_ref()
                 .map(|m| m.value_size as i64)
                 .unwrap_or(0);
-            Ok(MemRegion::new(
-                MemRegionType::MapValue,
-                0,
-                map_size,
-                true,
-            ))
+            Ok(MemRegion::new(MemRegionType::MapValue, 0, map_size, true))
         }
         BpfRegType::PtrToPacket | BpfRegType::PtrToPacketMeta => {
             Ok(MemRegion::new(
@@ -283,13 +272,11 @@ pub fn resolve_mem_access(
                 MemRegionType::Context,
                 0,
                 i64::MAX, // Context access is BTF-validated
-                false, // Depends on field
+                false,    // Depends on field
             ))
         }
         BpfRegType::PtrToArena => {
-            let arena_id = reg.btf_info.as_ref()
-                .map(|b| b.btf_id)
-                .unwrap_or(0);
+            let arena_id = reg.btf_info.as_ref().map(|b| b.btf_id).unwrap_or(0);
             Ok(MemRegion {
                 region_type: MemRegionType::Arena,
                 start: 0,
@@ -298,19 +285,16 @@ pub fn resolve_mem_access(
                 arena_id: Some(arena_id),
             })
         }
-        BpfRegType::PtrToMem => {
-            Ok(MemRegion::new(
-                MemRegionType::Allocated,
-                0,
-                reg.mem_size as i64,
-                true,
-            ))
-        }
-        _ => {
-            Err(VerifierError::InvalidMemoryAccess(
-                format!("cannot access memory through {:?}", reg.reg_type)
-            ))
-        }
+        BpfRegType::PtrToMem => Ok(MemRegion::new(
+            MemRegionType::Allocated,
+            0,
+            reg.mem_size as i64,
+            true,
+        )),
+        _ => Err(VerifierError::InvalidMemoryAccess(format!(
+            "cannot access memory through {:?}",
+            reg.reg_type
+        ))),
     }
 }
 
@@ -334,7 +318,7 @@ pub fn check_percpu_access(
 ) -> Result<()> {
     // Per-CPU access must be within single CPU's region
     let access_end = off as u64 + size as u64;
-    
+
     if access_end > percpu_info.size as u64 {
         return Err(VerifierError::OutOfBounds {
             offset: off,
@@ -439,14 +423,11 @@ pub fn validate_arena_ptr_arithmetic(
     scalar_val: i64,
 ) -> Result<(i64, i64)> {
     // Get arena info
-    let arena_id = reg.btf_info.as_ref()
-        .map(|b| b.btf_id)
-        .unwrap_or(0);
+    let arena_id = reg.btf_info.as_ref().map(|b| b.btf_id).unwrap_or(0);
 
-    let arena = arena_state.get(arena_id)
-        .ok_or_else(|| VerifierError::InvalidMemoryAccess(
-            "unknown arena for pointer arithmetic".into()
-        ))?;
+    let arena = arena_state.get(arena_id).ok_or_else(|| {
+        VerifierError::InvalidMemoryAccess("unknown arena for pointer arithmetic".into())
+    })?;
 
     // Calculate new offset bounds
     let (new_min, new_max) = match op {
@@ -461,9 +442,10 @@ pub fn validate_arena_ptr_arithmetic(
             (min, max)
         }
         _ => {
-            return Err(VerifierError::InvalidPointerArithmetic(
-                format!("invalid pointer arithmetic operation: {:?}", op)
-            ));
+            return Err(VerifierError::InvalidPointerArithmetic(format!(
+                "invalid pointer arithmetic operation: {:?}",
+                op
+            )));
         }
     };
 
@@ -525,19 +507,17 @@ pub fn validate_arena_cast(
     }
 
     // Verify arena exists
-    let arena_id = src_reg.btf_info.as_ref()
-        .map(|b| b.btf_id)
-        .unwrap_or(0);
+    let arena_id = src_reg.btf_info.as_ref().map(|b| b.btf_id).unwrap_or(0);
 
     if !arena_state.exists(arena_id) {
         return Err(VerifierError::InvalidMemoryAccess(
-            "arena not found for cast".into()
+            "arena not found for cast".into(),
         ));
     }
 
     // Create result register
     let mut dst_reg = src_reg.clone();
-    
+
     if to_user {
         // Add MEM_USER flag for user-space pointer
         dst_reg.type_flags.insert(BpfTypeFlag::MEM_USER);
@@ -550,11 +530,7 @@ pub fn validate_arena_cast(
 }
 
 /// Check if arena access crosses page boundary
-pub fn check_arena_page_crossing(
-    offset: i64,
-    size: u32,
-    page_size: u64,
-) -> bool {
+pub fn check_arena_page_crossing(offset: i64, size: u32, page_size: u64) -> bool {
     let start_page = offset as u64 / page_size;
     let end_page = (offset as u64 + size as u64 - 1) / page_size;
     start_page != end_page
@@ -574,23 +550,22 @@ pub fn validate_arena_atomic(
     // Atomic operations have alignment requirements
     let alignment = size as i32;
     let access_addr = reg.off + off;
-    
+
     if access_addr % alignment != 0 {
-        return Err(VerifierError::InvalidMemoryAccess(
-            format!("misaligned access at offset {} (alignment {})", access_addr, alignment)
-        ));
+        return Err(VerifierError::InvalidMemoryAccess(format!(
+            "misaligned access at offset {} (alignment {})",
+            access_addr, alignment
+        )));
     }
 
     // Validate atomic op is supported
-    let valid_ops = [
-        BPF_ADD, BPF_OR, BPF_AND, BPF_XOR,
-        BPF_XCHG, BPF_CMPXCHG,
-    ];
-    
+    let valid_ops = [BPF_ADD, BPF_OR, BPF_AND, BPF_XOR, BPF_XCHG, BPF_CMPXCHG];
+
     if !valid_ops.contains(&atomic_op) {
-        return Err(VerifierError::InvalidMemoryAccess(
-            format!("unsupported atomic operation on arena: {}", atomic_op)
-        ));
+        return Err(VerifierError::InvalidMemoryAccess(format!(
+            "unsupported atomic operation on arena: {}",
+            atomic_op
+        )));
     }
 
     Ok(())
@@ -605,15 +580,12 @@ const BPF_XCHG: u32 = 0xe1;
 const BPF_CMPXCHG: u32 = 0xf1;
 
 /// Track arena pointer through register operations
-pub fn propagate_arena_info(
-    dst: &mut BpfRegState,
-    src: &BpfRegState,
-) {
+pub fn propagate_arena_info(dst: &mut BpfRegState, src: &BpfRegState) {
     // Copy arena-related info
     if src.reg_type == BpfRegType::PtrToArena {
         dst.reg_type = BpfRegType::PtrToArena;
         dst.btf_info = src.btf_info.clone();
-        
+
         // Preserve MEM_USER flag
         if src.type_flags.contains(BpfTypeFlag::MEM_USER) {
             dst.type_flags.insert(BpfTypeFlag::MEM_USER);
@@ -633,14 +605,11 @@ pub fn narrow_arena_bounds(
     }
 
     // Get arena bounds
-    let arena_id = reg.btf_info.as_ref()
-        .map(|b| b.btf_id)
-        .unwrap_or(0);
+    let arena_id = reg.btf_info.as_ref().map(|b| b.btf_id).unwrap_or(0);
 
-    let arena = arena_state.get(arena_id)
-        .ok_or_else(|| VerifierError::InvalidMemoryAccess(
-            "unknown arena for bounds narrowing".into()
-        ))?;
+    let arena = arena_state.get(arena_id).ok_or_else(|| {
+        VerifierError::InvalidMemoryAccess("unknown arena for bounds narrowing".into())
+    })?;
 
     if is_less_than {
         // Pointer < cmp_val means max is cmp_val - 1
@@ -711,20 +680,20 @@ impl ArenaAllocTracker {
         let alloc_id = self.next_alloc_id;
         self.next_alloc_id += 1;
 
-        self.allocations.insert(alloc_id, ArenaAllocation {
+        self.allocations.insert(
             alloc_id,
-            arena_id,
-            offset,
-            size,
-            active: true,
-            alloc_insn_idx: insn_idx,
-            ref_obj_id,
-        });
+            ArenaAllocation {
+                alloc_id,
+                arena_id,
+                offset,
+                size,
+                active: true,
+                alloc_insn_idx: insn_idx,
+                ref_obj_id,
+            },
+        );
 
-        self.by_arena
-            .entry(arena_id)
-            .or_default()
-            .push(alloc_id);
+        self.by_arena.entry(arena_id).or_default().push(alloc_id);
 
         self.stats.record_alloc(size);
         alloc_id
@@ -735,7 +704,7 @@ impl ArenaAllocTracker {
         if let Some(alloc) = self.allocations.get_mut(&alloc_id) {
             if !alloc.active {
                 return Err(VerifierError::InvalidMemoryAccess(
-                    "double free detected".into()
+                    "double free detected".into(),
                 ));
             }
             alloc.active = false;
@@ -743,7 +712,7 @@ impl ArenaAllocTracker {
             Ok(())
         } else {
             Err(VerifierError::InvalidMemoryAccess(
-                "freeing unknown allocation".into()
+                "freeing unknown allocation".into(),
             ))
         }
     }
@@ -767,12 +736,15 @@ impl ArenaAllocTracker {
     }
 
     /// Check if pointer is within any active allocation
-    pub fn find_allocation_at(&self, arena_id: u32, offset: u64, size: u64) -> Option<&ArenaAllocation> {
+    pub fn find_allocation_at(
+        &self,
+        arena_id: u32,
+        offset: u64,
+        size: u64,
+    ) -> Option<&ArenaAllocation> {
         self.get_active_allocations(arena_id)
             .into_iter()
-            .find(|a| {
-                offset >= a.offset && offset + size <= a.offset + a.size
-            })
+            .find(|a| offset >= a.offset && offset + size <= a.offset + a.size)
     }
 
     /// Check for leaked allocations (active allocations at program exit)
@@ -815,7 +787,7 @@ impl ArenaAddrContext {
     pub fn kern_to_user(&self, kern_addr: u64) -> Result<u64> {
         if kern_addr < self.kern_base || kern_addr >= self.kern_base + self.size {
             return Err(VerifierError::InvalidMemoryAccess(
-                "kernel address outside arena bounds".into()
+                "kernel address outside arena bounds".into(),
             ));
         }
         let offset = kern_addr - self.kern_base;
@@ -826,7 +798,7 @@ impl ArenaAddrContext {
     pub fn user_to_kern(&self, user_addr: u64) -> Result<u64> {
         if user_addr < self.user_base || user_addr >= self.user_base + self.size {
             return Err(VerifierError::InvalidMemoryAccess(
-                "user address outside arena bounds".into()
+                "user address outside arena bounds".into(),
             ));
         }
         let offset = user_addr - self.user_base;
@@ -896,9 +868,10 @@ pub fn validate_addr_space_cast_insn(
             // Just return copy of source
         }
         _ => {
-            return Err(VerifierError::InvalidMemoryAccess(
-                format!("invalid address space cast: {} -> {}", from_as, to_as)
-            ));
+            return Err(VerifierError::InvalidMemoryAccess(format!(
+                "invalid address space cast: {} -> {}",
+                from_as, to_as
+            )));
         }
     }
 

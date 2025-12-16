@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0
+
 //! Instruction patching for BPF programs.
 //!
 //! This module implements instruction patching for BPF programs.
@@ -10,14 +12,12 @@
 
 #![allow(missing_docs)] // Patching internals
 
-
 use alloc::{format, vec::Vec};
-
 
 use alloc::collections::BTreeMap as HashMap;
 
-use crate::core::types::*;
 use crate::core::error::{Result, VerifierError};
+use crate::core::types::*;
 
 /// Types of patches that can be applied
 #[derive(Debug, Clone)]
@@ -31,17 +31,11 @@ pub enum PatchType {
     /// Remove instruction (replace with nop)
     Remove,
     /// Patch map fd to map pointer
-    MapFdToPtr {
-        map_ptr: u64,
-    },
+    MapFdToPtr { map_ptr: u64 },
     /// Patch helper call
-    HelperCall {
-        func_id: i32,
-    },
+    HelperCall { func_id: i32 },
     /// Insert zero extension
-    ZeroExtend {
-        reg: u8,
-    },
+    ZeroExtend { reg: u8 },
     /// Insert speculation barrier
     NospecBarrier,
 }
@@ -57,7 +51,10 @@ pub struct Patch {
 
 impl Patch {
     pub fn new(insn_idx: usize, patch_type: PatchType) -> Self {
-        Self { insn_idx, patch_type }
+        Self {
+            insn_idx,
+            patch_type,
+        }
     }
 
     /// Create a replace patch
@@ -168,7 +165,7 @@ impl InsnPatcher {
                     // LD_IMM64 consists of two instructions
                     let lo = (*map_ptr & 0xFFFFFFFF) as i32;
                     let hi = ((*map_ptr >> 32) & 0xFFFFFFFF) as i32;
-                    
+
                     result[idx].imm = lo;
                     if idx + 1 < result.len() {
                         result[idx + 1].imm = hi;
@@ -179,13 +176,7 @@ impl InsnPatcher {
                 }
                 PatchType::ZeroExtend { reg } => {
                     // Insert: mov32 reg, reg (zero extends upper 32 bits)
-                    let zext = BpfInsn::new(
-                        BPF_ALU | BPF_MOV | BPF_X,
-                        *reg,
-                        *reg,
-                        0,
-                        0,
-                    );
+                    let zext = BpfInsn::new(BPF_ALU | BPF_MOV | BPF_X, *reg, *reg, 0, 0);
                     result.insert(idx + 1, zext);
                     self.update_idx_map(idx + 1, 1);
                     Self::update_jump_targets(&mut result, idx + 1, 1)?;
@@ -217,11 +208,7 @@ impl InsnPatcher {
     }
 
     /// Update jump targets after an insertion
-    fn update_jump_targets(
-        insns: &mut [BpfInsn],
-        insert_idx: usize,
-        delta: i32,
-    ) -> Result<()> {
+    fn update_jump_targets(insns: &mut [BpfInsn], insert_idx: usize, delta: i32) -> Result<()> {
         for (idx, insn) in insns.iter_mut().enumerate() {
             let class = insn.class();
             if class != BPF_JMP && class != BPF_JMP32 {
@@ -283,7 +270,7 @@ pub fn patch_map_pointers(
     let mut i = 0;
     while i < insns.len() {
         let insn = &insns[i];
-        
+
         // Check for LD_IMM64 with map fd
         if insn.code == (BPF_LD | BPF_IMM | BPF_DW) {
             let src = insn.src_reg;
@@ -292,7 +279,7 @@ pub fn patch_map_pointers(
                 if let Some(&ptr) = fd_to_ptr.get(&fd) {
                     let lo = (ptr & 0xFFFFFFFF) as i32;
                     let hi = ((ptr >> 32) & 0xFFFFFFFF) as i32;
-                    
+
                     insns[i].imm = lo;
                     if i + 1 < insns.len() {
                         insns[i + 1].imm = hi;
@@ -309,10 +296,7 @@ pub fn patch_map_pointers(
 }
 
 /// Insert zero extensions where needed (for JIT that doesn't zero-extend)
-pub fn insert_zero_extensions(
-    insns: &[BpfInsn],
-    needs_zext: &[bool],
-) -> Result<Vec<BpfInsn>> {
+pub fn insert_zero_extensions(insns: &[BpfInsn], needs_zext: &[bool]) -> Result<Vec<BpfInsn>> {
     let mut patcher = InsnPatcher::new(insns.to_vec());
 
     for (idx, &needs) in needs_zext.iter().enumerate() {
@@ -506,7 +490,10 @@ impl PatchManager {
         }
 
         // Apply all and update insns
-        if !self.zext_patches.is_empty() || !self.nospec_patches.is_empty() || !self.patches.is_empty() {
+        if !self.zext_patches.is_empty()
+            || !self.nospec_patches.is_empty()
+            || !self.patches.is_empty()
+        {
             *insns = patcher.apply()?;
         }
 
@@ -602,8 +589,13 @@ impl core::fmt::Display for PatchResult {
             write!(f, "{}", parts.join(", "))?;
         }
         if self.size_delta() != 0 {
-            write!(f, " (size {} -> {}, delta {:+})",
-                self.original_size, self.final_size, self.size_delta())?;
+            write!(
+                f,
+                " (size {} -> {}, delta {:+})",
+                self.original_size,
+                self.final_size,
+                self.size_delta()
+            )?;
         }
         Ok(())
     }
@@ -613,25 +605,25 @@ impl core::fmt::Display for PatchResult {
 /// Inserts check for division by zero and INT_MIN / -1 overflow.
 pub fn patch_sdiv_safe(insn_idx: usize, insn: &BpfInsn) -> Vec<Patch> {
     let mut patches = Vec::new();
-    
+
     // For signed division, we need to handle:
     // 1. Division by zero
     // 2. INT_MIN / -1 overflow
-    
+
     let dst = insn.dst_reg;
     let src = insn.src_reg;
     let is_64bit = insn.class() == BPF_ALU64;
-    
+
     // We'll insert a sequence that checks and handles these cases
     // For simplicity, just mark for manual handling
     let _ = (dst, src, is_64bit);
-    
+
     // The actual implementation would insert:
     // if (src == 0) goto error;
     // if (dst == INT_MIN && src == -1) { dst = INT_MIN; goto skip; }
     // dst = dst / src;
     // skip:
-    
+
     patches.push(Patch::new(insn_idx, PatchType::Replace(*insn)));
     patches
 }

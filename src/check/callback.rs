@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0
+
 //!
 
 //! This module implements verification of callback functions used with
@@ -18,12 +20,10 @@
 
 //! - Bounded execution (for loop callbacks)
 
-
-
 use alloc::{boxed::Box, format, vec, vec::Vec};
 
-use crate::core::types::*;
 use crate::core::error::{Result, VerifierError};
+use crate::core::types::*;
 use crate::state::reg_state::BpfRegState;
 use crate::state::verifier_state::BpfVerifierState;
 
@@ -69,9 +69,9 @@ impl CallbackType {
     pub fn return_range(&self) -> BpfRetvalRange {
         match self {
             CallbackType::ForEachMapElem => BpfRetvalRange::new(0, 1), // 0 = continue, 1 = stop
-            CallbackType::Loop => BpfRetvalRange::new(0, 1),          // 0 = continue, 1 = stop
-            CallbackType::Timer => BpfRetvalRange::new(0, 0),         // must return 0
-            CallbackType::IterNext => BpfRetvalRange::new(0, 1),      // 0 = continue, 1 = stop
+            CallbackType::Loop => BpfRetvalRange::new(0, 1),           // 0 = continue, 1 = stop
+            CallbackType::Timer => BpfRetvalRange::new(0, 0),          // must return 0
+            CallbackType::IterNext => BpfRetvalRange::new(0, 1),       // 0 = continue, 1 = stop
             CallbackType::SockOps => BpfRetvalRange::new(i32::MIN, i32::MAX),
             CallbackType::StructOps => BpfRetvalRange::new(i32::MIN, i32::MAX),
             CallbackType::Sleepable => BpfRetvalRange::new(0, 0),
@@ -204,14 +204,11 @@ impl CallbackState {
 }
 
 /// Verify callback argument types
-pub fn verify_callback_args(
-    state: &BpfVerifierState,
-    callback: &CallbackState,
-) -> Result<()> {
+pub fn verify_callback_args(state: &BpfVerifierState, callback: &CallbackState) -> Result<()> {
     for expected in &callback.arg_types {
-        let reg = state.reg(expected.regno).ok_or(
-            VerifierError::InvalidRegister(expected.regno as u8)
-        )?;
+        let reg = state
+            .reg(expected.regno)
+            .ok_or(VerifierError::InvalidRegister(expected.regno as u8))?;
 
         // Check register type
         if !is_compatible_type(reg, expected) {
@@ -248,32 +245,25 @@ pub fn verify_callback_args(
 fn is_compatible_type(reg: &BpfRegState, expected: &ExpectedArg) -> bool {
     match expected.reg_type {
         BpfRegType::ScalarValue => {
-            reg.reg_type == BpfRegType::ScalarValue ||
-            (expected.nullable && reg.reg_type == BpfRegType::NotInit)
+            reg.reg_type == BpfRegType::ScalarValue
+                || (expected.nullable && reg.reg_type == BpfRegType::NotInit)
         }
         BpfRegType::PtrToMapKey => {
-            reg.reg_type == BpfRegType::PtrToMapKey ||
-            reg.reg_type == BpfRegType::PtrToMem
+            reg.reg_type == BpfRegType::PtrToMapKey || reg.reg_type == BpfRegType::PtrToMem
         }
         BpfRegType::PtrToMapValue => {
-            reg.reg_type == BpfRegType::PtrToMapValue ||
-            reg.reg_type == BpfRegType::PtrToMem
+            reg.reg_type == BpfRegType::PtrToMapValue || reg.reg_type == BpfRegType::PtrToMem
         }
-        BpfRegType::PtrToCtx => {
-            reg.reg_type == BpfRegType::PtrToCtx
-        }
-        _ => reg.reg_type == expected.reg_type
+        BpfRegType::PtrToCtx => reg.reg_type == BpfRegType::PtrToCtx,
+        _ => reg.reg_type == expected.reg_type,
     }
 }
 
 /// Verify callback return value
-pub fn verify_callback_return(
-    state: &BpfVerifierState,
-    callback: &CallbackState,
-) -> Result<()> {
-    let r0 = state.reg(BPF_REG_0).ok_or(
-        VerifierError::InvalidRegister(BPF_REG_0 as u8)
-    )?;
+pub fn verify_callback_return(state: &BpfVerifierState, callback: &CallbackState) -> Result<()> {
+    let r0 = state
+        .reg(BPF_REG_0)
+        .ok_or(VerifierError::InvalidRegister(BPF_REG_0 as u8))?;
 
     // R0 must be a scalar
     if r0.reg_type != BpfRegType::ScalarValue {
@@ -287,12 +277,10 @@ pub fn verify_callback_return(
     let ret_min = r0.smin_value;
     let ret_max = r0.smax_value;
 
-    if ret_min < callback.ret_range.minval as i64 ||
-       ret_max > callback.ret_range.maxval as i64 {
+    if ret_min < callback.ret_range.minval as i64 || ret_max > callback.ret_range.maxval as i64 {
         return Err(VerifierError::InvalidFunctionCall(format!(
             "callback return value [{}, {}] not in expected range [{}, {}]",
-            ret_min, ret_max,
-            callback.ret_range.minval, callback.ret_range.maxval
+            ret_min, ret_max, callback.ret_range.minval, callback.ret_range.maxval
         )));
     }
 
@@ -302,7 +290,7 @@ pub fn verify_callback_return(
 /// Check if callback nesting depth is within limits
 pub fn check_callback_depth(callback: &CallbackState) -> Result<()> {
     const MAX_CALLBACK_DEPTH: u32 = 8;
-    
+
     if callback.depth >= MAX_CALLBACK_DEPTH {
         return Err(VerifierError::TooComplex(format!(
             "callback nesting depth {} exceeds maximum {}",
@@ -313,13 +301,10 @@ pub fn check_callback_depth(callback: &CallbackState) -> Result<()> {
 }
 
 /// Initialize register state for callback entry
-pub fn init_callback_regs(
-    state: &mut BpfVerifierState,
-    callback: &CallbackState,
-) -> Result<()> {
-    let func = state.cur_func_mut().ok_or(
-        VerifierError::Internal("no current function".into())
-    )?;
+pub fn init_callback_regs(state: &mut BpfVerifierState, callback: &CallbackState) -> Result<()> {
+    let func = state
+        .cur_func_mut()
+        .ok_or(VerifierError::Internal("no current function".into()))?;
 
     // Clear caller-saved registers
     for i in 0..=5 {
@@ -332,7 +317,7 @@ pub fn init_callback_regs(
     // Initialize argument registers based on callback type
     for arg in &callback.arg_types {
         let reg = &mut func.regs[arg.regno];
-        
+
         match arg.reg_type {
             BpfRegType::ScalarValue => {
                 reg.mark_unknown(false);
@@ -425,7 +410,7 @@ fn is_forbidden_in_timer(helper_id: u32) -> bool {
     matches!(
         helper_id,
         12 | // tail_call
-        64   // bind (socket operations)
+        64 // bind (socket operations)
     )
 }
 
@@ -445,7 +430,7 @@ pub fn is_callback_helper(helper_id: u32) -> bool {
         181 | // bpf_loop
         170 | // bpf_user_ringbuf_drain
         174 | // bpf_find_vma
-        165   // bpf_snprintf
+        165 // bpf_snprintf
     )
 }
 
@@ -456,7 +441,7 @@ pub fn is_sync_callback_helper(helper_id: u32) -> bool {
         164 | // bpf_for_each_map_elem
         181 | // bpf_loop
         170 | // bpf_user_ringbuf_drain
-        174   // bpf_find_vma
+        174 // bpf_find_vma
     )
 }
 
@@ -465,7 +450,7 @@ pub fn is_async_callback_helper(helper_id: u32) -> bool {
     matches!(
         helper_id,
         167 | // bpf_timer_set_callback
-        195   // bpf_wq_set_callback_impl
+        195 // bpf_wq_set_callback_impl
     )
 }
 
@@ -525,15 +510,16 @@ pub fn set_map_elem_callback_state(
     map_ptr_regno: usize,
 ) -> Result<CallbackState> {
     // Get map information from the map pointer register
-    let map_reg = state.reg(map_ptr_regno).ok_or(
-        VerifierError::InvalidRegister(map_ptr_regno as u8)
-    )?.clone();
+    let map_reg = state
+        .reg(map_ptr_regno)
+        .ok_or(VerifierError::InvalidRegister(map_ptr_regno as u8))?
+        .clone();
 
     let (key_size, value_size) = if let Some(ref map_info) = map_reg.map_ptr {
         (map_info.key_size, map_info.value_size)
     } else {
         return Err(VerifierError::InvalidMapAccess(
-            "cannot determine map key/value size for callback".into()
+            "cannot determine map key/value size for callback".into(),
         ));
     };
 
@@ -541,17 +527,17 @@ pub fn set_map_elem_callback_state(
 
     // Push frame and init regs
     state.push_frame(0, callback_idx as u32)?;
-    
-    let func = state.cur_func_mut().ok_or(
-        VerifierError::Internal("no current function".into())
-    )?;
+
+    let func = state
+        .cur_func_mut()
+        .ok_or(VerifierError::Internal("no current function".into()))?;
 
     // R1 = pointer to map key
     func.regs[1].reg_type = BpfRegType::PtrToMapKey;
     func.regs[1].mem_size = key_size;
     func.regs[1].off = 0;
 
-    // R2 = pointer to map value  
+    // R2 = pointer to map value
     func.regs[2].reg_type = BpfRegType::PtrToMapValue;
     func.regs[2].mem_size = value_size;
     func.regs[2].off = 0;
@@ -575,9 +561,9 @@ pub fn set_loop_callback_state(
     nr_loops_reg: usize,
 ) -> Result<CallbackState> {
     // Get the number of loops from the register
-    let loops_reg = state.reg(nr_loops_reg).ok_or(
-        VerifierError::InvalidRegister(nr_loops_reg as u8)
-    )?;
+    let loops_reg = state
+        .reg(nr_loops_reg)
+        .ok_or(VerifierError::InvalidRegister(nr_loops_reg as u8))?;
 
     // Determine max iterations
     let max_iterations = if loops_reg.is_const() {
@@ -592,9 +578,9 @@ pub fn set_loop_callback_state(
     // Push frame and init regs
     state.push_frame(0, callback_idx as u32)?;
 
-    let func = state.cur_func_mut().ok_or(
-        VerifierError::Internal("no current function".into())
-    )?;
+    let func = state
+        .cur_func_mut()
+        .ok_or(VerifierError::Internal("no current function".into()))?;
 
     // R1 = loop index (0 to nr_loops-1)
     func.regs[1].mark_unknown(false);
@@ -620,18 +606,19 @@ pub fn set_timer_callback_state(
     callback_idx: usize,
     map_ptr_regno: usize,
 ) -> Result<CallbackState> {
-    let map_reg = state.reg(map_ptr_regno).ok_or(
-        VerifierError::InvalidRegister(map_ptr_regno as u8)
-    )?.clone();
+    let map_reg = state
+        .reg(map_ptr_regno)
+        .ok_or(VerifierError::InvalidRegister(map_ptr_regno as u8))?
+        .clone();
 
     let mut callback = CallbackState::timer_callback(callback_idx);
 
     // Push frame and init regs
     state.push_frame(0, callback_idx as u32)?;
 
-    let func = state.cur_func_mut().ok_or(
-        VerifierError::Internal("no current function".into())
-    )?;
+    let func = state
+        .cur_func_mut()
+        .ok_or(VerifierError::Internal("no current function".into()))?;
 
     // R1 = pointer to map containing timer
     func.regs[1].reg_type = BpfRegType::PtrToMapValue;
@@ -666,9 +653,9 @@ pub fn set_find_vma_callback_state(
     // Push frame and init regs
     state.push_frame(0, callback_idx as u32)?;
 
-    let func = state.cur_func_mut().ok_or(
-        VerifierError::Internal("no current function".into())
-    )?;
+    let func = state
+        .cur_func_mut()
+        .ok_or(VerifierError::Internal("no current function".into()))?;
 
     // R1 = task_struct pointer
     func.regs[1].reg_type = BpfRegType::PtrToBtfId;
@@ -700,13 +687,15 @@ pub fn set_user_ringbuf_callback_state(
     // Push frame and init regs
     state.push_frame(0, callback_idx as u32)?;
 
-    let func = state.cur_func_mut().ok_or(
-        VerifierError::Internal("no current function".into())
-    )?;
+    let func = state
+        .cur_func_mut()
+        .ok_or(VerifierError::Internal("no current function".into()))?;
 
     // R1 = dynptr to sample
     func.regs[1].reg_type = BpfRegType::PtrToStack;
-    func.regs[1].type_flags.insert(BpfTypeFlag::DYNPTR_TYPE_LOCAL);
+    func.regs[1]
+        .type_flags
+        .insert(BpfTypeFlag::DYNPTR_TYPE_LOCAL);
 
     // R2 = callback context
     func.regs[2].mark_unknown(false);
@@ -730,9 +719,9 @@ pub fn set_rbtree_add_callback_state(
     // Push frame and init regs
     state.push_frame(0, callback_idx as u32)?;
 
-    let func = state.cur_func_mut().ok_or(
-        VerifierError::Internal("no current function".into())
-    )?;
+    let func = state
+        .cur_func_mut()
+        .ok_or(VerifierError::Internal("no current function".into()))?;
 
     // R1 = first node to compare (non-owning reference)
     func.regs[1].reg_type = BpfRegType::PtrToBtfId;
@@ -809,7 +798,7 @@ impl CallbackTracker {
     /// Enter a callback
     pub fn enter(&mut self, callback: CallbackState) -> Result<()> {
         check_callback_depth(&callback)?;
-        
+
         self.total_invocations += 1;
         if self.total_invocations > self.max_invocations {
             return Err(VerifierError::TooComplex(format!(

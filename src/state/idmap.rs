@@ -1,9 +1,10 @@
+// SPDX-License-Identifier: GPL-2.0
+
 //! ID mapping for state comparison
 //!
 //! This module handles ID mapping during state comparison. When comparing
 //! two verifier states, we need to track which IDs in one state correspond
 //! to which IDs in the other state.
-
 
 use alloc::vec::Vec;
 
@@ -96,7 +97,8 @@ impl IdMap {
 
     /// Get the current ID for an old ID
     pub fn get_cur_id(&self, old_id: u32) -> Option<u32> {
-        self.old_to_idx.get(&old_id)
+        self.old_to_idx
+            .get(&old_id)
             .map(|&idx| self.entries[idx].cur_id)
     }
 
@@ -211,8 +213,7 @@ impl ReadMark {
 
 /// Parent link for state hierarchy
 #[allow(missing_docs)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ParentLink {
     /// No parent
     #[default]

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0
+
 //! Worklist-based path exploration for BPF verification.
 //!
 //! This module implements an advanced worklist algorithm for exploring
@@ -9,13 +11,12 @@
 
 use core::cmp::Ordering;
 
-
 use alloc::vec::Vec;
 
-use alloc::collections::{BinaryHeap, BTreeMap as HashMap, BTreeSet as HashSet};
+use alloc::collections::{BTreeMap as HashMap, BTreeSet as HashSet, BinaryHeap};
 
-use crate::analysis::states_equal::states_equal;
 use crate::analysis::state_merge::{merge_states, MergeResult, MergeStats};
+use crate::analysis::states_equal::states_equal;
 use crate::core::types::*;
 use crate::state::verifier_state::BpfVerifierState;
 
@@ -47,7 +48,13 @@ impl WorkItem {
     }
 
     /// Create a work item with depth tracking.
-    pub fn with_depth(insn_idx: usize, state: BpfVerifierState, priority: u64, depth: u32, parent: usize) -> Self {
+    pub fn with_depth(
+        insn_idx: usize,
+        state: BpfVerifierState,
+        priority: u64,
+        depth: u32,
+        parent: usize,
+    ) -> Self {
         Self {
             insn_idx,
             state,
@@ -163,7 +170,13 @@ impl Worklist {
     }
 
     /// Push a work item with parent tracking.
-    pub fn push_with_parent(&mut self, insn_idx: usize, state: BpfVerifierState, parent_idx: usize, depth: u32) {
+    pub fn push_with_parent(
+        &mut self,
+        insn_idx: usize,
+        state: BpfVerifierState,
+        parent_idx: usize,
+        depth: u32,
+    ) {
         let priority = self.next_priority();
         let item = WorkItem::with_depth(insn_idx, state, priority, depth, parent_idx);
         self.push_item(item);
@@ -199,7 +212,7 @@ impl Worklist {
     fn next_priority(&mut self) -> u64 {
         // Increment counter for each item
         self.priority_counter = self.priority_counter.saturating_add(1);
-        
+
         match self.strategy {
             ExplorationStrategy::DepthFirst => {
                 // Higher priority for later items (LIFO) - use counter directly
@@ -233,16 +246,17 @@ impl Worklist {
 
     /// Save an explored state for future pruning.
     pub fn save_explored(&mut self, insn_idx: usize, state: BpfVerifierState) {
-        self.explored
-            .entry(insn_idx)
-            .or_default()
-            .push(state);
+        self.explored.entry(insn_idx).or_default().push(state);
     }
 
     /// Try to merge a state at a join point.
     ///
     /// Returns the merged state if merging occurred, or None if the state should be explored normally.
-    pub fn try_merge_at_join(&mut self, insn_idx: usize, state: &BpfVerifierState) -> Option<BpfVerifierState> {
+    pub fn try_merge_at_join(
+        &mut self,
+        insn_idx: usize,
+        state: &BpfVerifierState,
+    ) -> Option<BpfVerifierState> {
         let pending = self.pending_merge.entry(insn_idx).or_default();
 
         // Check if we should merge with existing states

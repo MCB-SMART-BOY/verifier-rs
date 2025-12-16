@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0
+
 //! Miscellaneous instruction fixups.
 //!
 //! This module implements various instruction transformations that the kernel
@@ -11,15 +13,13 @@
 
 #![allow(missing_docs)] // Fixup internals
 
-
 use alloc::{vec, vec::Vec};
-
 
 use alloc::collections::BTreeMap as HashMap;
 
-use crate::core::types::*;
+use super::patching::{Patch, PatchManager, PatchType};
 use crate::core::error::Result;
-use super::patching::{PatchManager, Patch, PatchType};
+use crate::core::types::*;
 
 /// Maximum tail call count
 pub const MAX_TAIL_CALL_CNT: u32 = 33;
@@ -194,10 +194,7 @@ pub struct FixupResult {
 }
 
 /// Perform miscellaneous fixups on the program.
-pub fn do_misc_fixups(
-    insns: &mut Vec<BpfInsn>,
-    ctx: &FixupContext,
-) -> Result<FixupResult> {
+pub fn do_misc_fixups(insns: &mut Vec<BpfInsn>, ctx: &FixupContext) -> Result<FixupResult> {
     let mut result = FixupResult::default();
     let mut manager = PatchManager::new();
     let orig_len = insns.len();
@@ -209,7 +206,7 @@ pub fn do_misc_fixups(
         // Handle helper calls
         if is_helper_call(insn) {
             let helper_id = insn.imm as u32;
-            
+
             match BpfFunc::from_u32(helper_id) {
                 Some(BpfFunc::MapLookupElem) => {
                     if ctx.inline_map_lookups {
@@ -263,7 +260,7 @@ pub fn do_misc_fixups(
                             patch_type: PatchType::InsertBefore(spec.prepend_insns.clone()),
                         });
                     }
-                    
+
                     // Update kfunc address if changed
                     if let Some(new_addr) = spec.new_addr {
                         // The address update is handled by patching the imm field
@@ -274,7 +271,7 @@ pub fn do_misc_fixups(
                             patch_type: PatchType::Replace(new_insn),
                         });
                     }
-                    
+
                     result.kfuncs_specialized += 1;
                 }
             }
@@ -364,17 +361,21 @@ fn is_kfunc_call(insn: &BpfInsn) -> bool {
 /// - bpf_dynptr_from_skb can be specialized to a read-only variant
 /// - bpf_obj_new_impl needs size and struct_meta arguments injected
 /// - Device-bound kfuncs are resolved to device-specific implementations
-fn specialize_kfunc(ctx: &FixupContext, btf_id: u32, insn_idx: usize) -> Option<KfuncSpecialization> {
+fn specialize_kfunc(
+    ctx: &FixupContext,
+    btf_id: u32,
+    insn_idx: usize,
+) -> Option<KfuncSpecialization> {
     // Find the kfunc descriptor
     let desc = ctx.kfuncs.iter().find(|k| k.func_id == btf_id)?;
-    
+
     // If it's a module kfunc (non-zero offset), don't specialize
     if desc.offset != 0 {
         return None;
     }
-    
+
     let special = desc.special?;
-    
+
     match special {
         SpecialKfunc::DynptrFromSkb => {
             // If the program hasn't done any direct writes, use read-only variant
@@ -390,13 +391,13 @@ fn specialize_kfunc(ctx: &FixupContext, btf_id: u32, insn_idx: usize) -> Option<
                 None
             }
         }
-        
+
         SpecialKfunc::ObjNewImpl | SpecialKfunc::PercpuObjNewImpl => {
             // Inject size and struct_meta arguments
             let aux = ctx.insn_aux.get(&insn_idx)?;
             let obj_size = aux.obj_new_size;
             let struct_meta = aux.kptr_struct_meta;
-            
+
             // For percpu_obj_new, enforce additional constraints:
             // 1. struct_meta must be NULL (no kptr fields allowed)
             // 2. size must not exceed BPF_GLOBAL_PERCPU_MA_MAX_SIZE (512 bytes)
@@ -410,9 +411,9 @@ fn specialize_kfunc(ctx: &FixupContext, btf_id: u32, insn_idx: usize) -> Option<
                     return None;
                 }
             }
-            
+
             let mut prepend = Vec::new();
-            
+
             // MOV r1, obj_size
             prepend.push(BpfInsn::new(
                 BPF_ALU64 | BPF_MOV | BPF_K,
@@ -421,7 +422,7 @@ fn specialize_kfunc(ctx: &FixupContext, btf_id: u32, insn_idx: usize) -> Option<
                 0,
                 obj_size as i32,
             ));
-            
+
             // LD_IMM64 r2, struct_meta (2 instructions)
             prepend.push(BpfInsn::new(
                 BPF_LD | BPF_IMM | BPF_DW,
@@ -437,22 +438,23 @@ fn specialize_kfunc(ctx: &FixupContext, btf_id: u32, insn_idx: usize) -> Option<
                 0,
                 ((struct_meta >> 32) & 0xFFFFFFFF) as i32,
             ));
-            
+
             Some(KfuncSpecialization {
                 new_addr: None,
                 prepend_insns: prepend,
                 specialized: true,
             })
         }
-        
-        SpecialKfunc::ObjDropImpl | SpecialKfunc::PercpuObjDropImpl | 
-        SpecialKfunc::RefcountAcquireImpl => {
+
+        SpecialKfunc::ObjDropImpl
+        | SpecialKfunc::PercpuObjDropImpl
+        | SpecialKfunc::RefcountAcquireImpl => {
             // Inject struct_meta argument in r2
             let aux = ctx.insn_aux.get(&insn_idx)?;
             let struct_meta = aux.kptr_struct_meta;
-            
+
             let mut prepend = Vec::new();
-            
+
             // LD_IMM64 r2, struct_meta
             prepend.push(BpfInsn::new(
                 BPF_LD | BPF_IMM | BPF_DW,
@@ -468,14 +470,14 @@ fn specialize_kfunc(ctx: &FixupContext, btf_id: u32, insn_idx: usize) -> Option<
                 0,
                 ((struct_meta >> 32) & 0xFFFFFFFF) as i32,
             ));
-            
+
             Some(KfuncSpecialization {
                 new_addr: None,
                 prepend_insns: prepend,
                 specialized: true,
             })
         }
-        
+
         SpecialKfunc::ListPushFrontImpl | SpecialKfunc::ListPushBackImpl => {
             // These need node offset injected
             // In kernel: insn_buf[0] = BPF_MOV64_IMM(BPF_REG_3, node_offset)
@@ -485,7 +487,7 @@ fn specialize_kfunc(ctx: &FixupContext, btf_id: u32, insn_idx: usize) -> Option<
                 specialized: true,
             })
         }
-        
+
         SpecialKfunc::CastToKernCtx => {
             // Cast to kernel context - usually a no-op that gets eliminated
             // The register already contains the context pointer
@@ -495,7 +497,7 @@ fn specialize_kfunc(ctx: &FixupContext, btf_id: u32, insn_idx: usize) -> Option<
                 specialized: true,
             })
         }
-        
+
         SpecialKfunc::RdonlyCast => {
             // Read-only cast - similar to cast_to_kern_ctx
             Some(KfuncSpecialization {
@@ -504,13 +506,13 @@ fn specialize_kfunc(ctx: &FixupContext, btf_id: u32, insn_idx: usize) -> Option<
                 specialized: true,
             })
         }
-        
+
         SpecialKfunc::RcuReadLock | SpecialKfunc::RcuReadUnlock => {
             // These are often NOPs in non-sleepable programs
             // but we keep them for proper RCU tracking
             None
         }
-        
+
         _ => None,
     }
 }
@@ -542,11 +544,11 @@ fn convert_ld_abs_ind(insn: &BpfInsn, idx: usize, _ctx: &FixupContext) -> Option
     let mode = insn.code & 0xe0;
     let size = insn.code & 0x18;
     let is_indirect = mode == BPF_IND;
-    
+
     // Determine helper function based on access size
     // These are internal kernel helpers, not exposed via BpfFunc enum
     // Helper IDs for skb load helpers (kernel internal):
-    // - SKB_LOAD_8:  __BPF_FUNC_skb_load_helper_8  
+    // - SKB_LOAD_8:  __BPF_FUNC_skb_load_helper_8
     // - SKB_LOAD_16: __BPF_FUNC_skb_load_helper_16
     // - SKB_LOAD_32: __BPF_FUNC_skb_load_helper_32
     let helper_id = match size {
@@ -555,9 +557,9 @@ fn convert_ld_abs_ind(insn: &BpfInsn, idx: usize, _ctx: &FixupContext) -> Option
         BPF_W => SKB_LOAD_HELPER_32,
         _ => return None,
     };
-    
+
     let mut new_insns = Vec::new();
-    
+
     if is_indirect {
         // LD_IND: offset = imm + src_reg
         // mov r1, src_reg  (index register)
@@ -589,19 +591,13 @@ fn convert_ld_abs_ind(insn: &BpfInsn, idx: usize, _ctx: &FixupContext) -> Option
             insn.imm,
         ));
     }
-    
+
     // call helper
     // R0 = skb_load_helper_*(skb, offset)
     // Note: R6 typically holds skb pointer in socket filter programs
     // The actual skb pointer setup is done by the runtime
-    new_insns.push(BpfInsn::new(
-        BPF_JMP | BPF_CALL,
-        0,
-        0,
-        0,
-        helper_id,
-    ));
-    
+    new_insns.push(BpfInsn::new(BPF_JMP | BPF_CALL, 0, 0, 0, helper_id));
+
     // The first instruction replaces the original, rest are inserted before
     if new_insns.len() == 1 {
         Some(vec![Patch {
@@ -627,42 +623,43 @@ fn convert_ld_abs_ind(insn: &BpfInsn, idx: usize, _ctx: &FixupContext) -> Option
 
 /// Internal helper IDs for SKB load operations
 /// These correspond to kernel's internal helper functions
-const SKB_LOAD_HELPER_8: i32 = -1;   // Placeholder - actual ID set by kernel
-const SKB_LOAD_HELPER_16: i32 = -2;  // Placeholder - actual ID set by kernel  
-const SKB_LOAD_HELPER_32: i32 = -3;  // Placeholder - actual ID set by kernel
+const SKB_LOAD_HELPER_8: i32 = -1; // Placeholder - actual ID set by kernel
+const SKB_LOAD_HELPER_16: i32 = -2; // Placeholder - actual ID set by kernel
+const SKB_LOAD_HELPER_32: i32 = -3; // Placeholder - actual ID set by kernel
 
 /// Check if instruction accesses arena memory
-/// 
+///
 /// Arena accesses use specific instruction encoding or are marked
 /// with auxiliary data during verification. This checks for:
 /// 1. addr_space_cast instructions (indicate arena pointer usage)
 /// 2. Memory operations on registers previously identified as arena pointers
 fn is_arena_access(insn: &BpfInsn, ctx: &FixupContext) -> bool {
     let class = insn.class();
-    
+
     // Check for memory operations (LDX/STX)
     if class != BPF_LDX && class != BPF_STX {
         return false;
     }
-    
+
     // Arena accesses are identified by:
     // 1. The source/dest register being marked as PTR_TO_ARENA during verification
     // 2. The instruction having specific aux data set
-    
+
     // Check if this instruction index has arena access marked in aux data
     if let Some(aux) = ctx.insn_aux.get(&(ctx.current_idx)) {
         if aux.is_arena_access {
             return true;
         }
     }
-    
+
     // Check for arena memory mode (BPF_PROBE_MEM32 indicates arena)
     // Arena accesses typically use the PROBE_MEM32 mode for 32-bit addressing
     let mode = insn.code & 0xe0;
-    if mode == 0xc0 { // BPF_PROBE_MEM32 mode indicator
+    if mode == 0xc0 {
+        // BPF_PROBE_MEM32 mode indicator
         return true;
     }
-    
+
     false
 }
 
@@ -699,31 +696,25 @@ const HASH_MAP_BUCKET_SIZE: u32 = 8;
 
 /// Try to inline a map lookup operation.
 /// Returns patches if inlining is possible.
-/// 
+///
 /// Supports:
 /// - BPF_MAP_TYPE_ARRAY: Direct index access
 /// - BPF_MAP_TYPE_PERCPU_ARRAY: Per-CPU direct access
 /// - BPF_MAP_TYPE_PROG_ARRAY: Direct program slot access
 /// - BPF_MAP_TYPE_ARRAY_OF_MAPS: Direct inner map access
-fn try_inline_map_lookup(
-    insns: &[BpfInsn],
-    idx: usize,
-    ctx: &FixupContext,
-) -> Option<Vec<Patch>> {
+fn try_inline_map_lookup(insns: &[BpfInsn], idx: usize, ctx: &FixupContext) -> Option<Vec<Patch>> {
     // Check if R1 (map pointer) comes from a constant LD_IMM64
     let map_insn_idx = find_map_load_before(insns, idx)?;
     let map_insn = &insns[map_insn_idx];
-    
+
     let map_fd = map_insn.imm;
     let map_info = find_map_by_fd(ctx, map_fd)?;
-    
+
     match map_info.map_type {
         map_types::ARRAY | map_types::PROG_ARRAY | map_types::ARRAY_OF_MAPS => {
             try_inline_array_lookup(insns, idx, map_info)
         }
-        map_types::PERCPU_ARRAY => {
-            try_inline_percpu_array_lookup(insns, idx, map_info)
-        }
+        map_types::PERCPU_ARRAY => try_inline_percpu_array_lookup(insns, idx, map_info),
         map_types::HASH | map_types::LRU_HASH => {
             // Hash maps cannot be fully inlined but we can optimize
             // the common case with precomputed hash
@@ -742,44 +733,46 @@ fn try_inline_array_lookup(
     // Check if index (R2) is constant
     let key_idx = find_const_key_before(insns, idx)?;
     let key_insn = &insns[key_idx];
-    
+
     if key_insn.code != (BPF_ALU64 | BPF_MOV | BPF_K) || key_insn.dst_reg != 2 {
         return None;
     }
-    
+
     let index = key_insn.imm as u32;
-    
+
     // Bounds check
     if index >= map_info.max_entries {
         return None;
     }
-    
+
     // Calculate direct offset into array
     // Array layout: [header][elem0][elem1]...[elemN]
     let elem_offset = ARRAY_MAP_HEADER_SIZE + index * round_up_value_size(map_info.value_size);
-    
+
     // Generate inlined access:
     //   r0 = r1          ; copy map ptr
     //   r0 += offset     ; add element offset
     let mut new_insns = Vec::new();
-    
+
     // r0 = r1 (copy map pointer)
-    new_insns.push(BpfInsn::new(
-        BPF_ALU64 | BPF_MOV | BPF_X,
-        0, 1, 0, 0,
-    ));
-    
+    new_insns.push(BpfInsn::new(BPF_ALU64 | BPF_MOV | BPF_X, 0, 1, 0, 0));
+
     // r0 += elem_offset
     new_insns.push(BpfInsn::new(
         BPF_ALU64 | BPF_ADD | BPF_K,
-        0, 0, 0,
+        0,
+        0,
+        0,
         elem_offset as i32,
     ));
-    
+
     let mut patches = Vec::new();
     patches.push(Patch::new(idx, PatchType::Replace(new_insns[0])));
-    patches.push(Patch::new(idx, PatchType::InsertAfter(new_insns[1..].to_vec())));
-    
+    patches.push(Patch::new(
+        idx,
+        PatchType::InsertAfter(new_insns[1..].to_vec()),
+    ));
+
     Some(patches)
 }
 
@@ -792,18 +785,18 @@ fn try_inline_percpu_array_lookup(
     // Check if index (R2) is constant
     let key_idx = find_const_key_before(insns, idx)?;
     let key_insn = &insns[key_idx];
-    
+
     if key_insn.code != (BPF_ALU64 | BPF_MOV | BPF_K) || key_insn.dst_reg != 2 {
         return None;
     }
-    
+
     let index = key_insn.imm as u32;
-    
+
     // Bounds check
     if index >= map_info.max_entries {
         return None;
     }
-    
+
     // Per-CPU array layout is more complex:
     // Each CPU has its own copy of the array
     // Need to get current CPU ID and index into per-CPU area
@@ -812,55 +805,58 @@ fn try_inline_percpu_array_lookup(
     //   r0 = bpf_get_smp_processor_id()   ; get CPU
     //   r0 *= percpu_elem_size            ; offset for this CPU
     //   r0 += base_offset + index_offset  ; add base and index
-    
+
     let percpu_value_size = round_up_value_size(map_info.value_size);
     let index_offset = index * percpu_value_size;
-    
+
     let mut new_insns = Vec::new();
-    
+
     // Save r1 (map pointer) to r6
-    new_insns.push(BpfInsn::new(
-        BPF_ALU64 | BPF_MOV | BPF_X,
-        6, 1, 0, 0,
-    ));
-    
+    new_insns.push(BpfInsn::new(BPF_ALU64 | BPF_MOV | BPF_X, 6, 1, 0, 0));
+
     // r0 = bpf_get_smp_processor_id()
     new_insns.push(BpfInsn::new(
         BPF_JMP | BPF_CALL,
-        0, 0, 0,
+        0,
+        0,
+        0,
         8, // BPF_FUNC_get_smp_processor_id
     ));
-    
+
     // r0 *= percpu_area_size (value_size * max_entries, rounded up)
     let percpu_area_size = percpu_value_size * map_info.max_entries;
     new_insns.push(BpfInsn::new(
         BPF_ALU64 | BPF_MUL | BPF_K,
-        0, 0, 0,
+        0,
+        0,
+        0,
         percpu_area_size as i32,
     ));
-    
+
     // r0 += r6 (add map base)
-    new_insns.push(BpfInsn::new(
-        BPF_ALU64 | BPF_ADD | BPF_X,
-        0, 6, 0, 0,
-    ));
-    
+    new_insns.push(BpfInsn::new(BPF_ALU64 | BPF_ADD | BPF_X, 0, 6, 0, 0));
+
     // r0 += header_size + index_offset
     new_insns.push(BpfInsn::new(
         BPF_ALU64 | BPF_ADD | BPF_K,
-        0, 0, 0,
+        0,
+        0,
+        0,
         (ARRAY_MAP_HEADER_SIZE + index_offset) as i32,
     ));
-    
+
     let mut patches = Vec::new();
     patches.push(Patch::new(idx, PatchType::Replace(new_insns[0])));
-    patches.push(Patch::new(idx, PatchType::InsertAfter(new_insns[1..].to_vec())));
-    
+    patches.push(Patch::new(
+        idx,
+        PatchType::InsertAfter(new_insns[1..].to_vec()),
+    ));
+
     Some(patches)
 }
 
 /// Optimize hash map lookup with precomputed hash
-/// 
+///
 /// Full inlining of hash maps is not possible due to the hash function
 /// and bucket traversal. However, we can optimize by:
 /// 1. Precomputing hash for constant keys
@@ -873,7 +869,7 @@ fn try_optimize_hash_lookup(
     // Check for constant key stored on stack
     // This is a common pattern: key is stored at FP-X, then address passed
     let key_setup = find_stack_key_setup(insns, idx, map_info.key_size)?;
-    
+
     // If key is constant, we can precompute hash
     if let Some(key_bytes) = key_setup.const_key {
         let hash = compute_jhash(&key_bytes, 0);
@@ -884,47 +880,53 @@ fn try_optimize_hash_lookup(
         let bucket_offset = bucket_idx * HASH_MAP_BUCKET_SIZE;
         // Use stack_offset for key location hint
         let key_stack_off = key_setup.stack_offset;
-        
+
         // Generate optimized lookup:
         //   r3 = precomputed_hash
         //   r4 = bucket_idx (for JIT optimization hint)
         //   call __htab_map_lookup_elem_optimized
         //
         // This is still a call but with precomputed values
-        
+
         let mut new_insns = Vec::new();
-        
+
         // r3 = hash (pass as extra hint)
         new_insns.push(BpfInsn::new(
             BPF_ALU64 | BPF_MOV | BPF_K,
-            3, 0, 0,
+            3,
+            0,
+            0,
             hash as i32,
         ));
-        
+
         // r4 = bucket offset hint for JIT
         new_insns.push(BpfInsn::new(
             BPF_ALU64 | BPF_MOV | BPF_K,
-            4, 0, 0,
+            4,
+            0,
+            0,
             bucket_offset as i32,
         ));
-        
+
         // r5 = key stack offset (negative value indicating FP-relative)
         // This allows JIT to directly reference the key without pointer setup
         new_insns.push(BpfInsn::new(
             BPF_ALU64 | BPF_MOV | BPF_K,
-            5, 0, 0,
+            5,
+            0,
+            0,
             key_stack_off as i32,
         ));
-        
+
         // Keep original call but mark as optimized via aux data
         // The JIT can use the hash, bucket, and key location hints
-        
+
         let mut patches = Vec::new();
         patches.push(Patch::new(idx, PatchType::InsertBefore(new_insns)));
-        
+
         return Some(patches);
     }
-    
+
     None
 }
 
@@ -937,48 +939,41 @@ struct KeySetupInfo {
 }
 
 /// Find stack key setup pattern before map lookup
-fn find_stack_key_setup(
-    insns: &[BpfInsn],
-    idx: usize,
-    key_size: u32,
-) -> Option<KeySetupInfo> {
+fn find_stack_key_setup(insns: &[BpfInsn], idx: usize, key_size: u32) -> Option<KeySetupInfo> {
     // Look for pattern:
     //   *(u32/u64*)(r10 - X) = const  ; store key
     //   r2 = r10 - X                   ; load key address into r2
     //   call map_lookup
-    
+
     // Find r2 setup (should be lea from FP)
     for i in (0..idx).rev() {
         let insn = &insns[i];
-        
+
         // Check for: r2 = r10 + offset (negative offset = r10 - X)
-        if insn.code == (BPF_ALU64 | BPF_ADD | BPF_K) 
-            && insn.dst_reg == 2 
-            && i > 0
-        {
+        if insn.code == (BPF_ALU64 | BPF_ADD | BPF_K) && insn.dst_reg == 2 && i > 0 {
             let prev = &insns[i - 1];
             if prev.code == (BPF_ALU64 | BPF_MOV | BPF_X)
                 && prev.dst_reg == 2
                 && prev.src_reg == BPF_REG_FP as u8
             {
                 let stack_offset = insn.imm as i16;
-                
+
                 // Try to find constant store at this offset
                 let const_key = find_const_key_store(insns, i - 1, stack_offset, key_size);
-                
+
                 return Some(KeySetupInfo {
                     stack_offset,
                     const_key,
                 });
             }
         }
-        
+
         // Stop if r2 is modified differently
         if insn.dst_reg == 2 {
             break;
         }
     }
-    
+
     None
 }
 
@@ -991,20 +986,17 @@ fn find_const_key_store(
 ) -> Option<Vec<u8>> {
     // Look for: *(uXX*)(r10 + offset) = imm
     // This only works for small keys (4 or 8 bytes)
-    
+
     if key_size > 8 {
         return None;
     }
-    
+
     for i in (0..end_idx).rev() {
         let insn = &insns[i];
-        
+
         // Check for store immediate to stack
         let is_st_mem = (insn.code & 0x07) == BPF_ST && (insn.code & 0xe0) == BPF_MEM;
-        if is_st_mem 
-            && insn.dst_reg == BPF_REG_FP as u8
-            && insn.off == stack_offset
-        {
+        if is_st_mem && insn.dst_reg == BPF_REG_FP as u8 && insn.off == stack_offset {
             let mut key_bytes = Vec::new();
             let size = match insn.code & 0x18 {
                 BPF_W => 4,
@@ -1013,7 +1005,7 @@ fn find_const_key_store(
                 BPF_B => 1,
                 _ => return None,
             };
-            
+
             if size as u32 == key_size {
                 // Found matching store
                 let value = insn.imm;
@@ -1024,7 +1016,7 @@ fn find_const_key_store(
             }
         }
     }
-    
+
     None
 }
 
@@ -1054,10 +1046,9 @@ fn find_map_load_before(insns: &[BpfInsn], idx: usize) -> Option<usize> {
     // Look backwards for LD_IMM64 that loads into R1
     for i in (0..idx).rev() {
         let insn = &insns[i];
-        if insn.code == (BPF_LD | BPF_IMM | BPF_DW) 
+        if insn.code == (BPF_LD | BPF_IMM | BPF_DW)
             && insn.dst_reg == 1
-            && (insn.src_reg == BPF_PSEUDO_MAP_FD 
-                || insn.src_reg == BPF_PSEUDO_MAP_VALUE)
+            && (insn.src_reg == BPF_PSEUDO_MAP_FD || insn.src_reg == BPF_PSEUDO_MAP_VALUE)
         {
             return Some(i);
         }
@@ -1084,35 +1075,32 @@ fn find_const_key_before(insns: &[BpfInsn], idx: usize) -> Option<usize> {
 }
 
 /// Try to inline bpf_loop helper.
-/// 
+///
 /// bpf_loop(nr_loops, callback, ctx, flags) can be inlined when:
 /// 1. nr_loops is a small constant (<=8 for unrolling)
 /// 2. callback is a known subprogram
-/// 
+///
 /// For small constant loops, we unroll them directly.
 /// For larger or dynamic loops, we generate a proper loop structure.
-fn try_inline_bpf_loop(
-    insns: &[BpfInsn],
-    idx: usize,
-) -> Option<Vec<Patch>> {
+fn try_inline_bpf_loop(insns: &[BpfInsn], idx: usize) -> Option<Vec<Patch>> {
     // Check if R1 (nr_loops) is a constant
     let nr_idx = find_const_before(insns, idx, 1)?;
     let nr_insn = &insns[nr_idx];
     let nr_loops = nr_insn.imm as u32;
-    
+
     // Check if callback (R2) is a known subprogram
     let callback_idx = find_const_before(insns, idx, 2);
-    
+
     // For small loops, unroll completely
     if nr_loops <= 8 && nr_loops > 0 {
         return Some(inline_bpf_loop_unrolled(idx, nr_loops, callback_idx));
     }
-    
+
     // For larger constant loops, generate a proper loop structure
     if nr_loops <= 64 {
         return Some(inline_bpf_loop_with_counter(idx, nr_loops));
     }
-    
+
     // Too large to inline
     None
 }
@@ -1120,63 +1108,56 @@ fn try_inline_bpf_loop(
 /// Generate unrolled bpf_loop inlining for small iteration counts
 fn inline_bpf_loop_unrolled(idx: usize, nr_loops: u32, _callback_idx: Option<usize>) -> Vec<Patch> {
     let mut new_insns = Vec::new();
-    
+
     // Save callback_ctx (r2) to r8 since we need r2 for each call
-    new_insns.push(BpfInsn::new(
-        BPF_ALU64 | BPF_MOV | BPF_X,
-        8, 2, 0, 0,
-    ));
-    
+    new_insns.push(BpfInsn::new(BPF_ALU64 | BPF_MOV | BPF_X, 8, 2, 0, 0));
+
     for i in 0..nr_loops {
         // r1 = loop index
-        new_insns.push(BpfInsn::new(
-            BPF_ALU64 | BPF_MOV | BPF_K,
-            1, 0, 0,
-            i as i32,
-        ));
-        
+        new_insns.push(BpfInsn::new(BPF_ALU64 | BPF_MOV | BPF_K, 1, 0, 0, i as i32));
+
         // r2 = callback_ctx (restore from r8)
-        new_insns.push(BpfInsn::new(
-            BPF_ALU64 | BPF_MOV | BPF_X,
-            2, 8, 0, 0,
-        ));
-        
+        new_insns.push(BpfInsn::new(BPF_ALU64 | BPF_MOV | BPF_X, 2, 8, 0, 0));
+
         // call callback - using BPF_PSEUDO_CALL for subprogram call
         // The offset will need to be patched with actual callback location
         new_insns.push(BpfInsn::new(
             BPF_JMP | BPF_CALL,
-            0, BPF_PSEUDO_CALL, 0,
+            0,
+            BPF_PSEUDO_CALL,
+            0,
             0, // Placeholder - callback offset patched later
         ));
-        
+
         // Check return value: if r0 != 0 goto done
         // Calculate jump offset to the final r0 = remaining instruction
         if i < nr_loops - 1 {
             let insns_remaining = (nr_loops - i - 1) * 4; // 4 insns per iteration
             new_insns.push(BpfInsn::new(
                 BPF_JMP | BPF_JNE | BPF_K,
-                0, 0,
+                0,
+                0,
                 (insns_remaining + 1) as i16, // +1 for the final mov
                 0,
             ));
         }
     }
-    
+
     // All iterations completed: r0 = 0
-    new_insns.push(BpfInsn::new(
-        BPF_ALU64 | BPF_MOV | BPF_K,
-        0, 0, 0, 0,
-    ));
-    
+    new_insns.push(BpfInsn::new(BPF_ALU64 | BPF_MOV | BPF_K, 0, 0, 0, 0));
+
     // Jump target for early exit - already at end, just set remaining count
     // Early exits will have r0 set to remaining iterations (need additional insn)
-    
+
     let mut patches = Vec::new();
     patches.push(Patch::new(idx, PatchType::Replace(new_insns[0])));
     if new_insns.len() > 1 {
-        patches.push(Patch::new(idx, PatchType::InsertAfter(new_insns[1..].to_vec())));
+        patches.push(Patch::new(
+            idx,
+            PatchType::InsertAfter(new_insns[1..].to_vec()),
+        ));
     }
-    
+
     patches
 }
 
@@ -1189,7 +1170,7 @@ fn inline_bpf_loop_with_counter(idx: usize, nr_loops: u32) -> Vec<Patch> {
     // loop:
     //   if r6 == 0 goto done
     //   r1 = r7          ; index
-    //   r2 = r8          ; callback_ctx  
+    //   r2 = r8          ; callback_ctx
     //   call callback
     //   if r0 != 0 goto done
     //   r7 += 1
@@ -1197,88 +1178,60 @@ fn inline_bpf_loop_with_counter(idx: usize, nr_loops: u32) -> Vec<Patch> {
     //   goto loop
     // done:
     //   r0 = r6          ; remaining iterations
-    
+
     let mut new_insns = Vec::new();
-    
+
     // r6 = nr_loops (counter)
     new_insns.push(BpfInsn::new(
         BPF_ALU64 | BPF_MOV | BPF_K,
-        6, 0, 0,
+        6,
+        0,
+        0,
         nr_loops as i32,
     ));
-    
+
     // r7 = 0 (current index)
-    new_insns.push(BpfInsn::new(
-        BPF_ALU64 | BPF_MOV | BPF_K,
-        7, 0, 0, 0,
-    ));
-    
+    new_insns.push(BpfInsn::new(BPF_ALU64 | BPF_MOV | BPF_K, 7, 0, 0, 0));
+
     // r8 = r2 (save callback_ctx)
-    new_insns.push(BpfInsn::new(
-        BPF_ALU64 | BPF_MOV | BPF_X,
-        8, 2, 0, 0,
-    ));
-    
+    new_insns.push(BpfInsn::new(BPF_ALU64 | BPF_MOV | BPF_X, 8, 2, 0, 0));
+
     // loop: if r6 == 0 goto done (+8 instructions)
-    new_insns.push(BpfInsn::new(
-        BPF_JMP | BPF_JEQ | BPF_K,
-        6, 0, 8, 0,
-    ));
-    
+    new_insns.push(BpfInsn::new(BPF_JMP | BPF_JEQ | BPF_K, 6, 0, 8, 0));
+
     // r1 = r7 (index)
-    new_insns.push(BpfInsn::new(
-        BPF_ALU64 | BPF_MOV | BPF_X,
-        1, 7, 0, 0,
-    ));
-    
+    new_insns.push(BpfInsn::new(BPF_ALU64 | BPF_MOV | BPF_X, 1, 7, 0, 0));
+
     // r2 = r8 (callback_ctx)
-    new_insns.push(BpfInsn::new(
-        BPF_ALU64 | BPF_MOV | BPF_X,
-        2, 8, 0, 0,
-    ));
-    
+    new_insns.push(BpfInsn::new(BPF_ALU64 | BPF_MOV | BPF_X, 2, 8, 0, 0));
+
     // call callback (placeholder)
-    new_insns.push(BpfInsn::new(
-        BPF_JMP | BPF_CALL,
-        0, BPF_PSEUDO_CALL, 0, 0,
-    ));
-    
+    new_insns.push(BpfInsn::new(BPF_JMP | BPF_CALL, 0, BPF_PSEUDO_CALL, 0, 0));
+
     // if r0 != 0 goto done (+4 instructions)
-    new_insns.push(BpfInsn::new(
-        BPF_JMP | BPF_JNE | BPF_K,
-        0, 0, 4, 0,
-    ));
-    
+    new_insns.push(BpfInsn::new(BPF_JMP | BPF_JNE | BPF_K, 0, 0, 4, 0));
+
     // r7 += 1
-    new_insns.push(BpfInsn::new(
-        BPF_ALU64 | BPF_ADD | BPF_K,
-        7, 0, 0, 1,
-    ));
-    
+    new_insns.push(BpfInsn::new(BPF_ALU64 | BPF_ADD | BPF_K, 7, 0, 0, 1));
+
     // r6 -= 1
-    new_insns.push(BpfInsn::new(
-        BPF_ALU64 | BPF_ADD | BPF_K,
-        6, 0, 0, -1i32,
-    ));
-    
+    new_insns.push(BpfInsn::new(BPF_ALU64 | BPF_ADD | BPF_K, 6, 0, 0, -1i32));
+
     // goto loop (-8 instructions)
-    new_insns.push(BpfInsn::new(
-        BPF_JMP | BPF_JA,
-        0, 0, -8i16, 0,
-    ));
-    
+    new_insns.push(BpfInsn::new(BPF_JMP | BPF_JA, 0, 0, -8i16, 0));
+
     // done: r0 = r6 (remaining iterations)
-    new_insns.push(BpfInsn::new(
-        BPF_ALU64 | BPF_MOV | BPF_X,
-        0, 6, 0, 0,
-    ));
-    
+    new_insns.push(BpfInsn::new(BPF_ALU64 | BPF_MOV | BPF_X, 0, 6, 0, 0));
+
     let mut patches = Vec::new();
     patches.push(Patch::new(idx, PatchType::Replace(new_insns[0])));
     if new_insns.len() > 1 {
-        patches.push(Patch::new(idx, PatchType::InsertAfter(new_insns[1..].to_vec())));
+        patches.push(Patch::new(
+            idx,
+            PatchType::InsertAfter(new_insns[1..].to_vec()),
+        ));
     }
-    
+
     patches
 }
 
@@ -1307,41 +1260,40 @@ fn fixup_tail_call(idx: usize) -> Vec<Patch> {
     //   <original tail call>
     // skip:
     //   r0 = 0
-    
+
     // This is a simplified version - actual implementation needs
     // to use the hidden tail call counter slot
-    vec![
-        Patch::new(idx, PatchType::InsertBefore(vec![
+    vec![Patch::new(
+        idx,
+        PatchType::InsertBefore(vec![
             // Load tail call counter from hidden stack slot
             BpfInsn::new(
                 BPF_LDX | BPF_MEM | BPF_W,
-                0, // r0
+                0,                // r0
                 BPF_REG_FP as u8, // from FP
-                -4, // offset
+                -4,               // offset
                 0,
             ),
             // Compare with max
             BpfInsn::new(
                 BPF_JMP | BPF_JGE | BPF_K,
-                0, 0,
+                0,
+                0,
                 4, // skip to after tail call
                 MAX_TAIL_CALL_CNT as i32,
             ),
             // Increment counter
-            BpfInsn::new(
-                BPF_ALU64 | BPF_ADD | BPF_K,
-                0, 0, 0, 1,
-            ),
+            BpfInsn::new(BPF_ALU64 | BPF_ADD | BPF_K, 0, 0, 0, 1),
             // Store back
             BpfInsn::new(
                 BPF_STX | BPF_MEM | BPF_W,
                 BPF_REG_FP as u8, // to FP
-                0, // from r0
-                -4, // offset
+                0,                // from r0
+                -4,               // offset
                 0,
             ),
-        ])),
-    ]
+        ]),
+    )]
 }
 
 /// Fix up atomic operations for specific architectures.
@@ -1353,14 +1305,14 @@ fn fixup_atomic(insns: &[BpfInsn], idx: usize) -> Option<Vec<Patch>> {
     let insn = &insns[idx];
     let imm = insn.imm as u32;
     let size = insn.size();
-    
+
     // Check if this is an atomic operation
     if insn.mode() != BPF_ATOMIC {
         return None;
     }
-    
+
     let op = imm & !BPF_FETCH;
-    
+
     // Define constants for pattern matching
     const OP_CMPXCHG: u32 = BPF_CMPXCHG as u32;
     const OP_XCHG: u32 = BPF_XCHG as u32;
@@ -1368,7 +1320,7 @@ fn fixup_atomic(insns: &[BpfInsn], idx: usize) -> Option<Vec<Patch>> {
     const OP_AND: u32 = BPF_AND as u32;
     const OP_OR: u32 = BPF_OR as u32;
     const OP_XOR: u32 = BPF_XOR as u32;
-    
+
     match op {
         OP_CMPXCHG => {
             // CMPXCHG: Compare R0 with *dst_reg, if equal, store src_reg.
@@ -1430,37 +1382,33 @@ fn fixup_atomic(insns: &[BpfInsn], idx: usize) -> Option<Vec<Patch>> {
 /// - Masks the 32-bit address portion
 /// - Adds the arena's kernel base address
 /// - Adjusts the memory access instruction
-fn convert_arena_access(
-    insns: &[BpfInsn],
-    idx: usize,
-    arena_base: u64,
-) -> Option<Vec<Patch>> {
+fn convert_arena_access(insns: &[BpfInsn], idx: usize, arena_base: u64) -> Option<Vec<Patch>> {
     let insn = &insns[idx];
     let class = insn.class();
-    
+
     // Only handle memory access instructions
     if class != BPF_LDX && class != BPF_STX {
         return None;
     }
-    
+
     // Check if this is a BPF_PROBE_MEM32 mode access (arena access)
     // BPF_PROBE_MEM32 = 0xc0 (192)
     const BPF_PROBE_MEM32: u8 = 0xc0;
     if insn.mode() != BPF_PROBE_MEM32 {
         return None;
     }
-    
+
     let src_reg = insn.src_reg;
     let dst_reg = insn.dst_reg;
     let off = insn.off;
     let size_code = insn.code & 0x18; // Extract size bits
-    
+
     // Use R11 (AX) as temporary register for address conversion
     // This is the scratch register in BPF calling convention
     let temp_reg = 11u8;
-    
+
     let mut patches = Vec::new();
-    
+
     if class == BPF_LDX {
         // Load: r_dst = *(size *)(r_src + off)
         // Convert to:
@@ -1469,73 +1417,79 @@ fn convert_arena_access(
         //   r11 += arena_base_lo           ; add lower 32 bits
         //   r11 += (arena_base_hi << 32)   ; add upper 32 bits (if needed)
         //   r_dst = *(size *)(r11 + off)   ; perform the load
-        
+
         let mut preamble = vec![
             // r11 = r_src
             BpfInsn::new(BPF_ALU64 | BPF_MOV | BPF_X, temp_reg, src_reg, 0, 0),
             // r11 &= 0xffffffff (mask to 32-bit)
             BpfInsn::new(BPF_ALU64 | BPF_AND | BPF_K, temp_reg, 0, 0, -1i32), // 0xffffffff
         ];
-        
+
         // Add arena base using LD_IMM64 (2 instructions)
         let base_lo = arena_base as u32 as i32;
         let base_hi = (arena_base >> 32) as u32 as i32;
-        
+
         // r11 += arena_base (using ADD with immediate parts)
         if base_hi == 0 {
             // Base fits in 32-bit immediate
             preamble.push(BpfInsn::new(
                 BPF_ALU64 | BPF_ADD | BPF_K,
-                temp_reg, 0, 0, base_lo,
+                temp_reg,
+                0,
+                0,
+                base_lo,
             ));
         } else {
             // Need to use R10 temporarily or split the add
             // For simplicity, add lower 32 bits first, then upper
             preamble.push(BpfInsn::new(
                 BPF_ALU64 | BPF_ADD | BPF_K,
-                temp_reg, 0, 0, base_lo,
+                temp_reg,
+                0,
+                0,
+                base_lo,
             ));
             // Add upper 32 bits shifted (requires more complex handling)
             // This is a simplification - full impl would use LD_IMM64
         }
-        
+
         // Create the converted load instruction using temp_reg
-        let new_load = BpfInsn::new(
-            BPF_LDX | BPF_MEM | size_code,
-            dst_reg, temp_reg, off, 0,
-        );
-        
+        let new_load = BpfInsn::new(BPF_LDX | BPF_MEM | size_code, dst_reg, temp_reg, off, 0);
+
         // Insert preamble before the load instruction
         patches.push(Patch::new(idx, PatchType::InsertBefore(preamble)));
-        
+
         // Replace original instruction with the converted load using temp_reg
         patches.push(Patch::new(idx, PatchType::Replace(new_load)));
     } else {
         // Store: *(size *)(r_dst + off) = r_src
         // Similar conversion but for the destination address
-        
+
         let preamble = vec![
             // r11 = r_dst (the address register)
             BpfInsn::new(BPF_ALU64 | BPF_MOV | BPF_X, temp_reg, dst_reg, 0, 0),
             // r11 &= 0xffffffff
             BpfInsn::new(BPF_ALU64 | BPF_AND | BPF_K, temp_reg, 0, 0, -1i32),
             // r11 += arena_base
-            BpfInsn::new(BPF_ALU64 | BPF_ADD | BPF_K, temp_reg, 0, 0, arena_base as u32 as i32),
+            BpfInsn::new(
+                BPF_ALU64 | BPF_ADD | BPF_K,
+                temp_reg,
+                0,
+                0,
+                arena_base as u32 as i32,
+            ),
         ];
-        
+
         // Create the converted store instruction
-        let new_store = BpfInsn::new(
-            BPF_STX | BPF_MEM | size_code,
-            temp_reg, src_reg, off, 0,
-        );
-        
+        let new_store = BpfInsn::new(BPF_STX | BPF_MEM | size_code, temp_reg, src_reg, off, 0);
+
         // Insert preamble before the store instruction
         patches.push(Patch::new(idx, PatchType::InsertBefore(preamble)));
-        
+
         // Replace original instruction with converted store
         patches.push(Patch::new(idx, PatchType::Replace(new_store)));
     }
-    
+
     Some(patches)
 }
 
@@ -1557,26 +1511,29 @@ pub fn sanitize_ptr_alu(
     // After: ptr += scalar
     // Insert: if ptr < lower_bound goto error
     //         if ptr > upper_bound goto error
-    
+
     // This is called during verification when pointer arithmetic is detected
     let insn = &insns[idx];
     let mut patches = Vec::new();
-    
+
     // Simple bounds masking approach:
     // ptr = ptr & mask  ; where mask ensures ptr stays in bounds
     if insn.class() == BPF_ALU64 {
-        patches.push(Patch::new(idx, PatchType::InsertAfter(vec![
-            // AND with bounds mask (placeholder)
-            BpfInsn::new(
-                BPF_ALU64 | BPF_AND | BPF_K,
-                insn.dst_reg,
-                0,
-                0,
-                0x7FFFFFFF, // Example mask
-            ),
-        ])));
+        patches.push(Patch::new(
+            idx,
+            PatchType::InsertAfter(vec![
+                // AND with bounds mask (placeholder)
+                BpfInsn::new(
+                    BPF_ALU64 | BPF_AND | BPF_K,
+                    insn.dst_reg,
+                    0,
+                    0,
+                    0x7FFFFFFF, // Example mask
+                ),
+            ]),
+        ));
     }
-    
+
     Ok(patches)
 }
 
@@ -1635,7 +1592,7 @@ pub fn get_call_summary(insn: &BpfInsn, kfunc_descs: &[KfuncFixupDesc]) -> Optio
     if insn.code != (BPF_JMP | BPF_CALL) {
         return None;
     }
-    
+
     // Check if this is a kfunc call
     if insn.src_reg == BPF_PSEUDO_KFUNC_CALL {
         let btf_id = insn.imm as u32;
@@ -1653,14 +1610,14 @@ pub fn get_call_summary(insn: &BpfInsn, kfunc_descs: &[KfuncFixupDesc]) -> Optio
         }
         return None;
     }
-    
+
     // Regular helper call
     if insn.src_reg != 0 {
         return None; // Not a helper call (could be BPF_PSEUDO_CALL)
     }
-    
+
     let helper_id = insn.imm as u32;
-    
+
     // Determine helper properties based on ID
     // This is a simplified version - full implementation would use BTF
     let (num_params, is_void, fastcall) = match BpfFunc::from_u32(helper_id) {
@@ -1690,7 +1647,7 @@ pub fn get_call_summary(insn: &BpfInsn, kfunc_descs: &[KfuncFixupDesc]) -> Optio
         Some(BpfFunc::LoopCall) => (4, false, false),
         _ => (5, false, false), // Conservative default
     };
-    
+
     Some(CallSummary {
         num_params,
         is_void,
@@ -1728,13 +1685,13 @@ fn mark_fastcall_pattern_for_call(
     kfunc_descs: &[KfuncFixupDesc],
 ) {
     let call = &insns[insn_idx];
-    
+
     // Get call summary to determine which registers are clobbered
     let cs = match get_call_summary(call, kfunc_descs) {
         Some(cs) => cs,
         None => return,
     };
-    
+
     // A bitmask specifying which caller saved registers are clobbered
     // by a call to a helper/kfunc *as if* it follows bpf_fastcall contract:
     // - includes R0 if function is non-void
@@ -1746,10 +1703,10 @@ fn mark_fastcall_pattern_for_call(
         // Mask from clobbered_start to num_params (inclusive)
         ((1u32 << (cs.num_params as u32 + 1)) - 1) & !((1u32 << clobbered_start) - 1)
     };
-    
+
     // e.g. if helper call clobbers r{0,1}, expect r{2,3,4,5} in the pattern
     let mut expected_regs_mask = !clobbered_regs_mask & ALL_CALLER_SAVED_REGS;
-    
+
     // Match pairs of form:
     //   *(u64 *)(r10 - Y) = rX   (where Y % 8 == 0)
     //   ...
@@ -1758,56 +1715,57 @@ fn mark_fastcall_pattern_for_call(
     //   rX = *(u64 *)(r10 - Y)
     let mut off = lowest_off;
     let mut matched_count = 0u32;
-    
+
     for i in 1..=6 {
         // Check bounds
         if insn_idx < i || insn_idx + i >= insns.len() {
             break;
         }
-        
+
         let stx = &insns[insn_idx - i];
         let ldx = &insns[insn_idx + i];
-        
+
         // Must be a stack spill/fill pair (STX/LDX with DW size to/from FP)
-        if stx.code != (BPF_STX | BPF_MEM | BPF_DW) ||
-           ldx.code != (BPF_LDX | BPF_MEM | BPF_DW) ||
-           stx.dst_reg != BPF_REG_FP as u8 ||
-           ldx.src_reg != BPF_REG_FP as u8 {
+        if stx.code != (BPF_STX | BPF_MEM | BPF_DW)
+            || ldx.code != (BPF_LDX | BPF_MEM | BPF_DW)
+            || stx.dst_reg != BPF_REG_FP as u8
+            || ldx.src_reg != BPF_REG_FP as u8
+        {
             break;
         }
-        
+
         // Must be spill/fill for the same register
         if stx.src_reg != ldx.dst_reg {
             break;
         }
-        
+
         // Must be one of the previously unseen expected registers
         let reg_bit = 1u32 << stx.src_reg;
         if (reg_bit & expected_regs_mask) == 0 {
             break;
         }
-        
+
         // Must be spill/fill at the expected offset
         // (BPF_DW stack access is always 8-byte aligned)
         if stx.off != off || ldx.off != off {
             break;
         }
-        
+
         // Mark this register as seen
         expected_regs_mask &= !reg_bit;
-        
+
         // Mark these instructions as part of a fastcall pattern
         insn_aux.entry(insn_idx - i).or_default().fastcall_pattern = true;
         insn_aux.entry(insn_idx + i).or_default().fastcall_pattern = true;
-        
+
         matched_count += 1;
         off += BPF_REG_SIZE as i16;
     }
-    
+
     if matched_count == 0 {
         return;
     }
-    
+
     // Conditionally set 'fastcall_spills_num' to allow forward compatibility
     // when more helper functions are marked as bpf_fastcall at compile time
     // than current kernel supports
@@ -1816,7 +1774,7 @@ fn mark_fastcall_pattern_for_call(
     } else {
         subprog.keep_fastcall_stack = true;
     }
-    
+
     // Update subprogram's fastcall stack offset (track the minimum)
     subprog.fastcall_stack_off = subprog.fastcall_stack_off.min(off);
 }
@@ -1847,27 +1805,26 @@ pub fn mark_fastcall_patterns(
     for subprog in subprogs.iter_mut() {
         // Find lowest stack spill offset used in this subprogram
         let mut lowest_off: i16 = 0;
-        
+
         for i in subprog.start..subprog.end {
             if i >= insns.len() {
                 break;
             }
             let insn = &insns[i];
-            
+
             // Look for STX MEM DW to FP (stack spill)
-            if insn.code == (BPF_STX | BPF_MEM | BPF_DW) &&
-               insn.dst_reg == BPF_REG_FP as u8 {
+            if insn.code == (BPF_STX | BPF_MEM | BPF_DW) && insn.dst_reg == BPF_REG_FP as u8 {
                 lowest_off = lowest_off.min(insn.off);
             }
         }
-        
+
         // Use this offset to find fastcall patterns for each call
         for i in subprog.start..subprog.end {
             if i >= insns.len() {
                 break;
             }
             let insn = &insns[i];
-            
+
             // Look for call instructions
             if insn.code == (BPF_JMP | BPF_CALL) {
                 mark_fastcall_pattern_for_call(
@@ -1881,7 +1838,7 @@ pub fn mark_fastcall_patterns(
             }
         }
     }
-    
+
     Ok(())
 }
 
@@ -1932,7 +1889,7 @@ pub fn remove_fastcall_spills_fills(
         if let Some(aux) = insn_aux.get(&i) {
             if aux.fastcall_spills_num > 0 {
                 let spills_num = aux.fastcall_spills_num as usize;
-                
+
                 // Convert spill instructions before this call to NOPs
                 // Spills are at indices [i - spills_num, i - 1]
                 for j in 1..=spills_num {
@@ -1941,7 +1898,7 @@ pub fn remove_fastcall_spills_fills(
                         result.spills_removed += 1;
                     }
                 }
-                
+
                 // Convert fill instructions after this call to NOPs
                 // Fills are at indices [i + 1, i + spills_num]
                 for j in 1..=spills_num {
@@ -1950,11 +1907,11 @@ pub fn remove_fastcall_spills_fills(
                         result.fills_removed += 1;
                     }
                 }
-                
+
                 modified = true;
             }
         }
-        
+
         // Check if we're crossing into the next subprogram
         if subprog_idx + 1 < subprogs.len() {
             let next_subprog = &subprogs[subprog_idx + 1];
@@ -1963,7 +1920,8 @@ pub fn remove_fastcall_spills_fills(
                 if modified && !subprogs[subprog_idx].keep_fastcall_stack {
                     // Adjust stack depth: new depth = -fastcall_stack_off
                     // (fastcall_stack_off is negative, so this makes depth positive)
-                    subprogs[subprog_idx].stack_depth = -(subprogs[subprog_idx].fastcall_stack_off as i32);
+                    subprogs[subprog_idx].stack_depth =
+                        -(subprogs[subprog_idx].fastcall_stack_off as i32);
                     result.stack_depths_modified = true;
                 }
                 subprog_idx += 1;
@@ -1971,7 +1929,7 @@ pub fn remove_fastcall_spills_fills(
             }
         }
     }
-    
+
     // Handle the last subprogram
     if modified && subprog_idx < subprogs.len() && !subprogs[subprog_idx].keep_fastcall_stack {
         subprogs[subprog_idx].stack_depth = -(subprogs[subprog_idx].fastcall_stack_off as i32);
@@ -2051,13 +2009,13 @@ impl BpfFunc {
 // ============================================================================
 
 /// Fix up call arguments for helper/kfunc calls.
-/// 
+///
 /// This function ensures that call arguments are properly set up before
 /// a helper or kfunc call. It may insert additional instructions to:
 /// - Zero-extend 32-bit arguments
 /// - Convert pointers to expected types
 /// - Handle byval arguments
-/// 
+///
 /// Corresponds to kernel's fixup_call_args() (L22354-22403)
 pub fn fixup_call_args(
     _insns: &mut Vec<BpfInsn>,
@@ -2066,17 +2024,14 @@ pub fn fixup_call_args(
 ) -> Result<Vec<Patch>> {
     let mut patches = Vec::new();
     let mut prepend_insns = Vec::new();
-    
+
     for (i, arg_type) in arg_types.iter().enumerate() {
         let reg = (i + 1) as u8; // R1-R5 for arguments
-        
+
         match arg_type {
             ArgType::Const32 => {
                 // Zero-extend 32-bit constant to 64-bit
-                prepend_insns.push(BpfInsn::new(
-                    BPF_ALU | BPF_MOV | BPF_X,
-                    reg, reg, 0, 0,
-                ));
+                prepend_insns.push(BpfInsn::new(BPF_ALU | BPF_MOV | BPF_X, reg, reg, 0, 0));
             }
             ArgType::PtrToMem | ArgType::PtrToMemReadonly => {
                 // Ensure pointer is properly tagged if needed
@@ -2087,11 +2042,11 @@ pub fn fixup_call_args(
             _ => {}
         }
     }
-    
+
     if !prepend_insns.is_empty() {
         patches.push(Patch::new(call_idx, PatchType::InsertBefore(prepend_insns)));
     }
-    
+
     Ok(patches)
 }
 
@@ -2119,12 +2074,12 @@ pub enum ArgType {
 }
 
 /// Fix up collection insert kfuncs (rbtree, list).
-/// 
+///
 /// When inserting nodes into collections, we need to ensure:
 /// 1. The node is properly initialized
 /// 2. Reference counting is correct
 /// 3. The insertion point is valid
-/// 
+///
 /// Corresponds to kernel's __fixup_collection_insert_kfunc() (L22449-22464)
 pub fn fixup_collection_insert_kfunc(
     _insns: &mut Vec<BpfInsn>,
@@ -2132,7 +2087,7 @@ pub fn fixup_collection_insert_kfunc(
     collection_type: CollectionType,
 ) -> Result<Vec<Patch>> {
     let patches = Vec::new();
-    
+
     match collection_type {
         CollectionType::RbTree => {
             // For rbtree insert, we may need to:
@@ -2143,7 +2098,7 @@ pub fn fixup_collection_insert_kfunc(
             // For list insert, similar validations
         }
     }
-    
+
     Ok(patches)
 }
 
@@ -2157,12 +2112,12 @@ pub enum CollectionType {
 }
 
 /// Fix up a kfunc call instruction.
-/// 
+///
 /// This is the main entry point for kfunc-specific fixups. It handles:
 /// - Address resolution for module kfuncs
 /// - Argument setup and validation
 /// - Specialization based on program context
-/// 
+///
 /// Corresponds to kernel's fixup_kfunc_call() (L22466-22576)
 pub fn fixup_kfunc_call(
     insns: &mut Vec<BpfInsn>,
@@ -2171,19 +2126,19 @@ pub fn fixup_kfunc_call(
 ) -> Result<Vec<Patch>> {
     let insn = &insns[call_idx];
     let btf_id = insn.imm as u32;
-    
+
     let mut patches = Vec::new();
-    
+
     // Find the kfunc descriptor
     let desc = ctx.kfuncs.iter().find(|k| k.func_id == btf_id);
-    
+
     if let Some(desc) = desc {
         // If this is a module kfunc, resolve the address
         if desc.offset != 0 {
             // Module kfuncs need runtime address resolution
             // The kernel patches this at load time
         }
-        
+
         // Apply specialization if applicable
         if let Some(spec) = specialize_kfunc(ctx, btf_id, call_idx) {
             if spec.specialized {
@@ -2193,7 +2148,7 @@ pub fn fixup_kfunc_call(
                         PatchType::InsertBefore(spec.prepend_insns),
                     ));
                 }
-                
+
                 if let Some(new_addr) = spec.new_addr {
                     let mut new_insn = insns[call_idx].clone();
                     new_insn.imm = new_addr as i32;
@@ -2202,24 +2157,24 @@ pub fn fixup_kfunc_call(
             }
         }
     }
-    
+
     Ok(patches)
 }
 
 /// Add a hidden subprogram for internal use.
-/// 
+///
 /// Hidden subprograms are used for:
 /// - Exception handling callbacks
 /// - Timer callbacks that need special setup
 /// - Async callback wrappers
-/// 
+///
 /// Corresponds to kernel's add_hidden_subprog() (L22579-22603)
 pub fn add_hidden_subprog(
     insns: &mut Vec<BpfInsn>,
     subprog_type: HiddenSubprogType,
 ) -> Result<usize> {
     let start_idx = insns.len();
-    
+
     match subprog_type {
         HiddenSubprogType::ExceptionCallback => {
             // Exception callback stub:
@@ -2239,7 +2194,7 @@ pub fn add_hidden_subprog(
             insns.push(BpfInsn::new(BPF_JMP | BPF_EXIT, 0, 0, 0, 0));
         }
     }
-    
+
     Ok(start_idx)
 }
 
@@ -2255,12 +2210,12 @@ pub enum HiddenSubprogType {
 }
 
 /// Optimize bpf_loop calls by analyzing loop bounds and callback.
-/// 
+///
 /// This function performs higher-level optimization decisions:
 /// - Determines if a loop can be completely eliminated
 /// - Decides between unrolling and counter-based approaches
 /// - Handles loops with side effects correctly
-/// 
+///
 /// Corresponds to kernel's optimize_bpf_loop() (L23621-23664)
 pub fn optimize_bpf_loop(
     insns: &[BpfInsn],
@@ -2269,31 +2224,29 @@ pub fn optimize_bpf_loop(
 ) -> LoopOptimization {
     // Check if nr_loops is constant
     let nr_loops_const = find_const_before(insns, call_idx, 1);
-    
+
     if let Some(nr_idx) = nr_loops_const {
         let nr_loops = insns[nr_idx].imm as u32;
-        
+
         // Zero iterations - eliminate entirely
         if nr_loops == 0 {
             return LoopOptimization::Eliminate;
         }
-        
+
         // Check callback for side effects
-        let has_side_effects = callback_info
-            .map(|c| c.has_side_effects)
-            .unwrap_or(true);
-        
+        let has_side_effects = callback_info.map(|c| c.has_side_effects).unwrap_or(true);
+
         // Small loops without side effects can be unrolled
         if nr_loops <= 8 && !has_side_effects {
             return LoopOptimization::Unroll(nr_loops);
         }
-        
+
         // Medium loops get counter-based optimization
         if nr_loops <= 64 {
             return LoopOptimization::Counter(nr_loops);
         }
     }
-    
+
     // Dynamic or large loops - keep as helper call
     LoopOptimization::Keep
 }

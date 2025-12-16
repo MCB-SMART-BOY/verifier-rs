@@ -1,12 +1,13 @@
+// SPDX-License-Identifier: GPL-2.0
+
 //! Dead code elimination
 //!
 //! This module implements dead code elimination for BPF programs.
 //! It identifies and marks instructions that are never executed
 //! (unreachable) or whose results are never used (dead stores).
 
-use crate::core::types::*;
 use crate::core::error::Result;
-
+use crate::core::types::*;
 
 use alloc::{vec, vec::Vec};
 
@@ -122,7 +123,7 @@ impl DeadCodeEliminator {
     fn analyze_liveness(&mut self) -> Result<()> {
         // Initialize: at exit, R0 is live (return value)
         let mut changed = true;
-        
+
         // Find exit points and initialize their live sets
         for (idx, insn) in self.insns.iter().enumerate() {
             if !self.reachable.contains(&idx) {
@@ -136,7 +137,7 @@ impl DeadCodeEliminator {
         // Fixed-point iteration (backward)
         while changed {
             changed = false;
-            
+
             for idx in (0..self.insns.len()).rev() {
                 if !self.reachable.contains(&idx) {
                     continue;
@@ -230,12 +231,8 @@ impl DeadCodeEliminator {
         let class = insn.class();
 
         match class {
-            BPF_ALU | BPF_ALU64 => {
-                Some(insn.dst_reg as usize)
-            }
-            BPF_LDX => {
-                Some(insn.dst_reg as usize)
-            }
+            BPF_ALU | BPF_ALU64 => Some(insn.dst_reg as usize),
+            BPF_LDX => Some(insn.dst_reg as usize),
             BPF_LD => {
                 if insn.code == (BPF_LD | BPF_IMM | BPF_DW) {
                     Some(insn.dst_reg as usize)
@@ -430,20 +427,20 @@ const BPF_JCOND: u8 = 0xe0;
 /// Check if an instruction is a NOP (ja +0)
 #[inline]
 pub fn is_nop(insn: &BpfInsn) -> bool {
-    insn.code == NOP.code 
-        && insn.dst_reg == NOP.dst_reg 
-        && insn.src_reg == NOP.src_reg 
-        && insn.off == NOP.off 
+    insn.code == NOP.code
+        && insn.dst_reg == NOP.dst_reg
+        && insn.src_reg == NOP.src_reg
+        && insn.off == NOP.off
         && insn.imm == NOP.imm
 }
 
 /// Check if an instruction is may_goto +0
 #[inline]
 pub fn is_may_goto_0(insn: &BpfInsn) -> bool {
-    insn.code == MAY_GOTO_0.code 
-        && insn.dst_reg == MAY_GOTO_0.dst_reg 
-        && insn.src_reg == MAY_GOTO_0.src_reg 
-        && insn.off == MAY_GOTO_0.off 
+    insn.code == MAY_GOTO_0.code
+        && insn.dst_reg == MAY_GOTO_0.dst_reg
+        && insn.src_reg == MAY_GOTO_0.src_reg
+        && insn.off == MAY_GOTO_0.off
         && insn.imm == MAY_GOTO_0.imm
 }
 
@@ -525,7 +522,7 @@ fn adjust_jumps_after_removal(insns: &mut [BpfInsn], removed_idx: usize) {
                 // For CALL with BPF_PSEUDO_CALL, adjust the immediate (relative target)
                 if op == BPF_CALL && insn.src_reg == BPF_PSEUDO_CALL as u8 {
                     let target = (idx as i64 + insn.imm as i64 + 1) as usize;
-                    
+
                     if idx < removed_idx && target > removed_idx {
                         // Jump crosses over removed instruction (forward)
                         insn.imm -= 1;
@@ -556,7 +553,7 @@ fn adjust_jumps_after_removal(insns: &mut [BpfInsn], removed_idx: usize) {
                 if insn.code == (BPF_LD | BPF_IMM | BPF_DW) {
                     if insn.src_reg == BPF_PSEUDO_FUNC as u8 {
                         let target = (idx as i64 + insn.imm as i64 + 1) as usize;
-                        
+
                         if idx < removed_idx && target > removed_idx {
                             insn.imm -= 1;
                         } else if idx > removed_idx && target <= removed_idx {
@@ -584,7 +581,7 @@ pub fn optimize_dead_code(insns: &mut Vec<BpfInsn>) -> Result<OptimizationResult
     // Phase 1: Find and remove unreachable/dead code
     let mut eliminator = DeadCodeEliminator::new(insns.clone());
     let dead_indices = eliminator.eliminate()?;
-    
+
     // Remove dead instructions in reverse order to preserve indices
     let mut sorted_dead: Vec<_> = dead_indices.into_iter().collect();
     sorted_dead.sort_by(|a, b| b.cmp(a)); // Reverse sort

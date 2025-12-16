@@ -1,15 +1,16 @@
+// SPDX-License-Identifier: GPL-2.0
+
 //! Register state tracking
 //!
 //! This module implements the core register state tracking for the BPF verifier.
 //! Each register tracks its type, bounds (for scalars), and other metadata.
 
-
 use alloc::{format, vec::Vec};
 
-use crate::bounds::tnum::Tnum;
 use crate::bounds::bounds::ScalarBounds;
-use crate::core::types::*;
+use crate::bounds::tnum::Tnum;
 use crate::core::error::{Result, VerifierError};
+use crate::core::types::*;
 
 /// State of a single BPF register
 #[derive(Debug, Clone)]
@@ -429,9 +430,7 @@ impl BpfRegState {
             return false;
         }
         match self.reg_type {
-            BpfRegType::PtrToBtfId => {
-                !self.type_flags.contains(BpfTypeFlag::NON_OWN_REF)
-            }
+            BpfRegType::PtrToBtfId => !self.type_flags.contains(BpfTypeFlag::NON_OWN_REF),
             _ => false,
         }
     }
@@ -500,7 +499,9 @@ impl BpfRegState {
         self.s32_max_value = self.s32_max_value.min(smax);
 
         self.u32_min_value = self.u32_min_value.max(var32_off.value as u32);
-        self.u32_max_value = self.u32_max_value.min((var32_off.value | var32_off.mask) as u32);
+        self.u32_max_value = self
+            .u32_max_value
+            .min((var32_off.value | var32_off.mask) as u32);
     }
 
     /// Update 64-bit bounds from var_off
@@ -593,10 +594,13 @@ impl BpfRegState {
 
     /// Update var_off based on bounds
     pub fn bound_offset(&mut self) {
-        let var64_off = self.var_off.intersect(Tnum::range(self.umin_value, self.umax_value));
-        let var32_off = var64_off
-            .subreg()
-            .intersect(Tnum::range(self.u32_min_value as u64, self.u32_max_value as u64));
+        let var64_off = self
+            .var_off
+            .intersect(Tnum::range(self.umin_value, self.umax_value));
+        let var32_off = var64_off.subreg().intersect(Tnum::range(
+            self.u32_min_value as u64,
+            self.u32_max_value as u64,
+        ));
         self.var_off = var64_off.clear_subreg() | var32_off;
     }
 
@@ -703,7 +707,7 @@ impl BpfRegState {
     /// Mark pointer as not null (after null check)
     pub fn mark_ptr_not_null(&mut self) {
         self.type_flags.remove(BpfTypeFlag::PTR_MAYBE_NULL);
-        
+
         // Handle special map value cases would go here
         // For now, just clear the flag
     }
@@ -749,14 +753,14 @@ impl BpfRegState {
     pub fn scalar_alu_op(&mut self, op: u8, other: &BpfRegState, is_64bit: bool) -> Result<()> {
         let dst_bounds = self.to_scalar_bounds();
         let src_bounds = other.to_scalar_bounds();
-        
+
         let result = dst_bounds.alu_op(op, &src_bounds, is_64bit)?;
         self.apply_scalar_bounds(&result);
-        
+
         if !is_64bit {
             self.subreg_def = 1;
         }
-        
+
         Ok(())
     }
 }

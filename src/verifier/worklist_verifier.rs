@@ -1,20 +1,22 @@
+// SPDX-License-Identifier: GPL-2.0
+
 //! Worklist-based verifier implementation.
 //!
 //! This module provides an advanced verifier that uses worklist-based
 //! exploration with integrated state merging and range refinement.
 
 use crate::core::error::{Result, VerifierError};
-use crate::core::insn::{check_alu_op, check_ld_imm64, check_call, check_exit};
-use crate::core::log::{log_insn, log_branch};
+use crate::core::insn::{check_alu_op, check_call, check_exit, check_ld_imm64};
+use crate::core::log::{log_branch, log_insn};
 use crate::core::types::*;
 use crate::mem::memory::check_mem_access_with_ctx;
 use crate::state::reg_state::BpfRegState;
 use crate::state::verifier_state::BpfVerifierState;
 
-use super::branch_state::{process_conditional_branch, handle_null_check, BranchStateResult};
+use super::branch_state::{handle_null_check, process_conditional_branch, BranchStateResult};
 use super::env::VerifierEnv;
 use super::limits::{LimitChecker, ResourceLimits};
-use super::worklist::{Worklist, JoinPointDetector, ExplorationStrategy, WorklistStats};
+use super::worklist::{ExplorationStrategy, JoinPointDetector, Worklist, WorklistStats};
 
 /// Result of verifying an instruction.
 #[derive(Debug, Clone)]
@@ -86,7 +88,8 @@ impl<'a> WorklistVerifier<'a> {
         // Initialize limit checker and validate initial constraints
         self.limit_checker.start();
         self.limit_checker.set_insn_count(self.env.prog_len())?;
-        self.limit_checker.set_subprog_count(self.env.subprog_count())?;
+        self.limit_checker
+            .set_subprog_count(self.env.subprog_count())?;
 
         // Initialize state
         let mut initial_state = BpfVerifierState::new();
@@ -137,22 +140,38 @@ impl<'a> WorklistVerifier<'a> {
                         return Err(VerifierError::FallThroughExit);
                     }
                     if let Some(state) = self.cur_state.take() {
-                        self.worklist.push_with_parent(next_idx, state, self.cur_idx, item.depth + 1);
+                        self.worklist.push_with_parent(
+                            next_idx,
+                            state,
+                            self.cur_idx,
+                            item.depth + 1,
+                        );
                     }
                 }
                 VerifyResult::Jump(target) => {
                     if let Some(state) = self.cur_state.take() {
-                        self.worklist.push_with_parent(target, state, self.cur_idx, item.depth + 1);
+                        self.worklist
+                            .push_with_parent(target, state, self.cur_idx, item.depth + 1);
                     }
                 }
                 VerifyResult::Branch(branch_result, fall_through, target) => {
                     // Push both paths with refined states
                     if let Some(taken_state) = branch_result.taken_state {
-                        self.worklist.push_with_parent(target, taken_state, self.cur_idx, item.depth + 1);
+                        self.worklist.push_with_parent(
+                            target,
+                            taken_state,
+                            self.cur_idx,
+                            item.depth + 1,
+                        );
                         log_branch(&mut self.env.log, self.cur_idx, true, target);
                     }
                     if let Some(fallthrough_state) = branch_result.fallthrough_state {
-                        self.worklist.push_with_parent(fall_through, fallthrough_state, self.cur_idx, item.depth + 1);
+                        self.worklist.push_with_parent(
+                            fall_through,
+                            fallthrough_state,
+                            self.cur_idx,
+                            item.depth + 1,
+                        );
                         log_branch(&mut self.env.log, self.cur_idx, false, fall_through);
                     }
                 }
@@ -162,7 +181,8 @@ impl<'a> WorklistVerifier<'a> {
                 VerifyResult::Call(target) => {
                     self.handle_call(target)?;
                     if let Some(state) = self.cur_state.take() {
-                        self.worklist.push_with_parent(target, state, self.cur_idx, item.depth + 1);
+                        self.worklist
+                            .push_with_parent(target, state, self.cur_idx, item.depth + 1);
                     }
                 }
                 VerifyResult::Return => {
@@ -170,7 +190,12 @@ impl<'a> WorklistVerifier<'a> {
                     if let Some(state) = self.cur_state.take() {
                         // Return to instruction after call
                         let return_idx = self.cur_idx + 1;
-                        self.worklist.push_with_parent(return_idx, state, self.cur_idx, item.depth + 1);
+                        self.worklist.push_with_parent(
+                            return_idx,
+                            state,
+                            self.cur_idx,
+                            item.depth + 1,
+                        );
                     }
                 }
             }
@@ -186,9 +211,9 @@ impl<'a> WorklistVerifier<'a> {
 
     /// Initialize register states.
     fn init_regs(&self, state: &mut BpfVerifierState) -> Result<()> {
-        let func = state.cur_func_mut().ok_or(VerifierError::Internal(
-            "no current function".into()
-        ))?;
+        let func = state
+            .cur_func_mut()
+            .ok_or(VerifierError::Internal("no current function".into()))?;
 
         // R1 = context pointer
         func.regs[1] = BpfRegState::new_ctx_ptr(self.env.prog_type);
@@ -202,7 +227,10 @@ impl<'a> WorklistVerifier<'a> {
     /// Verify a single instruction.
     fn verify_insn(&mut self) -> Result<VerifyResult> {
         let idx = self.cur_idx;
-        let insn = self.env.insn(idx).ok_or(VerifierError::InvalidInsnIdx(idx))?;
+        let insn = self
+            .env
+            .insn(idx)
+            .ok_or(VerifierError::InvalidInsnIdx(idx))?;
         let insn = *insn;
 
         // Mark instruction as seen
@@ -232,15 +260,9 @@ impl<'a> WorklistVerifier<'a> {
                 self.check_st(&insn)?;
                 Ok(VerifyResult::Continue)
             }
-            BPF_LD => {
-                self.check_ld(&insn, idx)
-            }
-            BPF_JMP | BPF_JMP32 => {
-                self.check_jmp(&insn, idx)
-            }
-            _ => {
-                Err(VerifierError::InvalidInstruction(class as usize))
-            }
+            BPF_LD => self.check_ld(&insn, idx),
+            BPF_JMP | BPF_JMP32 => self.check_jmp(&insn, idx),
+            _ => Err(VerifierError::InvalidInstruction(class as usize)),
         }
     }
 
@@ -259,18 +281,20 @@ impl<'a> WorklistVerifier<'a> {
         let user_ctx = self.env.user_mem_context_for_insn(self.env.insn_idx);
         let allow_ptr_leaks = self.env.allow_ptr_leaks;
 
-        let state = self.cur_state.as_mut().ok_or(
-            VerifierError::Internal("no state".into())
-        )?;
+        let state = self
+            .cur_state
+            .as_mut()
+            .ok_or(VerifierError::Internal("no state".into()))?;
 
         let src_reg = insn.src_reg as usize;
         let dst_reg = insn.dst_reg as usize;
         let off = insn.off as i32;
         let size = insn.size() as u32;
 
-        let src = state.reg(src_reg).ok_or(
-            VerifierError::InvalidRegister(src_reg as u8)
-        )?.clone();
+        let src = state
+            .reg(src_reg)
+            .ok_or(VerifierError::InvalidRegister(src_reg as u8))?
+            .clone();
 
         if src.reg_type == BpfRegType::NotInit {
             return Err(VerifierError::UninitializedRegister(src_reg as u8));
@@ -296,26 +320,28 @@ impl<'a> WorklistVerifier<'a> {
         let user_ctx = self.env.user_mem_context_for_insn(self.env.insn_idx);
         let allow_ptr_leaks = self.env.allow_ptr_leaks;
 
-        let state = self.cur_state.as_mut().ok_or(
-            VerifierError::Internal("no state".into())
-        )?;
+        let state = self
+            .cur_state
+            .as_mut()
+            .ok_or(VerifierError::Internal("no state".into()))?;
 
         let dst_reg = insn.dst_reg as usize;
         let src_reg = insn.src_reg as usize;
         let off = insn.off as i32;
         let size = insn.size() as u32;
 
-        let dst = state.reg(dst_reg).ok_or(
-            VerifierError::InvalidRegister(dst_reg as u8)
-        )?.clone();
+        let dst = state
+            .reg(dst_reg)
+            .ok_or(VerifierError::InvalidRegister(dst_reg as u8))?
+            .clone();
 
         if dst.reg_type == BpfRegType::NotInit {
             return Err(VerifierError::UninitializedRegister(dst_reg as u8));
         }
 
-        let src = state.reg(src_reg).ok_or(
-            VerifierError::InvalidRegister(src_reg as u8)
-        )?;
+        let src = state
+            .reg(src_reg)
+            .ok_or(VerifierError::InvalidRegister(src_reg as u8))?;
 
         if src.reg_type == BpfRegType::NotInit {
             return Err(VerifierError::UninitializedRegister(src_reg as u8));
@@ -332,17 +358,19 @@ impl<'a> WorklistVerifier<'a> {
         let user_ctx = self.env.user_mem_context_for_insn(self.env.insn_idx);
         let allow_ptr_leaks = self.env.allow_ptr_leaks;
 
-        let state = self.cur_state.as_mut().ok_or(
-            VerifierError::Internal("no state".into())
-        )?;
+        let state = self
+            .cur_state
+            .as_mut()
+            .ok_or(VerifierError::Internal("no state".into()))?;
 
         let dst_reg = insn.dst_reg as usize;
         let off = insn.off as i32;
         let size = insn.size() as u32;
 
-        let dst = state.reg(dst_reg).ok_or(
-            VerifierError::InvalidRegister(dst_reg as u8)
-        )?.clone();
+        let dst = state
+            .reg(dst_reg)
+            .ok_or(VerifierError::InvalidRegister(dst_reg as u8))?
+            .clone();
 
         if dst.reg_type == BpfRegType::NotInit {
             return Err(VerifierError::UninitializedRegister(dst_reg as u8));
@@ -357,9 +385,10 @@ impl<'a> WorklistVerifier<'a> {
     fn check_ld(&mut self, insn: &BpfInsn, idx: usize) -> Result<VerifyResult> {
         if insn.code == (BPF_LD | BPF_IMM | BPF_DW) {
             let next_idx = idx + 1;
-            let next_insn = *self.env.insn(next_idx).ok_or(
-                VerifierError::InvalidInsnIdx(next_idx)
-            )?;
+            let next_insn = *self
+                .env
+                .insn(next_idx)
+                .ok_or(VerifierError::InvalidInsnIdx(next_idx))?;
 
             if let Some(ref mut state) = self.cur_state {
                 check_ld_imm64(state, insn, &next_insn)?;
@@ -392,20 +421,17 @@ impl<'a> WorklistVerifier<'a> {
                 }
                 Ok(VerifyResult::Exit)
             }
-            BPF_CALL => {
-                self.check_call_insn(insn, idx)
-            }
-            _ => {
-                self.check_cond_jmp(insn, idx)
-            }
+            BPF_CALL => self.check_call_insn(insn, idx),
+            _ => self.check_cond_jmp(insn, idx),
         }
     }
 
     /// Check conditional jump with range refinement.
     fn check_cond_jmp(&mut self, insn: &BpfInsn, idx: usize) -> Result<VerifyResult> {
-        let state = self.cur_state.as_ref().ok_or(
-            VerifierError::Internal("no state".into())
-        )?;
+        let state = self
+            .cur_state
+            .as_ref()
+            .ok_or(VerifierError::Internal("no state".into()))?;
 
         let fall_through = idx + 1;
         let target = (idx as i32 + insn.off as i32 + 1) as usize;
@@ -478,18 +504,20 @@ impl<'a> WorklistVerifier<'a> {
         let user_ctx = self.env.user_mem_context_for_insn(self.env.insn_idx);
         let allow_ptr_leaks = self.env.allow_ptr_leaks;
 
-        let state = self.cur_state.as_mut().ok_or(
-            VerifierError::Internal("no state".into())
-        )?;
+        let state = self
+            .cur_state
+            .as_mut()
+            .ok_or(VerifierError::Internal("no state".into()))?;
 
         let dst_reg = insn.dst_reg as usize;
         let src_reg = insn.src_reg as usize;
         let off = insn.off as i32;
         let size = insn.size() as u32;
 
-        let dst = state.reg(dst_reg).ok_or(
-            VerifierError::InvalidRegister(dst_reg as u8)
-        )?.clone();
+        let dst = state
+            .reg(dst_reg)
+            .ok_or(VerifierError::InvalidRegister(dst_reg as u8))?
+            .clone();
 
         check_mem_access_with_ctx(state, &dst, off, size, true, allow_ptr_leaks, &user_ctx)?;
 
@@ -514,9 +542,10 @@ impl<'a> WorklistVerifier<'a> {
         // Check call depth limit
         self.limit_checker.check_call_enter()?;
 
-        let state = self.cur_state.as_mut().ok_or(
-            VerifierError::Internal("no state".into())
-        )?;
+        let state = self
+            .cur_state
+            .as_mut()
+            .ok_or(VerifierError::Internal("no state".into()))?;
 
         state.push_frame(self.cur_idx as i32, 0)?;
         Ok(())
@@ -527,11 +556,13 @@ impl<'a> WorklistVerifier<'a> {
         // Record call exit for limit tracking
         self.limit_checker.record_call_exit();
 
-        let state = self.cur_state.as_mut().ok_or(
-            VerifierError::Internal("no state".into())
-        )?;
+        let state = self
+            .cur_state
+            .as_mut()
+            .ok_or(VerifierError::Internal("no state".into()))?;
 
-        let callsite = state.cur_func()
+        let callsite = state
+            .cur_func()
             .ok_or(VerifierError::Internal("no current function".into()))?
             .callsite;
 

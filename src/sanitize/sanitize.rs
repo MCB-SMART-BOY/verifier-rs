@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0
+
 //! Spectre mitigation sanitization
 //!
 //! This module implements sanitization checks to prevent speculative
@@ -6,13 +8,12 @@
 
 #![allow(missing_docs)] // Sanitization internals
 
-
 use alloc::{format, string::String, vec::Vec};
 
+use crate::core::error::{Result, VerifierError};
 use crate::core::types::*;
 use crate::state::reg_state::BpfRegState;
 use crate::state::verifier_state::BpfVerifierState;
-use crate::core::error::{Result, VerifierError};
 
 /// Sanitization state for an instruction
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -64,23 +65,19 @@ pub fn error_recoverable_with_nospec(err: &VerifierError) -> bool {
 }
 
 /// Retrieve pointer limit for sanitization
-pub fn retrieve_ptr_limit(
-    reg: &BpfRegState,
-    off: i32,
-    _is_write: bool,
-) -> Result<PtrLimit> {
+pub fn retrieve_ptr_limit(reg: &BpfRegState, off: i32, _is_write: bool) -> Result<PtrLimit> {
     let ptr_type = reg.reg_type;
-    
+
     match ptr_type {
         BpfRegType::PtrToStack => {
             // Stack has fixed limit
             let max_off = MAX_BPF_STACK as i64;
             let cur_off = reg.off as i64 + off as i64;
-            
+
             if cur_off >= 0 || cur_off < -max_off {
                 return Err(VerifierError::StackOutOfBounds(cur_off as i32));
             }
-            
+
             Ok(PtrLimit {
                 umax: (-cur_off) as u64,
                 ptr_type,
@@ -89,18 +86,20 @@ pub fn retrieve_ptr_limit(
         }
         BpfRegType::PtrToMapValue => {
             // Map value has its size as limit
-            let map_value_size = reg.map_ptr
+            let map_value_size = reg
+                .map_ptr
                 .as_ref()
                 .map(|m| m.value_size as u64)
                 .unwrap_or(0);
             let cur_off = (reg.off as i64 + off as i64) as u64;
-            
+
             if cur_off >= map_value_size {
-                return Err(VerifierError::InvalidMemoryAccess(
-                    format!("map value offset {} >= size {}", cur_off, map_value_size)
-                ));
+                return Err(VerifierError::InvalidMemoryAccess(format!(
+                    "map value offset {} >= size {}",
+                    cur_off, map_value_size
+                )));
             }
-            
+
             Ok(PtrLimit {
                 umax: map_value_size - cur_off,
                 ptr_type,
@@ -124,29 +123,24 @@ pub fn retrieve_ptr_limit(
                 is_exact: false,
             })
         }
-        _ => {
-            Ok(PtrLimit::default())
-        }
+        _ => Ok(PtrLimit::default()),
     }
 }
 
 /// Check if pointer ALU can skip sanitization
-pub fn can_skip_alu_sanitation(
-    dst_reg: &BpfRegState,
-    src_reg: Option<&BpfRegState>,
-) -> bool {
+pub fn can_skip_alu_sanitation(dst_reg: &BpfRegState, src_reg: Option<&BpfRegState>) -> bool {
     // If destination is not a pointer, no sanitization needed
     if !dst_reg.is_pointer() {
         return true;
     }
-    
+
     // If source is a known constant, we can skip
     if let Some(src) = src_reg {
         if src.is_const() {
             return true;
         }
     }
-    
+
     false
 }
 
@@ -174,23 +168,24 @@ pub fn sanitize_ptr_alu(
         return Ok(SanitizeState::None);
     }
 
-    let dst = state.reg(dst_reg)
+    let dst = state
+        .reg(dst_reg)
         .ok_or(VerifierError::InvalidRegister(dst_reg as u8))?;
-    
+
     // If not a pointer, no sanitization needed
     if !dst.is_pointer() {
         return Ok(SanitizeState::None);
     }
 
     let src = state.reg(src_reg);
-    
+
     if can_skip_alu_sanitation(dst, src) {
         return Ok(SanitizeState::None);
     }
 
     // Get pointer limit
     let limit = retrieve_ptr_limit(dst, insn.off as i32, false)?;
-    
+
     // Check if the operation is within bounds
     if let Some(src_reg) = src {
         if src_reg.reg_type == BpfRegType::ScalarValue {
@@ -204,11 +199,12 @@ pub fn sanitize_ptr_alu(
                     0
                 }
             };
-            
+
             if max_val > limit.umax && limit.is_exact {
-                return Err(VerifierError::InvalidPointerArithmetic(
-                    format!("offset {} exceeds limit {}", max_val, limit.umax)
-                ));
+                return Err(VerifierError::InvalidPointerArithmetic(format!(
+                    "offset {} exceeds limit {}",
+                    max_val, limit.umax
+                )));
             }
         }
     }
@@ -227,7 +223,8 @@ pub fn sanitize_val_alu(
     }
 
     let dst_reg = insn.dst_reg as usize;
-    let dst = state.reg(dst_reg)
+    let dst = state
+        .reg(dst_reg)
         .ok_or(VerifierError::InvalidRegister(dst_reg as u8))?;
 
     // Check for pointer leaks in unprivileged mode
@@ -250,22 +247,20 @@ pub fn sanitize_check_bounds(
     }
 
     let limit = retrieve_ptr_limit(reg, off, false)?;
-    
+
     // Check if access is within bounds
     if limit.is_exact && (size as u64) > limit.umax {
-        return Err(VerifierError::BoundsCheckFailed(
-            format!("access size {} exceeds limit {}", size, limit.umax)
-        ));
+        return Err(VerifierError::BoundsCheckFailed(format!(
+            "access size {} exceeds limit {}",
+            size, limit.umax
+        )));
     }
 
     Ok(())
 }
 
 /// Mark an instruction as needing sanitization
-pub fn sanitize_mark_insn_seen(
-    aux_data: &mut InsnAuxData,
-    needs_barrier: bool,
-) {
+pub fn sanitize_mark_insn_seen(aux_data: &mut InsnAuxData, needs_barrier: bool) {
     if needs_barrier {
         aux_data.needs_nospec_barrier = true;
     }
@@ -323,7 +318,8 @@ pub fn check_stack_access_for_ptr_arithmetic(
         return Ok(());
     }
 
-    let reg = state.reg(regno)
+    let reg = state
+        .reg(regno)
         .ok_or(VerifierError::InvalidRegister(regno as u8))?;
 
     if reg.reg_type != BpfRegType::PtrToStack {
@@ -348,11 +344,7 @@ pub fn check_stack_access_for_ptr_arithmetic(
 }
 
 /// Sanitize error - generate appropriate error for sanitization failure
-pub fn sanitize_err(
-    _state: &BpfVerifierState,
-    _insn: &BpfInsn,
-    _reason: &str,
-) -> VerifierError {
+pub fn sanitize_err(_state: &BpfVerifierState, _insn: &BpfInsn, _reason: &str) -> VerifierError {
     VerifierError::SpeculativeViolation
 }
 
@@ -405,7 +397,7 @@ pub fn analyze_spectre_v1(
     // Spectre v1 occurs when:
     // 1. There's a conditional branch based on an attacker-controlled value
     // 2. Followed by an array access using that value as index
-    
+
     // Check if this is a conditional jump
     let opcode = insn.code & 0xf0;
     if opcode < 0x50 || opcode > 0xd0 {
@@ -414,7 +406,7 @@ pub fn analyze_spectre_v1(
 
     let dst_reg = insn.dst_reg as usize;
     let reg = state.reg(dst_reg)?;
-    
+
     // Check if the comparison involves a scalar with wide bounds
     if reg.reg_type == BpfRegType::ScalarValue {
         let range = reg.umax_value.saturating_sub(reg.umin_value);
@@ -431,7 +423,7 @@ pub fn analyze_spectre_v1(
             });
         }
     }
-    
+
     None
 }
 
@@ -465,7 +457,7 @@ pub fn analyze_memory_access_v1(
             });
         }
     }
-    
+
     None
 }
 
@@ -484,27 +476,24 @@ pub fn analyze_spectre_v4(
 ) -> Option<SpectreAnalysis> {
     // Spectre v4 occurs when a load speculatively reads stale data
     // because a preceding store hasn't committed yet
-    
+
     // Check if both access the same address
     let store_base = store_insn.dst_reg as usize;
     let load_base = load_insn.src_reg as usize;
-    
+
     let store_reg = state.reg(store_base)?;
     let load_reg = state.reg(load_base)?;
-    
+
     // Same register and offset suggests potential alias
     if store_base == load_base && store_insn.off == load_insn.off {
         return Some(SpectreAnalysis {
             variant: SpectreVariant::V4SpeculativeStoreBypass,
             insn_idx: load_idx,
             mitigation: MitigationStrategy::SpeculationBarrier,
-            description: format!(
-                "potential store-load alias at offset {}",
-                store_insn.off
-            ),
+            description: format!("potential store-load alias at offset {}", store_insn.off),
         });
     }
-    
+
     // Check for potential overlap through pointers to same region
     if store_reg.reg_type == load_reg.reg_type {
         // Could potentially alias
@@ -516,7 +505,7 @@ pub fn analyze_spectre_v4(
             description: "potential store-load alias through same pointer type".into(),
         });
     }
-    
+
     None
 }
 
@@ -551,7 +540,7 @@ pub enum BarrierType {
 }
 
 /// Generate index mask for bounds check
-/// 
+///
 /// Creates a mask that zeros out the index if it exceeds bounds
 pub fn generate_index_mask(index_max: u64) -> u64 {
     if index_max == 0 {
@@ -569,22 +558,18 @@ pub fn generate_index_mask(index_max: u64) -> u64 {
 }
 
 /// Check if a JIT bypass is possible for this access
-pub fn check_jit_spectre_bypass(
-    reg: &BpfRegState,
-    off: i32,
-    size: u32,
-) -> bool {
+pub fn check_jit_spectre_bypass(reg: &BpfRegState, off: i32, size: u32) -> bool {
     // JIT can bypass speculation barriers in some cases
     // when it can prove the access is always safe
-    
+
     if !reg.is_pointer() {
         return true; // Not a pointer, no speculation issue
     }
-    
+
     // Constant offsets with known bounds can be bypassed
     if reg.var_off.is_const() {
         let total_off = reg.off + off;
-        
+
         match reg.reg_type {
             BpfRegType::PtrToStack => {
                 // Stack access with constant offset
@@ -599,7 +584,7 @@ pub fn check_jit_spectre_bypass(
             _ => {}
         }
     }
-    
+
     false
 }
 
@@ -637,7 +622,7 @@ pub fn analyze_program_spectre(
     config: &SpectreConfig,
 ) -> Vec<SpectreAnalysis> {
     let mut results = Vec::new();
-    
+
     for (idx, insn) in insns.iter().enumerate() {
         // Analyze for Spectre v1 in conditional jumps
         if config.mitigate_v1 {
@@ -657,16 +642,14 @@ pub fn analyze_program_spectre(
             }
         }
     }
-    
+
     results
 }
 
 /// Apply Spectre mitigations by patching the program
-pub fn apply_spectre_mitigations(
-    analyses: &[SpectreAnalysis],
-) -> Vec<SpectreBarrierPatch> {
+pub fn apply_spectre_mitigations(analyses: &[SpectreAnalysis]) -> Vec<SpectreBarrierPatch> {
     let mut patches = Vec::new();
-    
+
     for analysis in analyses {
         match analysis.mitigation {
             MitigationStrategy::SpeculationBarrier => {
@@ -685,7 +668,7 @@ pub fn apply_spectre_mitigations(
             MitigationStrategy::None => {}
         }
     }
-    
+
     patches
 }
 
@@ -735,7 +718,7 @@ impl Default for AluSanitizeResult {
 }
 
 /// Sanitize ALU operation for Spectre mitigation
-/// 
+///
 /// This function determines what sanitization is needed for an ALU operation
 /// to prevent speculative execution attacks.
 pub fn sanitize_alu_op(
@@ -746,14 +729,15 @@ pub fn sanitize_alu_op(
     allow_ptr_leaks: bool,
 ) -> Result<AluSanitizeResult> {
     let mut result = AluSanitizeResult::default();
-    
+
     if !sanitize_needed(allow_ptr_leaks) {
         return Ok(result);
     }
 
-    let dst = state.reg(dst_reg)
+    let dst = state
+        .reg(dst_reg)
         .ok_or(VerifierError::InvalidRegister(dst_reg as u8))?;
-    
+
     // Only pointer arithmetic needs sanitization
     if !dst.is_pointer() {
         return Ok(result);
@@ -761,7 +745,7 @@ pub fn sanitize_alu_op(
 
     let opcode = insn.code & 0xf0;
     let src_type = insn.code & 0x08;
-    
+
     // Only ADD and SUB are relevant for pointer arithmetic
     if opcode != BPF_ADD && opcode != BPF_SUB {
         return Ok(result);
@@ -769,9 +753,15 @@ pub fn sanitize_alu_op(
 
     // Get the scalar operand's bounds
     let (smin, _smax, _umin, umax) = if src_type == BPF_X {
-        let src = state.reg(src_reg)
+        let src = state
+            .reg(src_reg)
             .ok_or(VerifierError::InvalidRegister(src_reg as u8))?;
-        (src.smin_value, src.smax_value, src.umin_value, src.umax_value)
+        (
+            src.smin_value,
+            src.smax_value,
+            src.umin_value,
+            src.umax_value,
+        )
     } else {
         let imm = insn.imm as i64;
         (imm, imm, imm as u64, imm as u64)
@@ -779,11 +769,11 @@ pub fn sanitize_alu_op(
 
     // Compute pointer limit
     let ptr_limit = retrieve_ptr_limit(dst, insn.off as i32, false)?;
-    
+
     // Check if operation is within safe bounds
     let is_add = opcode == BPF_ADD;
     let max_offset = if is_add { umax } else { (-smin) as u64 };
-    
+
     if ptr_limit.is_exact && max_offset <= ptr_limit.umax {
         result.is_safe = true;
         return Ok(result);
@@ -792,11 +782,13 @@ pub fn sanitize_alu_op(
     // Need sanitization
     result.is_safe = false;
     result.needs_patch = true;
-    
+
     // Determine sanitization strategy
     if ptr_limit.is_exact {
         // Can use bounds check
-        result.action = AluSanitizeAction::BoundsCheck { limit: ptr_limit.umax };
+        result.action = AluSanitizeAction::BoundsCheck {
+            limit: ptr_limit.umax,
+        };
         result.alu_limit = ptr_limit.umax as u32;
     } else {
         // Use pointer masking
@@ -807,18 +799,15 @@ pub fn sanitize_alu_op(
 }
 
 /// Compute ALU limit for sanitization patching
-/// 
+///
 /// Returns the limit value to use for masking/bounds checking
-pub fn compute_alu_limit(
-    state: &BpfVerifierState,
-    dst_reg: usize,
-    off: i32,
-) -> Result<u32> {
-    let dst = state.reg(dst_reg)
+pub fn compute_alu_limit(state: &BpfVerifierState, dst_reg: usize, off: i32) -> Result<u32> {
+    let dst = state
+        .reg(dst_reg)
         .ok_or(VerifierError::InvalidRegister(dst_reg as u8))?;
 
     let ptr_limit = retrieve_ptr_limit(dst, off, false)?;
-    
+
     if ptr_limit.is_exact {
         Ok(ptr_limit.umax as u32)
     } else {
@@ -828,14 +817,11 @@ pub fn compute_alu_limit(
 }
 
 /// Generate ALU sanitization patch
-/// 
+///
 /// Creates the instruction(s) needed to sanitize an ALU operation
-pub fn generate_alu_sanitize_patch(
-    insn: &BpfInsn,
-    result: &AluSanitizeResult,
-) -> Vec<BpfInsn> {
+pub fn generate_alu_sanitize_patch(insn: &BpfInsn, result: &AluSanitizeResult) -> Vec<BpfInsn> {
     let mut patches = Vec::new();
-    
+
     match result.action {
         AluSanitizeAction::None => {}
         AluSanitizeAction::IndexMask { mask } => {
@@ -876,7 +862,7 @@ pub fn generate_alu_sanitize_patch(
             // Barrier goes after - handled separately
         }
     }
-    
+
     patches
 }
 
@@ -896,7 +882,7 @@ pub fn sanitize_mem_access(
     allow_ptr_leaks: bool,
 ) -> Result<AluSanitizeResult> {
     let mut result = AluSanitizeResult::default();
-    
+
     if !sanitize_needed(allow_ptr_leaks) {
         return Ok(result);
     }
@@ -907,7 +893,7 @@ pub fn sanitize_mem_access(
 
     // Check if access is within validated bounds
     let ptr_limit = retrieve_ptr_limit(reg, off, is_write)?;
-    
+
     if ptr_limit.is_exact && (size as u64) <= ptr_limit.umax {
         // Access is within bounds
         result.is_safe = true;
@@ -918,7 +904,7 @@ pub fn sanitize_mem_access(
     result.is_safe = false;
     result.needs_patch = true;
     result.action = AluSanitizeAction::BarrierBefore;
-    
+
     let _ = state; // Used for additional context if needed
     Ok(result)
 }
@@ -952,7 +938,7 @@ impl Default for PointerMaskConfig {
 }
 
 /// Compute pointer mask for array access
-/// 
+///
 /// The mask ensures that even under speculation, the index cannot
 /// exceed the array bounds.
 pub fn compute_array_mask(array_size: u64) -> u64 {
@@ -971,19 +957,15 @@ pub fn compute_array_mask(array_size: u64) -> u64 {
 }
 
 /// Generate pointer masking instructions
-/// 
+///
 /// Inserts instructions to mask a pointer after arithmetic to prevent
 /// speculative out-of-bounds access.
-pub fn generate_ptr_mask_insns(
-    ptr_reg: u8,
-    scratch_reg: u8,
-    limit: u64,
-) -> Vec<BpfInsn> {
+pub fn generate_ptr_mask_insns(ptr_reg: u8, scratch_reg: u8, limit: u64) -> Vec<BpfInsn> {
     let mut insns = Vec::new();
-    
+
     // Strategy: Use arithmetic right shift to create a mask
     // if ptr > limit, mask becomes 0, otherwise ~0
-    
+
     // r_scratch = ptr - limit
     insns.push(BpfInsn::new(
         BPF_ALU64 | BPF_MOV | BPF_X,
@@ -999,7 +981,7 @@ pub fn generate_ptr_mask_insns(
         0,
         limit as i32,
     ));
-    
+
     // r_scratch >>= 63 (arithmetic: fills with sign bit)
     insns.push(BpfInsn::new(
         BPF_ALU64 | BPF_ARSH | BPF_K,
@@ -1008,7 +990,7 @@ pub fn generate_ptr_mask_insns(
         0,
         63,
     ));
-    
+
     // ptr &= r_scratch
     insns.push(BpfInsn::new(
         BPF_ALU64 | BPF_AND | BPF_X,
@@ -1017,18 +999,14 @@ pub fn generate_ptr_mask_insns(
         0,
         0,
     ));
-    
+
     insns
 }
 
 /// Check if JIT can bypass sanitization for this access
-/// 
+///
 /// Some accesses are provably safe even under speculation
-pub fn can_jit_bypass_sanitize(
-    reg: &BpfRegState,
-    off: i32,
-    size: u32,
-) -> bool {
+pub fn can_jit_bypass_sanitize(reg: &BpfRegState, off: i32, size: u32) -> bool {
     // Same logic as check_jit_spectre_bypass but exported
     check_jit_spectre_bypass(reg, off, size)
 }
@@ -1044,10 +1022,10 @@ pub fn analyze_program_sanitization(
     config: &SpectreConfig,
 ) -> SanitizationReport {
     let mut report = SanitizationReport::default();
-    
+
     for (idx, insn) in insns.iter().enumerate() {
         let class = insn.class();
-        
+
         match class {
             BPF_ALU | BPF_ALU64 => {
                 let opcode = insn.code & 0xf0;
@@ -1057,11 +1035,11 @@ pub fn analyze_program_sanitization(
                     if let Some(dst) = state.reg(dst_reg) {
                         if dst.is_pointer() {
                             report.ptr_alu_count += 1;
-                            
+
                             // Analyze for sanitization needs
-                            if let Ok(result) = sanitize_alu_op(
-                                state, insn, dst_reg, insn.src_reg as usize, false
-                            ) {
+                            if let Ok(result) =
+                                sanitize_alu_op(state, insn, dst_reg, insn.src_reg as usize, false)
+                            {
                                 if result.needs_patch {
                                     report.sanitize_needed.push(idx);
                                     report.actions.push((idx, result.action));
@@ -1074,13 +1052,13 @@ pub fn analyze_program_sanitization(
             BPF_LDX | BPF_STX | BPF_ST => {
                 // Memory access
                 report.mem_access_count += 1;
-                
+
                 let base_reg = if class == BPF_LDX {
                     insn.src_reg as usize
                 } else {
                     insn.dst_reg as usize
                 };
-                
+
                 if let Some(reg) = state.reg(base_reg) {
                     if reg.is_pointer() && !reg.var_off.is_const() {
                         // Variable offset memory access
@@ -1093,7 +1071,7 @@ pub fn analyze_program_sanitization(
                 if opcode != BPF_JA && opcode != BPF_EXIT && opcode != BPF_CALL {
                     // Conditional branch
                     report.cond_branch_count += 1;
-                    
+
                     if config.mitigate_v1 {
                         report.spectre_v1_sources.push(idx);
                     }
@@ -1102,7 +1080,7 @@ pub fn analyze_program_sanitization(
             _ => {}
         }
     }
-    
+
     report
 }
 
@@ -1130,7 +1108,7 @@ impl SanitizationReport {
     pub fn needs_sanitization(&self) -> bool {
         !self.sanitize_needed.is_empty()
     }
-    
+
     /// Get total number of mitigations needed
     pub fn mitigation_count(&self) -> usize {
         self.sanitize_needed.len()
@@ -1229,7 +1207,7 @@ impl SpeculativePathTracker {
     pub fn record_insn(&mut self, insn_idx: usize) {
         if self.is_speculative() {
             self.speculative_insns.push(insn_idx);
-            
+
             // Limit speculative window
             if self.speculative_insns.len() > self.max_window {
                 self.speculative_insns.remove(0);
@@ -1284,9 +1262,7 @@ impl SpectreV1Taint {
     pub fn propagate(&self, other: &SpectreV1Taint) -> SpectreV1Taint {
         match (self, other) {
             (SpectreV1Taint::Clean, SpectreV1Taint::Clean) => SpectreV1Taint::Clean,
-            (SpectreV1Taint::Tainted, _) | (_, SpectreV1Taint::Tainted) => {
-                SpectreV1Taint::Tainted
-            }
+            (SpectreV1Taint::Tainted, _) | (_, SpectreV1Taint::Tainted) => SpectreV1Taint::Tainted,
             _ => SpectreV1Taint::Derived,
         }
     }
@@ -1401,28 +1377,28 @@ impl SpectreV1Analyzer {
         if !self.config.mitigate_v1 {
             return;
         }
-        
+
         let dst_reg = insn.dst_reg as usize;
-        
+
         // Enter speculative path
         self.path.enter_branch(insn_idx, is_taken);
-        
+
         // If the branch condition involves tainted data, mark as potential gadget source
         if self.taint.is_tainted(dst_reg) {
             // After the branch, the value is "bounds checked" but speculatively tainted
             self.taint.mark_speculative_taint(dst_reg, insn_idx);
         }
-        
+
         // Also check source register for comparisons
         let src_reg = insn.src_reg as usize;
         if self.taint.is_tainted(src_reg) {
             self.taint.mark_speculative_taint(src_reg, insn_idx);
         }
-        
+
         // Check for wide bounds that suggest array indexing
         // In aggressive mode, use a lower threshold
         let range_threshold = if self.config.aggressive { 64 } else { 256 };
-        
+
         if let Some(reg) = state.reg(dst_reg) {
             if reg.reg_type == BpfRegType::ScalarValue {
                 let range = reg.umax_value.saturating_sub(reg.umin_value);
@@ -1460,20 +1436,20 @@ impl SpectreV1Analyzer {
         if !self.config.mitigate_v1 {
             return;
         }
-        
+
         // Record this instruction on speculative path
         self.path.record_insn(insn_idx);
-        
+
         let class = insn.code & 0x07;
         let is_load = class == 0x01 || class == 0x61; // LDX or LD
-        
+
         // Get the base register
         let base_reg = if is_load {
             insn.src_reg as usize
         } else {
             insn.dst_reg as usize
         };
-        
+
         // Check if on speculative path with tainted offset
         if self.path.is_speculative() {
             if let Some(reg) = state.reg(base_reg) {
@@ -1499,7 +1475,7 @@ impl SpectreV1Analyzer {
                 }
             }
         }
-        
+
         // For loads, propagate taint to destination
         if is_load {
             let dst_reg = insn.dst_reg as usize;
@@ -1520,11 +1496,11 @@ impl SpectreV1Analyzer {
     ) {
         // Record on speculative path
         self.path.record_insn(insn_idx);
-        
+
         // Certain helpers can be gadget targets
         // map_lookup returns pointer that could leak data
         const BPF_FUNC_MAP_LOOKUP_ELEM: u32 = 1;
-        
+
         if func_id == BPF_FUNC_MAP_LOOKUP_ELEM {
             // R1 contains map, R2 contains key - if key is tainted, potential gadget
             if self.taint.is_tainted(2) && self.path.is_speculative() {
@@ -1540,7 +1516,7 @@ impl SpectreV1Analyzer {
                     });
                 }
             }
-            
+
             // Return value (R0) could point to sensitive data
             // Mark as potentially tainted if on speculative path
             if self.path.is_speculative() {
@@ -1552,11 +1528,12 @@ impl SpectreV1Analyzer {
     /// Analyze an ALU operation
     pub fn analyze_alu(&mut self, insn: &BpfInsn, insn_idx: usize) {
         self.path.record_insn(insn_idx);
-        
+
         let dst_reg = insn.dst_reg as usize;
         let src_type = insn.code & 0x08;
-        
-        if src_type == 0x08 { // BPF_X - register source
+
+        if src_type == 0x08 {
+            // BPF_X - register source
             let src_reg = insn.src_reg as usize;
             self.taint.propagate_alu(dst_reg, src_reg);
         }
@@ -1581,7 +1558,7 @@ impl SpectreV1Analyzer {
     /// Generate mitigation patches
     pub fn generate_patches(&self) -> Vec<SpectreBarrierPatch> {
         let mut patches = Vec::new();
-        
+
         for gadget in &self.gadgets {
             match gadget.mitigation {
                 MitigationStrategy::SpeculationBarrier => {
@@ -1608,32 +1585,38 @@ impl SpectreV1Analyzer {
                 _ => {}
             }
         }
-        
+
         // Deduplicate patches
         patches.sort_by_key(|p| p.insn_idx);
         patches.dedup_by_key(|p| p.insn_idx);
-        
+
         patches
     }
 
     /// Check if speculation barrier is needed at instruction
     pub fn needs_barrier(&self, insn_idx: usize) -> bool {
-        self.gadgets.iter().any(|g| {
-            g.branch_idx == insn_idx || g.access_idx == insn_idx
-        })
+        self.gadgets
+            .iter()
+            .any(|g| g.branch_idx == insn_idx || g.access_idx == insn_idx)
     }
 
     /// Get summary statistics
     pub fn summary(&self) -> SpectreV1Summary {
         SpectreV1Summary {
             total_gadgets: self.gadgets.len(),
-            bounds_bypass: self.gadgets.iter()
+            bounds_bypass: self
+                .gadgets
+                .iter()
                 .filter(|g| g.gadget_type == SpectreV1GadgetType::BoundsCheckBypass)
                 .count(),
-            data_leaks: self.gadgets.iter()
+            data_leaks: self
+                .gadgets
+                .iter()
                 .filter(|g| g.gadget_type == SpectreV1GadgetType::DataLeak)
                 .count(),
-            pointer_leaks: self.gadgets.iter()
+            pointer_leaks: self
+                .gadgets
+                .iter()
                 .filter(|g| g.gadget_type == SpectreV1GadgetType::PointerLeak)
                 .count(),
             speculation_depth: self.path.depth(),
@@ -1665,41 +1648,45 @@ pub fn analyze_program_spectre_v1(
     if !config.mitigate_v1 {
         return (Vec::new(), Vec::new());
     }
-    
+
     let mut analyzer = SpectreV1Analyzer::new(config.clone());
-    
+
     // Mark initial inputs as potentially tainted
     // R1 = context pointer (trusted)
     // Other args may be attacker-controlled depending on program type
-    
+
     for (idx, insn) in insns.iter().enumerate() {
         let class = insn.code & 0x07;
         let opcode = insn.code & 0xf0;
-        
+
         match class {
-            0x05 | 0x06 => { // JMP, JMP32
+            0x05 | 0x06 => {
+                // JMP, JMP32
                 if opcode >= 0x10 && opcode <= 0xd0 && opcode != 0x00 {
                     // Conditional jump
                     analyzer.analyze_branch(state, insn, idx, true);
                 }
             }
-            0x00 | 0x07 => { // ALU64, ALU
+            0x00 | 0x07 => {
+                // ALU64, ALU
                 analyzer.analyze_alu(insn, idx);
             }
-            0x01 | 0x02 | 0x03 => { // LDX, ST, STX
+            0x01 | 0x02 | 0x03 => {
+                // LDX, ST, STX
                 analyzer.analyze_memory_access(state, insn, idx);
             }
             _ => {}
         }
-        
+
         // Check for helper calls
-        if class == 0x05 && opcode == 0x80 { // CALL
+        if class == 0x05 && opcode == 0x80 {
+            // CALL
             analyzer.analyze_helper_call(state, insn, idx, insn.imm as u32);
         }
     }
-    
+
     let gadgets = analyzer.get_gadgets().to_vec();
     let patches = analyzer.generate_patches();
-    
+
     (gadgets, patches)
 }

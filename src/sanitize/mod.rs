@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0
+
 //! Sanitization for the BPF verifier.
 //!
 //! This module contains pointer arithmetic sanitization and

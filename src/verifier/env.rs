@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0
+
 //! Verifier environment
 //!
 //! This module implements the main verifier environment that holds all
@@ -5,26 +7,24 @@
 
 #![allow(missing_docs)] // Many internal types don't need public docs
 
-
 use crate::stdlib::Box;
 
 use core::mem::MaybeUninit;
 use core::ptr;
 
-use crate::core::types::*;
-use crate::core::error::{Result, VerifierError};
-use crate::core::log::{VerifierLog, LogLevel};
-use crate::state::verifier_state::BpfVerifierState;
-use crate::state::reg_state::MapInfo;
 use crate::analysis::cfg::ControlFlowGraph;
-use crate::analysis::scc::{SccAnalysis, BackEdgePropagator};
-use crate::sanitize::sanitize::InsnAuxData as SanitizeAuxData;
-use crate::check::subprog::MAX_CALL_FRAMES;
-use crate::btf::integration::{BtfContext, SourceLocation};
-use crate::mem::user::UserMemContext;
-use crate::special::struct_ops::StructOpsContext;
 use crate::analysis::race_detector::RaceDetector;
-
+use crate::analysis::scc::{BackEdgePropagator, SccAnalysis};
+use crate::btf::integration::{BtfContext, SourceLocation};
+use crate::check::subprog::MAX_CALL_FRAMES;
+use crate::core::error::{Result, VerifierError};
+use crate::core::log::{LogLevel, VerifierLog};
+use crate::core::types::*;
+use crate::mem::user::UserMemContext;
+use crate::sanitize::sanitize::InsnAuxData as SanitizeAuxData;
+use crate::special::struct_ops::StructOpsContext;
+use crate::state::reg_state::MapInfo;
+use crate::state::verifier_state::BpfVerifierState;
 
 use alloc::{format, string::String, vec, vec::Vec};
 
@@ -254,7 +254,7 @@ pub struct ExploredState {
 pub const MAX_STACK_SLOTS: usize = 64;
 
 /// Stack write marks for speculative execution safety
-/// 
+///
 /// This tracks which stack slots have been written during the current
 /// instruction execution. Used to ensure speculative writes are properly
 /// committed or rolled back.
@@ -272,26 +272,26 @@ impl StackWriteMarks {
     pub fn new() -> Self {
         Self::default()
     }
-    
+
     /// Mark a stack slot as written in the given frame
     pub fn mark_write(&mut self, frameno: u32, spi: usize) {
         if frameno < MAX_CALL_FRAMES as u32 && spi < MAX_STACK_SLOTS {
             self.pending[frameno as usize] |= 1u64 << spi;
         }
     }
-    
+
     /// Mark multiple stack slots as written (using a bitmask)
     pub fn mark_write_mask(&mut self, frameno: u32, mask: u64) {
         if frameno < MAX_CALL_FRAMES as u32 {
             self.pending[frameno as usize] |= mask;
         }
     }
-    
+
     /// Reset pending write marks (called before each instruction)
     pub fn reset(&mut self) {
         self.pending = [0; MAX_CALL_FRAMES];
     }
-    
+
     /// Commit pending write marks (called after successful instruction execution)
     /// Returns true if any new slots were committed
     pub fn commit(&mut self) -> bool {
@@ -306,7 +306,7 @@ impl StackWriteMarks {
         self.pending = [0; MAX_CALL_FRAMES];
         any_new
     }
-    
+
     /// Check if a slot has been written (either pending or committed)
     pub fn is_written(&self, frameno: u32, spi: usize) -> bool {
         if frameno < MAX_CALL_FRAMES as u32 && spi < MAX_STACK_SLOTS {
@@ -316,7 +316,7 @@ impl StackWriteMarks {
             false
         }
     }
-    
+
     /// Clear all marks (for state reset)
     pub fn clear(&mut self) {
         self.pending = [0; MAX_CALL_FRAMES];
@@ -403,11 +403,7 @@ pub struct VerifierEnv {
 
 impl VerifierEnv {
     /// Create a new verifier environment
-    pub fn new(
-        insns: Vec<BpfInsn>,
-        prog_type: BpfProgType,
-        allow_ptr_leaks: bool,
-    ) -> Result<Self> {
+    pub fn new(insns: Vec<BpfInsn>, prog_type: BpfProgType, allow_ptr_leaks: bool) -> Result<Self> {
         if insns.is_empty() {
             return Err(VerifierError::EmptyProgram);
         }
@@ -425,7 +421,7 @@ impl VerifierEnv {
 
         // Initially, the whole program is one subprogram
         let subprogs = vec![SubprogInfoEntry::new(0, insn_count)];
-        
+
         // Initialize sanitization data
         let sanitize_aux = vec![SanitizeAuxData::default(); insn_count];
 
@@ -470,19 +466,19 @@ impl VerifierEnv {
     }
 
     /// Create a new verifier environment directly on the heap.
-    /// 
+    ///
     /// This avoids placing the large VerifierEnv struct on the stack,
     /// which is critical for kernel mode where stack space is limited.
-    /// 
+    ///
     /// # Kernel Safety
-    /// 
+    ///
     /// VerifierEnv is ~1664 bytes. In kernel mode with 8-16KB stacks,
     /// creating it on the stack and then boxing would use significant
     /// stack space. This method allocates on the heap first, then
     /// initializes fields in place using ptr::write.
-    /// 
+    ///
     /// # Safety
-    /// 
+    ///
     /// This function uses unsafe code internally to write fields directly
     /// to heap-allocated memory, avoiding stack allocation of the full struct.
     /// All fields are properly initialized before the struct is returned.
@@ -500,21 +496,24 @@ impl VerifierEnv {
         }
 
         let insn_count = insns.len();
-        
+
         // Allocate uninitialized memory on the heap
         let mut boxed: Box<MaybeUninit<Self>> = Box::new(MaybeUninit::uninit());
         let env_ptr = boxed.as_mut_ptr();
-        
+
         // Safety: We're writing to heap-allocated memory through raw pointers.
         // Each field is initialized exactly once before we convert to Box<Self>.
         unsafe {
             // Initialize each field in place using ptr::write
             // This avoids creating the struct on the stack
-            
+
             ptr::write(ptr::addr_of_mut!((*env_ptr).prog_type), prog_type);
-            ptr::write(ptr::addr_of_mut!((*env_ptr).expected_attach_type), BpfAttachType::None);
+            ptr::write(
+                ptr::addr_of_mut!((*env_ptr).expected_attach_type),
+                BpfAttachType::None,
+            );
             ptr::write(ptr::addr_of_mut!((*env_ptr).insns), insns);
-            
+
             // Build vectors - they allocate on heap internally
             let insn_aux: Vec<InsnAuxData> = (0..insn_count)
                 .map(|i| InsnAuxData {
@@ -523,24 +522,33 @@ impl VerifierEnv {
                 })
                 .collect();
             ptr::write(ptr::addr_of_mut!((*env_ptr).insn_aux), insn_aux);
-            
+
             let subprogs = vec![SubprogInfoEntry::new(0, insn_count)];
             ptr::write(ptr::addr_of_mut!((*env_ptr).subprogs), subprogs);
-            
+
             ptr::write(ptr::addr_of_mut!((*env_ptr).cur_state), None);
             ptr::write(ptr::addr_of_mut!((*env_ptr).state_stack), Vec::new());
-            ptr::write(ptr::addr_of_mut!((*env_ptr).explored_states), HashMap::new());
+            ptr::write(
+                ptr::addr_of_mut!((*env_ptr).explored_states),
+                HashMap::new(),
+            );
             ptr::write(ptr::addr_of_mut!((*env_ptr).cfg), None);
             ptr::write(ptr::addr_of_mut!((*env_ptr).scc_analysis), None);
             ptr::write(ptr::addr_of_mut!((*env_ptr).back_edge_propagator), None);
-            
+
             let sanitize_aux = vec![SanitizeAuxData::default(); insn_count];
             ptr::write(ptr::addr_of_mut!((*env_ptr).sanitize_aux), sanitize_aux);
-            
+
             ptr::write(ptr::addr_of_mut!((*env_ptr).speculative), false);
-            ptr::write(ptr::addr_of_mut!((*env_ptr).log), VerifierLog::new(LogLevel::Info));
+            ptr::write(
+                ptr::addr_of_mut!((*env_ptr).log),
+                VerifierLog::new(LogLevel::Info),
+            );
             ptr::write(ptr::addr_of_mut!((*env_ptr).caps), VerifierCaps::modern());
-            ptr::write(ptr::addr_of_mut!((*env_ptr).allow_ptr_leaks), allow_ptr_leaks);
+            ptr::write(
+                ptr::addr_of_mut!((*env_ptr).allow_ptr_leaks),
+                allow_ptr_leaks,
+            );
             ptr::write(ptr::addr_of_mut!((*env_ptr).insn_processed), 0);
             ptr::write(ptr::addr_of_mut!((*env_ptr).peak_states), 0);
             ptr::write(ptr::addr_of_mut!((*env_ptr).total_states), 0);
@@ -551,17 +559,26 @@ impl VerifierEnv {
             ptr::write(ptr::addr_of_mut!((*env_ptr).id_gen), 0);
             ptr::write(ptr::addr_of_mut!((*env_ptr).in_callback), false);
             ptr::write(ptr::addr_of_mut!((*env_ptr).callback_depth), 0);
-            ptr::write(ptr::addr_of_mut!((*env_ptr).exception_callback_subprog), None);
-            ptr::write(ptr::addr_of_mut!((*env_ptr).stack_write_marks), StackWriteMarks::new());
+            ptr::write(
+                ptr::addr_of_mut!((*env_ptr).exception_callback_subprog),
+                None,
+            );
+            ptr::write(
+                ptr::addr_of_mut!((*env_ptr).stack_write_marks),
+                StackWriteMarks::new(),
+            );
             ptr::write(ptr::addr_of_mut!((*env_ptr).prog_sleepable), false);
             ptr::write(ptr::addr_of_mut!((*env_ptr).btf_ctx), BtfContext::new());
             ptr::write(ptr::addr_of_mut!((*env_ptr).struct_ops_ctx), None);
             ptr::write(ptr::addr_of_mut!((*env_ptr).attach_btf_id), 0);
             ptr::write(ptr::addr_of_mut!((*env_ptr).expected_attach_type_idx), 0);
             ptr::write(ptr::addr_of_mut!((*env_ptr).has_refcounted_args), false);
-            ptr::write(ptr::addr_of_mut!((*env_ptr).race_detector), RaceDetector::new(prog_type));
+            ptr::write(
+                ptr::addr_of_mut!((*env_ptr).race_detector),
+                RaceDetector::new(prog_type),
+            );
             ptr::write(ptr::addr_of_mut!((*env_ptr).race_detection_enabled), true);
-            
+
             // All fields initialized, convert to Box<Self>
             Ok(Box::from_raw(Box::into_raw(boxed) as *mut Self))
         }
@@ -581,25 +598,25 @@ impl VerifierEnv {
     pub fn format_error_with_source(&self, insn_idx: usize, msg: &str) -> String {
         self.btf_ctx.format_error(insn_idx, msg)
     }
-    
+
     /// Reset stack write marks before processing an instruction
-    /// 
+    ///
     /// This should be called at the start of do_check_insn to track
     /// which stack slots are written during speculative execution.
     pub fn reset_stack_write_marks(&mut self) {
         self.stack_write_marks.reset();
     }
-    
+
     /// Commit stack write marks after successful instruction execution
-    /// 
+    ///
     /// This should be called after do_check_insn succeeds to commit
     /// the stack writes for speculative execution safety.
     pub fn commit_stack_write_marks(&mut self) -> bool {
         self.stack_write_marks.commit()
     }
-    
+
     /// Mark a stack slot as written
-    /// 
+    ///
     /// Called during stack write operations to track which slots are modified.
     pub fn mark_stack_write(&mut self, frameno: u32, spi: usize) {
         self.stack_write_marks.mark_write(frameno, spi);
@@ -694,7 +711,7 @@ impl VerifierEnv {
     pub fn check_limits(&self) -> Result<()> {
         if self.insn_processed > BPF_MAX_VERIFICATION_ITERATIONS {
             return Err(VerifierError::VerificationLimitExceeded(
-                "instruction limit".into()
+                "instruction limit".into(),
             ));
         }
         Ok(())
@@ -729,13 +746,13 @@ impl VerifierEnv {
     /// Initialize SCC analysis for loop detection
     pub fn init_scc_analysis(&mut self) {
         use crate::analysis::scc::compute_scc;
-        
+
         let analysis = compute_scc(&self.insns);
-        
+
         // Create back edge propagator with default max iterations
         // BPF_MAX_LOOPS from kernel is typically 8 million, but we use per-loop limit
         let propagator = BackEdgePropagator::from_scc_analysis(&analysis, 1024);
-        
+
         // Mark loop headers as prune points for better state caching
         for scc in &analysis.sccs {
             if scc.is_loop {
@@ -747,7 +764,7 @@ impl VerifierEnv {
                 }
             }
         }
-        
+
         self.scc_analysis = Some(analysis);
         self.back_edge_propagator = Some(propagator);
     }
@@ -817,7 +834,7 @@ impl VerifierEnv {
     }
 
     /// Create a UserMemContext from the current verification environment
-    /// 
+    ///
     /// This provides the proper context for user memory access validation
     /// based on the program's capabilities and current verification state.
     pub fn user_mem_context(&self) -> UserMemContext {
@@ -825,7 +842,7 @@ impl VerifierEnv {
             privileged: self.allow_ptr_leaks,
             sleepable: self.prog_sleepable,
             allow_direct_access: false, // Set per-access based on arena user pointers
-            has_nospec: false, // Set per-instruction based on sanitize_aux
+            has_nospec: false,          // Set per-instruction based on sanitize_aux
             prog_type: self.prog_type,
         }
     }
@@ -847,8 +864,8 @@ impl VerifierEnv {
     }
 
     /// Initialize struct_ops context for verification
-    /// 
-    /// This should be called during program setup when attach_btf_id 
+    ///
+    /// This should be called during program setup when attach_btf_id
     /// and expected_attach_type are known.
     pub fn init_struct_ops_context(
         &mut self,
@@ -871,7 +888,7 @@ impl VerifierEnv {
     }
 
     /// Check struct_ops BTF ID validity
-    /// 
+    ///
     /// This corresponds to the kernel's `check_struct_ops_btf_id()`.
     /// It validates the attach_btf_id and member_idx are valid for
     /// a struct_ops program.
@@ -886,15 +903,13 @@ impl VerifierEnv {
         // Must have an attach_btf_id
         if self.attach_btf_id == 0 {
             return Err(VerifierError::InvalidProgramType(
-                "struct_ops program requires attach_btf_id".into()
+                "struct_ops program requires attach_btf_id".into(),
             ));
         }
 
         // Get struct_ops context
         let ctx = self.struct_ops_ctx.as_mut().ok_or_else(|| {
-            VerifierError::InvalidProgramType(
-                "struct_ops context not initialized".into()
-            )
+            VerifierError::InvalidProgramType("struct_ops context not initialized".into())
         })?;
 
         // Validate member index
@@ -902,7 +917,8 @@ impl VerifierEnv {
         if member_idx >= ctx.members.len() {
             return Err(VerifierError::InvalidProgramType(format!(
                 "attach to invalid member idx {} of struct_ops (max {})",
-                member_idx, ctx.members.len()
+                member_idx,
+                ctx.members.len()
             )));
         }
 
@@ -911,7 +927,8 @@ impl VerifierEnv {
 
         // Check if member supports sleepable
         if self.prog_sleepable && !ctx.current_supports_sleepable() {
-            let member_name = ctx.current_member_info()
+            let member_name = ctx
+                .current_member_info()
                 .map(|m| m.name.as_str())
                 .unwrap_or("unknown");
             return Err(VerifierError::InvalidProgramType(format!(
@@ -924,19 +941,22 @@ impl VerifierEnv {
     }
 
     /// Check if tail calls are allowed for this program
-    /// 
+    ///
     /// Programs with refcounted arguments cannot tail call.
     pub fn check_tail_call_allowed(&self) -> Result<()> {
         if self.has_refcounted_args {
             return Err(VerifierError::InvalidFunctionCall(
-                "program with refcounted arguments cannot tail call".into()
+                "program with refcounted arguments cannot tail call".into(),
             ));
         }
         Ok(())
     }
 
     /// Validate struct_ops return value
-    pub fn validate_struct_ops_return(&self, retval: &crate::state::reg_state::BpfRegState) -> Result<()> {
+    pub fn validate_struct_ops_return(
+        &self,
+        retval: &crate::state::reg_state::BpfRegState,
+    ) -> Result<()> {
         if !self.is_struct_ops() {
             return Ok(());
         }
@@ -1074,7 +1094,7 @@ impl VerifierEnv {
         if !self.race_detection_enabled {
             return Ok(());
         }
-        
+
         let _races = self.race_detector.analyze();
         self.race_detector.validate()
     }

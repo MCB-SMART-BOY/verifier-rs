@@ -1,10 +1,10 @@
+// SPDX-License-Identifier: GPL-2.0
+
 //!
 
 //! This module tracks BPF spin lock state to ensure correct lock/unlock
 
 //! pairing and detect potential deadlocks.
-
-
 
 use alloc::{format, vec::Vec};
 
@@ -51,17 +51,10 @@ impl LockState {
     }
 
     /// Acquire a lock
-    pub fn acquire(
-        &mut self,
-        map_uid: u32,
-        map_off: u32,
-        insn_idx: usize,
-    ) -> Result<LockId> {
+    pub fn acquire(&mut self, map_uid: u32, map_off: u32, insn_idx: usize) -> Result<LockId> {
         // Check nesting limit
         if self.held_locks.len() >= MAX_LOCK_DEPTH {
-            return Err(VerifierError::InvalidLock(
-                "too many nested locks".into()
-            ));
+            return Err(VerifierError::InvalidLock("too many nested locks".into()));
         }
 
         // Check for already held (same lock)
@@ -88,37 +81,32 @@ impl LockState {
     }
 
     /// Release a lock
-    pub fn release(
-        &mut self,
-        map_uid: u32,
-        map_off: u32,
-    ) -> Result<LockId> {
+    pub fn release(&mut self, map_uid: u32, map_off: u32) -> Result<LockId> {
         // Find the lock
-        let pos = self.held_locks.iter().position(|l| {
-            l.map_uid == map_uid && l.map_off == map_off
-        });
+        let pos = self
+            .held_locks
+            .iter()
+            .position(|l| l.map_uid == map_uid && l.map_off == map_off);
 
         match pos {
             Some(idx) => {
                 // For proper nesting, should release most recent lock
                 if idx != self.held_locks.len() - 1 {
                     return Err(VerifierError::InvalidLock(
-                        "locks must be released in reverse order".into()
+                        "locks must be released in reverse order".into(),
                     ));
                 }
                 match self.held_locks.pop() {
                     Some(lock) => Ok(lock.id),
                     None => Err(VerifierError::InvalidLock(
-                        "lock state inconsistency".into()
+                        "lock state inconsistency".into(),
                     )),
                 }
             }
-            None => {
-                Err(VerifierError::InvalidLock(format!(
-                    "releasing lock not held: map_uid={}, offset={}",
-                    map_uid, map_off
-                )))
-            }
+            None => Err(VerifierError::InvalidLock(format!(
+                "releasing lock not held: map_uid={}, offset={}",
+                map_uid, map_off
+            ))),
         }
     }
 
@@ -134,7 +122,9 @@ impl LockState {
 
     /// Check if a specific lock is held
     pub fn is_locked(&self, map_uid: u32, map_off: u32) -> bool {
-        self.held_locks.iter().any(|l| l.map_uid == map_uid && l.map_off == map_off)
+        self.held_locks
+            .iter()
+            .any(|l| l.map_uid == map_uid && l.map_off == map_off)
     }
 
     /// Get the most recently acquired lock
@@ -167,14 +157,14 @@ impl LockState {
         if self.held_locks.len() != other.held_locks.len() {
             return false;
         }
-        
+
         // Lock IDs may differ but locks should be at same locations
         for (a, b) in self.held_locks.iter().zip(other.held_locks.iter()) {
             if a.map_uid != b.map_uid || a.map_off != b.map_off {
                 return false;
             }
         }
-        
+
         true
     }
 }
@@ -194,11 +184,12 @@ pub enum LockAllowedOp {
 
 /// Check if an operation is allowed while holding a lock
 pub fn is_op_lock_safe(op: LockAllowedOp) -> bool {
-    matches!(op, 
-        LockAllowedOp::MapValueAccess | 
-        LockAllowedOp::Alu | 
-        LockAllowedOp::ConditionalJump |
-        LockAllowedOp::LockSafeHelper
+    matches!(
+        op,
+        LockAllowedOp::MapValueAccess
+            | LockAllowedOp::Alu
+            | LockAllowedOp::ConditionalJump
+            | LockAllowedOp::LockSafeHelper
     )
 }
 
@@ -215,7 +206,7 @@ pub fn check_lock_restrictions(
     // Cannot call helpers that might sleep while holding lock
     if is_helper_call && might_sleep {
         return Err(VerifierError::InvalidLock(
-            "cannot call sleeping helper while holding spin lock".into()
+            "cannot call sleeping helper while holding spin lock".into(),
         ));
     }
 
@@ -284,7 +275,7 @@ impl RcuState {
     pub fn rcu_read_unlock(&mut self) -> Result<()> {
         if self.rcu_nesting == 0 {
             return Err(VerifierError::InvalidLock(
-                "rcu_read_unlock without matching rcu_read_lock".into()
+                "rcu_read_unlock without matching rcu_read_lock".into(),
             ));
         }
         self.rcu_nesting -= 1;
@@ -316,7 +307,7 @@ impl RcuState {
             if ptr.reg_id == reg_id {
                 if !ptr.valid {
                     return Err(VerifierError::InvalidLock(
-                        "accessing RCU pointer after rcu_read_unlock".into()
+                        "accessing RCU pointer after rcu_read_unlock".into(),
                     ));
                 }
                 return Ok(());
@@ -330,7 +321,7 @@ impl RcuState {
     pub fn check_all_unlocked(&self) -> Result<()> {
         if self.rcu_nesting > 0 {
             return Err(VerifierError::InvalidLock(format!(
-                "rcu_read_lock not unlocked (nesting={})", 
+                "rcu_read_lock not unlocked (nesting={})",
                 self.rcu_nesting
             )));
         }
@@ -368,7 +359,7 @@ impl SyncState {
         self.rcu.check_all_unlocked()?;
         if self.preempt_disabled {
             return Err(VerifierError::InvalidLock(
-                "preemption not re-enabled at exit".into()
+                "preemption not re-enabled at exit".into(),
             ));
         }
         Ok(())
@@ -376,7 +367,7 @@ impl SyncState {
 
     /// Check if states are equivalent for pruning
     pub fn equivalent(&self, other: &SyncState) -> bool {
-        self.lock.equivalent(&other.lock) 
+        self.lock.equivalent(&other.lock)
             && self.rcu.equivalent(&other.rcu)
             && self.preempt_disable_depth == other.preempt_disable_depth
     }
@@ -391,7 +382,7 @@ impl SyncState {
     pub fn preempt_enable(&mut self) -> Result<()> {
         if self.preempt_disable_depth == 0 {
             return Err(VerifierError::InvalidLock(
-                "preempt_enable without matching preempt_disable".into()
+                "preempt_enable without matching preempt_disable".into(),
             ));
         }
         self.preempt_disable_depth -= 1;
@@ -406,26 +397,24 @@ impl SyncState {
 pub fn helper_might_sleep(helper_id: u32) -> bool {
     // List of helpers that might sleep
     const SLEEPING_HELPERS: &[u32] = &[
-        1,   // bpf_map_lookup_elem (some map types)
-        2,   // bpf_map_update_elem (some map types)
-        3,   // bpf_map_delete_elem (some map types)
-        11,  // bpf_get_current_comm
-        // ... more helpers
+        1, // bpf_map_lookup_elem (some map types)
+        2, // bpf_map_update_elem (some map types)
+        3, // bpf_map_delete_elem (some map types)
+        11, // bpf_get_current_comm
+           // ... more helpers
     ];
     SLEEPING_HELPERS.contains(&helper_id)
 }
 
 /// Validate synchronization state for a helper call
-pub fn validate_sync_for_helper(
-    sync: &SyncState,
-    helper_id: u32,
-) -> Result<()> {
+pub fn validate_sync_for_helper(sync: &SyncState, helper_id: u32) -> Result<()> {
     // Check spin lock restrictions
     if sync.lock.has_locks() {
         if helper_might_sleep(helper_id) {
-            return Err(VerifierError::InvalidLock(
-                format!("helper {} might sleep while holding spin lock", helper_id)
-            ));
+            return Err(VerifierError::InvalidLock(format!(
+                "helper {} might sleep while holding spin lock",
+                helper_id
+            )));
         }
     }
 
@@ -457,14 +446,10 @@ pub fn is_rcu_unlock_kfunc(kfunc_id: u32) -> bool {
 }
 
 /// Validate pointer access based on synchronization state
-pub fn validate_ptr_access_sync(
-    sync: &SyncState,
-    is_rcu_ptr: bool,
-    _ptr_id: u32,
-) -> Result<()> {
+pub fn validate_ptr_access_sync(sync: &SyncState, is_rcu_ptr: bool, _ptr_id: u32) -> Result<()> {
     if is_rcu_ptr && !sync.rcu.in_rcu_section {
         return Err(VerifierError::InvalidLock(
-            "accessing RCU pointer outside RCU read-side critical section".into()
+            "accessing RCU pointer outside RCU read-side critical section".into(),
         ));
     }
     Ok(())
@@ -594,7 +579,7 @@ impl IrqState {
             }
         } else {
             return Err(VerifierError::InvalidLock(
-                "restoring IRQ state without matching save".into()
+                "restoring IRQ state without matching save".into(),
             ));
         }
 
@@ -649,15 +634,12 @@ pub fn mark_stack_slot_irq_flag(
 }
 
 /// Unmark stack slot IRQ flag (on restore)
-pub fn unmark_stack_slot_irq_flag(
-    irq_state: &mut IrqState,
-    ref_obj_id: u32,
-) -> Result<()> {
+pub fn unmark_stack_slot_irq_flag(irq_state: &mut IrqState, ref_obj_id: u32) -> Result<()> {
     irq_state.release_irq(ref_obj_id)
 }
 
 /// Unmark stack slot IRQ flag with kfunc class validation
-/// 
+///
 /// This ensures that IRQ flags are restored using the matching kfunc class:
 /// - native kfuncs (local_irq_save/restore) must be matched
 /// - lock kfuncs (spin_lock_irqsave/unlock_irqrestore) must be matched
@@ -667,18 +649,17 @@ pub fn unmark_stack_slot_irq_flag_with_class(
     restore_kfunc_class: IrqKfuncClass,
 ) -> Result<()> {
     // Find the IRQ flag to get its kfunc class
-    let saved_class = irq_state.get_irq_flag(ref_obj_id)
+    let saved_class = irq_state
+        .get_irq_flag(ref_obj_id)
         .map(|f| f.kfunc_class)
-        .ok_or_else(|| VerifierError::InvalidLock(
-            "IRQ flag not found for restore".into()
-        ))?;
-    
+        .ok_or_else(|| VerifierError::InvalidLock("IRQ flag not found for restore".into()))?;
+
     // Validate kfunc class compatibility
     let is_native_save = matches!(saved_class, IrqKfuncClass::LocalIrqSave);
     let is_native_restore = matches!(restore_kfunc_class, IrqKfuncClass::LocalIrqRestore);
     let is_lock_save = matches!(saved_class, IrqKfuncClass::SpinLockIrqSave);
     let is_lock_restore = matches!(restore_kfunc_class, IrqKfuncClass::SpinUnlockIrqRestore);
-    
+
     if (is_native_save && !is_native_restore) || (is_lock_save && !is_lock_restore) {
         let flag_type = if is_native_save { "native" } else { "lock" };
         let used_type = if is_native_restore { "native" } else { "lock" };
@@ -687,7 +668,7 @@ pub fn unmark_stack_slot_irq_flag_with_class(
             flag_type, used_type
         )));
     }
-    
+
     irq_state.release_irq(ref_obj_id)
 }
 
@@ -698,13 +679,10 @@ pub fn is_irq_flag_reg_valid_uninit(spi: usize, stack_size: usize) -> bool {
 }
 
 /// Check if IRQ flag register is valid (already initialized)
-pub fn is_irq_flag_reg_valid_init(
-    irq_state: &IrqState,
-    ref_obj_id: u32,
-) -> Result<()> {
+pub fn is_irq_flag_reg_valid_init(irq_state: &IrqState, ref_obj_id: u32) -> Result<()> {
     if irq_state.get_irq_flag(ref_obj_id).is_none() {
         return Err(VerifierError::InvalidLock(
-            "invalid IRQ flag reference".into()
+            "invalid IRQ flag reference".into(),
         ));
     }
     Ok(())

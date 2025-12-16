@@ -1,16 +1,22 @@
+// SPDX-License-Identifier: GPL-2.0
+
 //! Reference leak detection
 //!
 //! This module provides comprehensive reference leak detection for BPF programs.
 //! It tracks reference acquisition and release across all paths and reports
 //! detailed information about leaks.
 
-
-use alloc::{string::{String, ToString}, vec, vec::Vec, format};
+use alloc::{
+    format,
+    string::{String, ToString},
+    vec,
+    vec::Vec,
+};
 
 use alloc::collections::{BTreeMap as HashMap, BTreeSet as HashSet};
 
-use crate::core::types::RefStateType;
 use crate::core::error::{Result, VerifierError};
+use crate::core::types::RefStateType;
 use crate::state::reference::BpfReferenceState;
 
 /// Information about a potential leak
@@ -64,9 +70,9 @@ impl LeakDetectionResult {
 
     /// Get the first leak error for verification
     pub fn first_leak_error(&self) -> Option<VerifierError> {
-        self.leaks.first().map(|leak| {
-            VerifierError::UnreleasedReference(leak.ref_id)
-        })
+        self.leaks
+            .first()
+            .map(|leak| VerifierError::UnreleasedReference(leak.ref_id))
     }
 
     /// Generate detailed leak report
@@ -91,21 +97,23 @@ impl LeakDetectionResult {
                 "  Acquired at insn {}: {}\n",
                 leak.acquire_insn, leak.acquire_source
             ));
-            
+
             for path in &leak.leak_paths {
                 report.push_str(&format!(
                     "  Unreleased at exit insn {}{}\n",
                     path.exit_insn,
-                    if path.is_callback_return { " (callback return)" } else { "" }
+                    if path.is_callback_return {
+                        " (callback return)"
+                    } else {
+                        ""
+                    }
                 ));
             }
         }
 
         report.push_str(&format!(
             "\nSummary: {}/{} references released, {} paths analyzed\n",
-            self.total_released,
-            self.total_acquired,
-            self.paths_analyzed
+            self.total_released, self.total_acquired, self.paths_analyzed
         ));
 
         report
@@ -280,11 +288,7 @@ impl LeakDetector {
     }
 
     /// Check references at exit and return error if any leaks
-    pub fn check_at_exit(
-        &self,
-        refs: &[BpfReferenceState],
-        exit_insn: usize,
-    ) -> Result<()> {
+    pub fn check_at_exit(&self, refs: &[BpfReferenceState], exit_insn: usize) -> Result<()> {
         for r in refs {
             match r.ref_type {
                 RefStateType::Ptr => {
@@ -310,19 +314,26 @@ impl LeakDetector {
 
     /// Quick check for leaks (used during verification)
     pub fn has_unreleased_refs(refs: &[BpfReferenceState]) -> bool {
-        refs.iter().any(|r| matches!(
-            r.ref_type,
-            RefStateType::Ptr | RefStateType::Lock | RefStateType::ResLock | RefStateType::Irq
-        ))
+        refs.iter().any(|r| {
+            matches!(
+                r.ref_type,
+                RefStateType::Ptr | RefStateType::Lock | RefStateType::ResLock | RefStateType::Irq
+            )
+        })
     }
 
     /// Get leaked reference IDs
     pub fn get_leaked_ids(refs: &[BpfReferenceState]) -> Vec<u32> {
         refs.iter()
-            .filter(|r| matches!(
-                r.ref_type,
-                RefStateType::Ptr | RefStateType::Lock | RefStateType::ResLock | RefStateType::Irq
-            ))
+            .filter(|r| {
+                matches!(
+                    r.ref_type,
+                    RefStateType::Ptr
+                        | RefStateType::Lock
+                        | RefStateType::ResLock
+                        | RefStateType::Irq
+                )
+            })
             .map(|r| r.id)
             .collect()
     }

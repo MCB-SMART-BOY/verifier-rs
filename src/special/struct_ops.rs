@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0
+
 //! Struct_ops program verification support.
 //!
 //! struct_ops allows BPF programs to implement kernel struct operations,
@@ -11,11 +13,10 @@
 //! 4. Some struct_ops can be sleepable, others cannot
 //! 5. State transitions and lifecycle must be validated
 
-
 use alloc::{format, string::String, vec, vec::Vec};
 
-use crate::core::types::*;
 use crate::core::error::{Result, VerifierError};
+use crate::core::types::*;
 use crate::state::reg_state::BpfRegState;
 
 // ============================================================================
@@ -201,11 +202,7 @@ pub mod tcp_congestion_ops {
 
     /// Initialize TCP congestion ops struct_ops context
     pub fn init_context(struct_btf_id: u32, map_id: u32) -> StructOpsContext {
-        let mut ctx = StructOpsContext::new(
-            StructOpsType::TcpCongestionOps,
-            struct_btf_id,
-            map_id,
-        );
+        let mut ctx = StructOpsContext::new(StructOpsType::TcpCongestionOps, struct_btf_id, map_id);
 
         // Add standard TCP congestion control callbacks
         ctx.add_member(StructOpsMemberInfo {
@@ -322,8 +319,8 @@ pub mod tcp_congestion_ops {
                     )));
                 }
             }
-            "init" | "release" | "cong_avoid" | "set_state" | "cwnd_event"
-            | "in_ack_event" | "pkts_acked" => {
+            "init" | "release" | "cong_avoid" | "set_state" | "cwnd_event" | "in_ack_event"
+            | "pkts_acked" => {
                 // Void return - value is ignored but should be 0
             }
             _ => {
@@ -339,26 +336,25 @@ pub mod tcp_congestion_ops {
 // ============================================================================
 
 /// Validate struct_ops callback arguments
-pub fn validate_struct_ops_args(
-    ctx: &StructOpsContext,
-    args: &[BpfRegState],
-) -> Result<()> {
-    let member = ctx.current_member_info().ok_or_else(|| {
-        VerifierError::InvalidFunctionCall("no current struct_ops member".into())
-    })?;
+pub fn validate_struct_ops_args(ctx: &StructOpsContext, args: &[BpfRegState]) -> Result<()> {
+    let member = ctx
+        .current_member_info()
+        .ok_or_else(|| VerifierError::InvalidFunctionCall("no current struct_ops member".into()))?;
 
     // Check argument count
     if args.len() < member.arg_count {
         return Err(VerifierError::InvalidFunctionCall(format!(
             "struct_ops.{} requires {} arguments, got {}",
-            member.name, member.arg_count, args.len()
+            member.name,
+            member.arg_count,
+            args.len()
         )));
     }
 
     // First argument is typically the struct context (e.g., struct sock *)
     if !args.is_empty() {
         let first_arg = &args[0];
-        
+
         // Must be a BTF pointer type
         if first_arg.reg_type != BpfRegType::PtrToBtfId {
             // Allow PtrToCtx as well since it may be typed
@@ -381,13 +377,10 @@ pub fn validate_struct_ops_args(
 }
 
 /// Validate return value for struct_ops callback
-pub fn validate_struct_ops_return(
-    ctx: &StructOpsContext,
-    retval: &BpfRegState,
-) -> Result<()> {
-    let member = ctx.current_member_info().ok_or_else(|| {
-        VerifierError::InvalidFunctionCall("no current struct_ops member".into())
-    })?;
+pub fn validate_struct_ops_return(ctx: &StructOpsContext, retval: &BpfRegState) -> Result<()> {
+    let member = ctx
+        .current_member_info()
+        .ok_or_else(|| VerifierError::InvalidFunctionCall("no current struct_ops member".into()))?;
 
     // Get expected return range
     let expected_range = member.ret_type.get_range();
@@ -424,8 +417,7 @@ pub fn validate_struct_ops_return(
         {
             return Err(VerifierError::InvalidReturnValue(format!(
                 "return value range [{}, {}] outside expected [{}, {}]",
-                retval.smin_value, retval.smax_value,
-                expected_range.minval, expected_range.maxval
+                retval.smin_value, retval.smax_value, expected_range.minval, expected_range.maxval
             )));
         }
     }
@@ -438,10 +430,7 @@ pub fn validate_struct_ops_return(
 // ============================================================================
 
 /// Validate struct_ops map creation
-pub fn validate_struct_ops_map(
-    btf_vmlinux_value_type_id: u32,
-    map_btf_id: u32,
-) -> Result<()> {
+pub fn validate_struct_ops_map(btf_vmlinux_value_type_id: u32, map_btf_id: u32) -> Result<()> {
     // struct_ops map must have a valid BTF type
     if btf_vmlinux_value_type_id == 0 {
         return Err(VerifierError::InvalidMapAccess(
@@ -504,18 +493,12 @@ impl StructOpsState {
     /// Transition to next state
     pub fn transition(&mut self, event: StructOpsEvent) -> Result<()> {
         let new_state = match (*self, event) {
-            (StructOpsState::Init, StructOpsEvent::AttachPrograms) => {
-                StructOpsState::Ready
-            }
-            (StructOpsState::Ready, StructOpsEvent::Register) => {
-                StructOpsState::Registered
-            }
+            (StructOpsState::Init, StructOpsEvent::AttachPrograms) => StructOpsState::Ready,
+            (StructOpsState::Ready, StructOpsEvent::Register) => StructOpsState::Registered,
             (StructOpsState::Registered, StructOpsEvent::Unregister) => {
                 StructOpsState::Unregistering
             }
-            (StructOpsState::Unregistering, StructOpsEvent::Complete) => {
-                StructOpsState::Destroyed
-            }
+            (StructOpsState::Unregistering, StructOpsEvent::Complete) => StructOpsState::Destroyed,
             _ => {
                 return Err(VerifierError::InvalidState(format!(
                     "invalid struct_ops transition from {:?} on {:?}",
@@ -547,10 +530,7 @@ pub enum StructOpsEvent {
 // ============================================================================
 
 /// Check if a helper is allowed in struct_ops context
-pub fn is_helper_allowed_in_struct_ops(
-    func_id: BpfFuncId,
-    ops_type: StructOpsType,
-) -> bool {
+pub fn is_helper_allowed_in_struct_ops(func_id: BpfFuncId, ops_type: StructOpsType) -> bool {
     // Common helpers allowed in all struct_ops
     let common_allowed = matches!(
         func_id,
@@ -580,9 +560,7 @@ pub fn is_helper_allowed_in_struct_ops(
             // TCP congestion control specific helpers
             matches!(
                 func_id,
-                BpfFuncId::TcpSendAck
-                    | BpfFuncId::SkStorageGet
-                    | BpfFuncId::SkStorageDelete
+                BpfFuncId::TcpSendAck | BpfFuncId::SkStorageGet | BpfFuncId::SkStorageDelete
             )
         }
         StructOpsType::SchedExtOps => {
@@ -622,8 +600,7 @@ pub mod struct_ops_kfuncs {
 pub fn is_struct_ops_kfunc(btf_id: u32) -> bool {
     matches!(
         btf_id,
-        struct_ops_kfuncs::BPF_STRUCT_OPS_GET_STATE
-            | struct_ops_kfuncs::BPF_STRUCT_OPS_SET_RESULT
+        struct_ops_kfuncs::BPF_STRUCT_OPS_GET_STATE | struct_ops_kfuncs::BPF_STRUCT_OPS_SET_RESULT
     )
 }
 

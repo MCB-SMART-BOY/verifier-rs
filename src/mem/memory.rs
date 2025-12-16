@@ -1,19 +1,19 @@
+// SPDX-License-Identifier: GPL-2.0
+
 //!
 
 //! This module handles validation of memory load and store operations,
 
 //! including checks for pointer bounds, alignment, and access permissions.
 
-
-
 use alloc::{format, string::ToString};
 
+use crate::core::error::{Result, VerifierError};
+use crate::core::types::*;
 use crate::state::reg_state::BpfRegState;
 use crate::state::verifier_state::BpfVerifierState;
-use crate::core::types::*;
-use crate::core::error::{Result, VerifierError};
 
-use super::context::{ContextAccessRules, check_ctx_access as context_check_ctx_access};
+use super::context::{check_ctx_access as context_check_ctx_access, ContextAccessRules};
 use super::packet::MAX_PACKET_OFF;
 use super::user::UserMemContext;
 
@@ -34,11 +34,7 @@ pub fn may_access_direct_pkt_data(prog_type: BpfProgType, is_write: bool) -> boo
 }
 
 /// Check pointer alignment
-pub fn check_ptr_alignment(
-    reg: &BpfRegState,
-    access_size: u32,
-    strict: bool,
-) -> Result<()> {
+pub fn check_ptr_alignment(reg: &BpfRegState, access_size: u32, strict: bool) -> Result<()> {
     // Get the actual offset
     let off = reg.off + reg.var_off.value as i32;
 
@@ -54,7 +50,9 @@ pub fn check_ptr_alignment(
     if reg.is_pkt_pointer() {
         // Variable part must be aligned
         if reg.var_off.mask & (access_size as u64 - 1) != 0 {
-            return Err(VerifierError::InvalidMemoryAccess("misaligned packet access: variable offset has bad alignment".to_string()));
+            return Err(VerifierError::InvalidMemoryAccess(
+                "misaligned packet access: variable offset has bad alignment".to_string(),
+            ));
         }
     }
 
@@ -79,7 +77,7 @@ pub fn check_mem_access(
     } else {
         UserMemContext::default()
     };
-    
+
     check_mem_access_with_ctx(state, reg, off, size, is_write, allow_ptr_leaks, &user_ctx)
 }
 
@@ -104,9 +102,7 @@ pub fn check_mem_access_with_ctx(
     }
 
     match reg_type {
-        BpfRegType::PtrToStack => {
-            check_stack_access(state, reg, off, size, is_write)
-        }
+        BpfRegType::PtrToStack => check_stack_access(state, reg, off, size, is_write),
         BpfRegType::PtrToMapValue => {
             check_map_value_access(state, reg, off, size, is_write, allow_ptr_leaks)
         }
@@ -114,7 +110,7 @@ pub fn check_mem_access_with_ctx(
             // Map keys are read-only
             if is_write {
                 return Err(VerifierError::InvalidMapAccess(
-                    "cannot write to map key".into()
+                    "cannot write to map key".into(),
                 ));
             }
             check_map_key_access(reg, off, size)
@@ -122,28 +118,20 @@ pub fn check_mem_access_with_ctx(
         BpfRegType::PtrToPacket | BpfRegType::PtrToPacketMeta => {
             check_packet_access(reg, off, size, is_write, allow_ptr_leaks)
         }
-        BpfRegType::PtrToPacketEnd => {
-            Err(VerifierError::InvalidMemoryAccess(
-                "cannot access memory through packet_end pointer".into()
-            ))
-        }
-        BpfRegType::PtrToCtx => {
-            check_ctx_access(reg, off, size, is_write)
-        }
-        BpfRegType::PtrToBtfId => {
-            check_btf_id_access(reg, off, size, is_write)
-        }
+        BpfRegType::PtrToPacketEnd => Err(VerifierError::InvalidMemoryAccess(
+            "cannot access memory through packet_end pointer".into(),
+        )),
+        BpfRegType::PtrToCtx => check_ctx_access(reg, off, size, is_write),
+        BpfRegType::PtrToBtfId => check_btf_id_access(reg, off, size, is_write),
         BpfRegType::PtrToMem => {
             check_mem_region_access_with_ctx(reg, off, size, is_write, user_ctx)
         }
-        BpfRegType::PtrToArena => {
-            check_arena_access_with_ctx(reg, off, size, is_write, user_ctx)
-        }
+        BpfRegType::PtrToArena => check_arena_access_with_ctx(reg, off, size, is_write, user_ctx),
         BpfRegType::PtrToSocket | BpfRegType::PtrToSockCommon | BpfRegType::PtrToTcpSock => {
             // Socket pointers are read-only
             if is_write {
                 return Err(VerifierError::InvalidMemoryAccess(
-                    "cannot write to socket structure".into()
+                    "cannot write to socket structure".into(),
                 ));
             }
             check_sock_access(reg, off, size)
@@ -154,22 +142,16 @@ pub fn check_mem_access_with_ctx(
         BpfRegType::ConstPtrToMap => {
             // Reading map pointer itself (e.g., for bpf_map_lookup)
             Err(VerifierError::InvalidMemoryAccess(
-                "cannot dereference const map pointer directly".into()
+                "cannot dereference const map pointer directly".into(),
             ))
         }
-        BpfRegType::ScalarValue if reg.is_null() => {
-            Err(VerifierError::InvalidMemoryAccess(
-                "null pointer dereference".into(),
-            ))
-        }
-        BpfRegType::ScalarValue => {
-            Err(VerifierError::InvalidMemoryAccess(
-                "cannot dereference scalar value as pointer".into(),
-            ))
-        }
-        BpfRegType::NotInit => {
-            Err(VerifierError::UninitializedRegister(0))
-        }
+        BpfRegType::ScalarValue if reg.is_null() => Err(VerifierError::InvalidMemoryAccess(
+            "null pointer dereference".into(),
+        )),
+        BpfRegType::ScalarValue => Err(VerifierError::InvalidMemoryAccess(
+            "cannot dereference scalar value as pointer".into(),
+        )),
+        BpfRegType::NotInit => Err(VerifierError::UninitializedRegister(0)),
         _ => Err(VerifierError::InvalidMemoryAccess(format!(
             "invalid register type for memory access: {:?}",
             reg_type
@@ -190,10 +172,10 @@ fn check_stack_access(
 ) -> Result<BpfRegType> {
     use crate::core::types::BpfStackSlotType;
     use crate::state::stack_state::get_spi;
-    
+
     // Calculate min/max offset based on whether var_off is constant
     let (min_off, max_off): (i64, i64);
-    
+
     if reg.var_off.is_const() {
         // Constant offset case
         min_off = reg.var_off.value as i64 + reg.off as i64 + off as i64;
@@ -202,16 +184,16 @@ fn check_stack_access(
         // Variable offset case - use signed bounds
         // Check for unbounded variable offset
         if reg.smax_value >= BPF_MAX_VAR_OFF || reg.smin_value <= -BPF_MAX_VAR_OFF {
-            return Err(VerifierError::InvalidMemoryAccess(
-                format!("unbounded variable-offset stack access: smin={}, smax={}", 
-                    reg.smin_value, reg.smax_value)
-            ));
+            return Err(VerifierError::InvalidMemoryAccess(format!(
+                "unbounded variable-offset stack access: smin={}, smax={}",
+                reg.smin_value, reg.smax_value
+            )));
         }
-        
+
         min_off = reg.smin_value + reg.off as i64 + off as i64;
         max_off = reg.smax_value + reg.off as i64 + off as i64 + size as i64;
     }
-    
+
     // Stack grows downward, offsets must be negative
     // max_off is the end of access, must be <= 0
     if max_off > 0 {
@@ -224,14 +206,15 @@ fn check_stack_access(
             )));
         }
     }
-    
+
     // Check access size is valid
     if size == 0 || size > 8 {
         return Err(VerifierError::InvalidMemoryAccess(format!(
-            "invalid stack access size: {}", size
+            "invalid stack access size: {}",
+            size
         )));
     }
-    
+
     // min_off is the start of access (most negative), must be >= -MAX_BPF_STACK
     // The needed stack size is -min_off
     let stack_depth = (-min_off) as usize;
@@ -247,9 +230,9 @@ fn check_stack_access(
     }
 
     // Ensure stack is allocated to required depth
-    let func = state.cur_func_mut().ok_or(VerifierError::Internal(
-        "no current function".into(),
-    ))?;
+    let func = state
+        .cur_func_mut()
+        .ok_or(VerifierError::Internal("no current function".into()))?;
 
     if stack_depth > func.stack.allocated_stack {
         func.stack.grow(stack_depth)?;
@@ -258,10 +241,10 @@ fn check_stack_access(
     // For variable offset accesses, we need to handle all possibly-accessed slots
     let min_spi = get_spi(min_off as i32).ok_or(VerifierError::StackOutOfBounds(min_off as i32))?;
     let max_spi = get_spi((max_off - 1) as i32).unwrap_or(0);
-    
+
     // Variable offset writes mark all possible slots
     // Variable offset reads must check all possible slots are initialized
-    
+
     if is_write {
         // Writing to stack - mark affected slots as MISC (initialized)
         for spi in max_spi..=min_spi {
@@ -271,21 +254,22 @@ fn check_stack_access(
                 match slot_type {
                     BpfStackSlotType::Dynptr => {
                         return Err(VerifierError::InvalidMemoryAccess(
-                            "cannot overwrite dynptr slot".into()
+                            "cannot overwrite dynptr slot".into(),
                         ));
                     }
                     BpfStackSlotType::Iter => {
                         // Check if iterator is still active
-                        if func.stack.stack[spi].spilled_ptr.iter.state == 
-                           crate::core::types::BpfIterState::Active {
+                        if func.stack.stack[spi].spilled_ptr.iter.state
+                            == crate::core::types::BpfIterState::Active
+                        {
                             return Err(VerifierError::InvalidMemoryAccess(
-                                "cannot overwrite active iterator slot".into()
+                                "cannot overwrite active iterator slot".into(),
                             ));
                         }
                     }
                     _ => {}
                 }
-                
+
                 // For variable offset writes, mark as MISC (loses precision)
                 // The kernel also has logic to handle partial overwrites
                 if !reg.var_off.is_const() {
@@ -301,23 +285,26 @@ fn check_stack_access(
         // Reading from stack - verify all possibly-accessed bytes are initialized
         for spi in max_spi..=min_spi {
             if spi >= func.stack.stack.len() {
-                return Err(VerifierError::InvalidMemoryAccess(
-                    format!("reading uninitialized stack at spi {}", spi)
-                ));
+                return Err(VerifierError::InvalidMemoryAccess(format!(
+                    "reading uninitialized stack at spi {}",
+                    spi
+                )));
             }
-            
+
             let slot = &func.stack.stack[spi];
             // Check each byte in the slot
             for byte_idx in 0..BPF_REG_SIZE {
                 if slot.slot_type[byte_idx] == BpfStackSlotType::Invalid {
                     if reg.var_off.is_const() {
-                        return Err(VerifierError::InvalidMemoryAccess(
-                            format!("reading uninitialized stack at offset {}", min_off)
-                        ));
+                        return Err(VerifierError::InvalidMemoryAccess(format!(
+                            "reading uninitialized stack at offset {}",
+                            min_off
+                        )));
                     } else {
-                        return Err(VerifierError::InvalidMemoryAccess(
-                            format!("variable-offset read from possibly uninitialized stack at spi {}", spi)
-                        ));
+                        return Err(VerifierError::InvalidMemoryAccess(format!(
+                            "variable-offset read from possibly uninitialized stack at spi {}",
+                            spi
+                        )));
                     }
                 }
             }
@@ -338,7 +325,7 @@ fn check_map_value_access(
 ) -> Result<BpfRegType> {
     // Calculate min/max offset based on whether var_off is constant
     let (min_off, max_off): (i64, i64);
-    
+
     if reg.var_off.is_const() {
         // Constant offset case
         min_off = reg.var_off.value as i64 + reg.off as i64 + off as i64;
@@ -352,11 +339,11 @@ fn check_map_value_access(
                 reg.umax_value
             )));
         }
-        
+
         min_off = reg.umin_value as i64 + reg.off as i64 + off as i64;
         max_off = reg.umax_value as i64 + reg.off as i64 + off as i64 + size as i64;
     }
-    
+
     // Check for negative offset
     if min_off < 0 {
         if reg.var_off.is_const() {
@@ -407,11 +394,7 @@ fn check_map_value_access(
 }
 
 /// Check map key memory access
-fn check_map_key_access(
-    reg: &BpfRegState,
-    off: i32,
-    size: u32,
-) -> Result<BpfRegType> {
+fn check_map_key_access(reg: &BpfRegState, off: i32, size: u32) -> Result<BpfRegType> {
     let total_off = reg.off + off;
 
     if total_off < 0 {
@@ -446,7 +429,7 @@ fn check_packet_access(
 ) -> Result<BpfRegType> {
     // Calculate min/max offset based on whether var_off is constant
     let (min_off, max_off): (i64, i64);
-    
+
     if reg.var_off.is_const() {
         // Constant offset case
         min_off = reg.var_off.value as i64 + reg.off as i64 + off as i64;
@@ -460,11 +443,11 @@ fn check_packet_access(
                 reg.umax_value
             )));
         }
-        
+
         min_off = reg.umin_value as i64 + reg.off as i64 + off as i64;
         max_off = reg.umax_value as i64 + reg.off as i64 + off as i64 + size as i64;
     }
-    
+
     // Check for negative offset
     if min_off < 0 {
         if reg.var_off.is_const() {
@@ -497,7 +480,7 @@ fn check_packet_access(
 
     // Packet bounds are ultimately checked dynamically at runtime
     // by comparing against pkt_end. The above are static sanity checks.
-    
+
     // Check variable offset alignment for packet access
     if !reg.var_off.is_const() {
         // Variable part must be aligned to access size
@@ -518,22 +501,17 @@ fn check_packet_access(
 }
 
 /// Check context memory access
-fn check_ctx_access(
-    reg: &BpfRegState,
-    off: i32,
-    size: u32,
-    is_write: bool,
-) -> Result<BpfRegType> {
+fn check_ctx_access(reg: &BpfRegState, off: i32, size: u32, is_write: bool) -> Result<BpfRegType> {
     // Get context access rules based on program type
     // The program type would normally be passed from verifier env,
     // but for now we infer it from the context or use a default
     let rules = get_ctx_access_rules_for_reg(reg);
-    
+
     context_check_ctx_access(reg, off, size, is_write, &rules)
 }
 
 /// Get context access rules for a register
-/// 
+///
 /// In a full implementation, this would use the program type from the
 /// verifier environment. For now, we try to infer from available info
 /// or use permissive defaults.
@@ -544,14 +522,14 @@ fn get_ctx_access_rules_for_reg(reg: &BpfRegState) -> ContextAccessRules {
         // For now, use XDP as a reasonable default with common fields
         return ContextAccessRules::xdp();
     }
-    
+
     // Default to a permissive context that allows reads of scalar values
     // This is conservative - real implementation should know program type
     ContextAccessRules::default_permissive()
 }
 
 /// Check BTF ID pointer access
-/// 
+///
 /// This implements BTF struct access validation similar to kernel's btf_struct_access.
 /// It validates field access based on BTF type information and returns the appropriate
 /// result type for the accessed field.
@@ -567,7 +545,7 @@ pub enum RcuAccessResult {
 }
 
 /// Check BTF ID memory access with full RCU/percpu validation
-/// 
+///
 /// This implements the kernel's BTF-based memory access checks including:
 /// - Read-only and untrusted pointer checks
 /// - RCU-protected pointer access validation
@@ -616,24 +594,24 @@ fn check_btf_id_access(
     // RCU (Read-Copy-Update) is a synchronization mechanism used in the kernel.
     // BPF programs must hold an RCU read lock when accessing RCU-protected data.
     // The verifier tracks bpf_rcu_read_lock/unlock calls to verify this.
-    
+
     if reg.type_flags.contains(BpfTypeFlag::MEM_RCU) {
         // This pointer was obtained from an RCU-protected dereference
         // Access rules:
         // 1. Cannot write to RCU-protected memory (would break RCU guarantees)
         // 2. Reading is safe if under RCU read lock (verified at call site)
         // 3. Reading without lock may work but is unsafe (kernel allows with warning)
-        
+
         if is_write {
             return Err(VerifierError::InvalidMemoryAccess(
                 "cannot write to RCU-protected memory".into(),
             ));
         }
-        
+
         // For reads, we allow but the caller should verify RCU lock state
         // The result type inherits RCU protection
     }
-    
+
     // Check for RCU pointer field access
     // When reading a pointer field marked __rcu, the result needs RCU protection
     if reg.type_flags.contains(BpfTypeFlag::MEM_RCU) {
@@ -642,17 +620,17 @@ fn check_btf_id_access(
     }
 
     // =========================================================================
-    // Percpu memory access validation  
+    // Percpu memory access validation
     // =========================================================================
     // Percpu memory has a different value on each CPU. BPF programs typically
     // access the current CPU's value, but this requires special handling.
-    
+
     if reg.type_flags.contains(BpfTypeFlag::MEM_PERCPU) {
         // Percpu access rules:
         // 1. Generally read-only from BPF (writing could race with other CPUs)
         // 2. Some helpers allow percpu writes with proper synchronization
         // 3. Must not store percpu pointers (address is CPU-specific)
-        
+
         if is_write {
             // Check if this is an allowed percpu write context
             // For now, deny all writes - kernel has specific exceptions
@@ -660,7 +638,7 @@ fn check_btf_id_access(
                 "write to percpu memory not allowed from BPF".into(),
             ));
         }
-        
+
         // For reads, the value is from the current CPU
         // Result type remains scalar (not a pointer)
     }
@@ -669,19 +647,19 @@ fn check_btf_id_access(
     // User memory access validation
     // =========================================================================
     // User memory (from user space) requires special handling
-    
+
     if reg.type_flags.contains(BpfTypeFlag::MEM_USER) {
         // User memory access rules:
         // 1. Direct access may fault - use bpf_probe_read_user instead
         // 2. Cannot write to user memory from most BPF programs
         // 3. Address must be validated before access
-        
+
         if is_write {
             return Err(VerifierError::InvalidMemoryAccess(
                 "direct write to user memory not allowed".into(),
             ));
         }
-        
+
         // Allow reads but caller should use proper helpers for safety
     }
 
@@ -690,13 +668,13 @@ fn check_btf_id_access(
     // =========================================================================
     // When accessing a pointer field within a struct, the result is a new pointer.
     // This is determined by BTF type lookup.
-    
+
     if let Some(ref btf_info) = reg.btf_info {
         // Check if this access is at a known pointer field offset
         if btf_info.is_ptr_field(total_off as u32) {
             // The accessed field is a pointer - return pointer type
             let mut result_type = BpfRegType::PtrToBtfId;
-            
+
             // Check for nullable pointer fields
             if btf_info.is_nullable_field(total_off as u32) {
                 // Nullable fields require NULL check after load
@@ -704,7 +682,7 @@ fn check_btf_id_access(
                 result_type = BpfRegType::PtrToBtfId;
                 // Type flags would include PTR_MAYBE_NULL
             }
-            
+
             return Ok(result_type);
         }
     }
@@ -712,14 +690,14 @@ fn check_btf_id_access(
     // =========================================================================
     // Size and alignment checks
     // =========================================================================
-    
+
     // BTF struct access should be naturally aligned
     if size > 0 && size <= 8 && (total_off as u32) % size != 0 {
         // Unaligned access - may be allowed for packed structs
         // For now, we allow it but log for debugging
         // A full implementation would check BTF attributes
     }
-    
+
     // Check for oversized access
     if size > 8 {
         return Err(VerifierError::InvalidMemoryAccess(format!(
@@ -733,7 +711,7 @@ fn check_btf_id_access(
 }
 
 /// Check generic memory region access
-/// 
+///
 /// Simplified API for checking memory access without user memory context.
 /// For user memory validation, use `check_mem_region_access_with_ctx` instead.
 pub fn check_mem_region_access(
@@ -753,8 +731,8 @@ fn check_mem_region_access_with_ctx(
     is_write: bool,
     user_ctx: &UserMemContext,
 ) -> Result<BpfRegType> {
-    use super::user::{is_user_mem_pointer, check_user_mem_direct_access};
-    
+    use super::user::{check_user_mem_direct_access, is_user_mem_pointer};
+
     let total_off = reg.off + off;
 
     if total_off < 0 {
@@ -774,15 +752,15 @@ fn check_mem_region_access_with_ctx(
     // Check user memory access restrictions
     if is_user_mem_pointer(reg) {
         let validation = check_user_mem_direct_access(reg, user_ctx, is_write);
-        
+
         if !validation.allowed {
             return Err(VerifierError::InvalidMemoryAccess(
-                validation.warning.unwrap_or_else(|| 
-                    "direct user memory access not allowed".into()
-                ),
+                validation
+                    .warning
+                    .unwrap_or_else(|| "direct user memory access not allowed".into()),
             ));
         }
-        
+
         // Note: validation.needs_nospec would be used by JIT for speculation barriers
     }
 
@@ -801,11 +779,7 @@ fn check_mem_region_access_with_ctx(
 }
 
 /// Check socket structure access
-fn check_sock_access(
-    reg: &BpfRegState,
-    off: i32,
-    size: u32,
-) -> Result<BpfRegType> {
+fn check_sock_access(reg: &BpfRegState, off: i32, size: u32) -> Result<BpfRegType> {
     let total_off = reg.off + off;
 
     if total_off < 0 {
@@ -882,7 +856,9 @@ pub fn check_helper_mem_access(
         ));
     }
 
-    let reg = state.reg(regno).ok_or(VerifierError::InvalidRegister(regno as u8))?;
+    let reg = state
+        .reg(regno)
+        .ok_or(VerifierError::InvalidRegister(regno as u8))?;
 
     // Check pointer type is valid for memory access
     match reg.reg_type {
@@ -940,7 +916,7 @@ pub fn check_map_access_type(
 /// Valid atomic operation codes
 pub mod atomic_ops {
     use crate::core::types::*;
-    
+
     /// Atomic add
     pub const ATOMIC_ADD: u32 = BPF_ADD as u32;
     /// Atomic or
@@ -960,17 +936,17 @@ pub mod atomic_ops {
 /// Check if an atomic operation code is valid
 fn is_valid_atomic_op(op: u32) -> bool {
     use atomic_ops::*;
-    
+
     // Base operations (without fetch)
     let base_ops = [ATOMIC_ADD, ATOMIC_OR, ATOMIC_AND, ATOMIC_XOR];
-    
+
     // Check for base ops (with or without fetch flag)
     for &base in &base_ops {
         if op == base || op == (base | ATOMIC_FETCH) {
             return true;
         }
     }
-    
+
     // Special operations
     matches!(op, ATOMIC_XCHG | ATOMIC_CMPXCHG)
 }
@@ -978,7 +954,7 @@ fn is_valid_atomic_op(op: u32) -> bool {
 /// Get the name of an atomic operation for error messages
 fn atomic_op_name(op: u32) -> &'static str {
     use atomic_ops::*;
-    
+
     match op {
         ATOMIC_ADD => "add",
         x if x == ATOMIC_ADD | ATOMIC_FETCH => "fetch_add",
@@ -995,12 +971,7 @@ fn atomic_op_name(op: u32) -> &'static str {
 }
 
 /// Check atomic operation on a memory location
-pub fn check_atomic_op(
-    reg: &BpfRegState,
-    off: i32,
-    size: u32,
-    op: u32,
-) -> Result<()> {
+pub fn check_atomic_op(reg: &BpfRegState, off: i32, size: u32, op: u32) -> Result<()> {
     // Validate the atomic operation code
     if !is_valid_atomic_op(op) {
         return Err(VerifierError::InvalidMemoryAccess(format!(
@@ -1008,20 +979,23 @@ pub fn check_atomic_op(
             op
         )));
     }
-    
+
     // Atomic operations have alignment requirements
     if off % size as i32 != 0 {
         return Err(VerifierError::InvalidMemoryAccess(format!(
             "atomic {} requires {}-byte aligned access, got offset {}",
-            atomic_op_name(op), size, off
+            atomic_op_name(op),
+            size,
+            off
         )));
     }
-    
+
     // Size must be 4 (32-bit) or 8 (64-bit) bytes
     if size != 4 && size != 8 {
         return Err(VerifierError::InvalidMemoryAccess(format!(
             "atomic {} requires 32-bit or 64-bit operand, got {} bytes",
-            atomic_op_name(op), size
+            atomic_op_name(op),
+            size
         )));
     }
 
@@ -1034,11 +1008,12 @@ pub fn check_atomic_op(
         _ => {
             return Err(VerifierError::InvalidMemoryAccess(format!(
                 "atomic {} not allowed on {:?}",
-                atomic_op_name(op), reg.reg_type
+                atomic_op_name(op),
+                reg.reg_type
             )));
         }
     }
-    
+
     // CMPXCHG has additional requirements - R0 must contain expected value
     // This is checked elsewhere in the instruction verification
 
@@ -1050,7 +1025,7 @@ pub fn check_atomic_op(
 // =============================================================================
 
 /// Check if RCU read lock is required for this access
-/// 
+///
 /// Returns true if the access requires RCU protection to be safe.
 /// This is used to validate that bpf_rcu_read_lock is held.
 pub fn requires_rcu_lock(reg: &BpfRegState) -> bool {
@@ -1058,18 +1033,18 @@ pub fn requires_rcu_lock(reg: &BpfRegState) -> bool {
     if reg.type_flags.contains(BpfTypeFlag::MEM_RCU) {
         return true;
     }
-    
+
     // Pointer obtained from RCU dereference requires lock to be safe
     if reg.type_flags.contains(BpfTypeFlag::PTR_UNTRUSTED) {
         // Untrusted pointers from RCU dereference need protection
         return true;
     }
-    
+
     false
 }
 
 /// Validate RCU access is safe given the current lock state
-/// 
+///
 /// This checks that:
 /// 1. RCU-protected accesses are done under rcu_read_lock
 /// 2. Pointers from RCU dereferences are used safely
@@ -1084,7 +1059,7 @@ pub fn validate_rcu_access(
             "write to RCU-protected memory is not allowed".into(),
         ));
     }
-    
+
     // Check if RCU lock is required
     if requires_rcu_lock(reg) {
         if rcu_lock_held {
@@ -1095,12 +1070,12 @@ pub fn validate_rcu_access(
             return Ok(RcuAccessResult::RequiresRcuLock);
         }
     }
-    
+
     Ok(RcuAccessResult::Allowed)
 }
 
 /// Check if a pointer can be safely stored (no pointer leaks)
-/// 
+///
 /// In unprivileged mode, pointers cannot be stored to maps or
 /// leaked to userspace. This prevents information disclosure attacks.
 pub fn check_ptr_leak(
@@ -1112,12 +1087,12 @@ pub fn check_ptr_leak(
     if allow_ptr_leaks {
         return Ok(());
     }
-    
+
     // Non-pointer sources are always OK
     if !src_reg.is_pointer() {
         return Ok(());
     }
-    
+
     // Check destination type
     match dst_reg.reg_type {
         BpfRegType::PtrToMapValue => {
@@ -1144,12 +1119,12 @@ pub fn check_ptr_leak(
         }
         _ => {}
     }
-    
+
     Ok(())
 }
 
 /// Validate percpu pointer access
-/// 
+///
 /// Percpu memory requires special handling:
 /// - Addresses are CPU-specific and cannot be stored
 /// - Writes require synchronization
@@ -1162,14 +1137,14 @@ pub fn validate_percpu_access(
     if !reg.type_flags.contains(BpfTypeFlag::MEM_PERCPU) {
         return Ok(());
     }
-    
+
     // Percpu writes are generally not allowed
     if is_write {
         return Err(VerifierError::InvalidMemoryAccess(
             "write to percpu memory not allowed".into(),
         ));
     }
-    
+
     // In sleepable programs, percpu access is problematic because
     // the program may be preempted and resume on a different CPU
     if is_sleepable_prog {
@@ -1177,12 +1152,12 @@ pub fn validate_percpu_access(
             "percpu access in sleepable program is not safe".into(),
         ));
     }
-    
+
     Ok(())
 }
 
 /// Check arena memory access (bpf_arena) - legacy wrapper
-/// 
+///
 /// Arena is a special memory region that allows user-space-like
 /// memory allocation within BPF programs.
 pub fn check_arena_access(
@@ -1202,35 +1177,35 @@ pub fn check_arena_access_with_ctx(
     is_write: bool,
     user_ctx: &UserMemContext,
 ) -> Result<BpfRegType> {
-    use super::user::{is_user_mem_pointer, check_arena_user_access};
-    
+    use super::user::{check_arena_user_access, is_user_mem_pointer};
+
     let total_off = reg.off.saturating_add(off);
-    
+
     if total_off < 0 {
         return Err(VerifierError::InvalidMemoryAccess(format!(
             "negative offset {} into arena",
             total_off
         )));
     }
-    
+
     // Check user memory access for arena with MEM_USER flag
     if is_user_mem_pointer(reg) {
         // Arena user pointer access - requires special validation
         // Use nospec status from the context
         let has_nospec = user_ctx.has_nospec;
         let validation = check_arena_user_access(reg, off, size, is_write, has_nospec)?;
-        
+
         if !validation.allowed {
             return Err(VerifierError::InvalidMemoryAccess(
-                validation.warning.unwrap_or_else(||
-                    "arena user memory access not allowed".into()
-                ),
+                validation
+                    .warning
+                    .unwrap_or_else(|| "arena user memory access not allowed".into()),
             ));
         }
-        
+
         // Note: validation.needs_nospec would be used by JIT
     }
-    
+
     // Arena has size limits
     if reg.mem_size > 0 {
         let end_off = total_off as u64 + size as u64;
@@ -1241,9 +1216,9 @@ pub fn check_arena_access_with_ctx(
             )));
         }
     }
-    
+
     // Arena is read-write by default (kernel-space arena)
     let _ = is_write;
-    
+
     Ok(BpfRegType::ScalarValue)
 }

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0
+
 //! Atomic instruction handling
 //!
 //! This module implements verification for BPF atomic operations,
@@ -5,10 +7,10 @@
 
 #![allow(missing_docs)] // Atomic operation constants
 
-use crate::core::types::*;
-use crate::state::verifier_state::BpfVerifierState;
-use crate::mem::memory::check_mem_access;
 use crate::core::error::{Result, VerifierError};
+use crate::core::types::*;
+use crate::mem::memory::check_mem_access;
+use crate::state::verifier_state::BpfVerifierState;
 
 /// Atomic operation codes (encoded in imm field)
 pub const BPF_ATOMIC_ADD: u32 = BPF_ADD as u32;
@@ -100,17 +102,19 @@ pub fn check_atomic_rmw(
     }
 
     // Check source register is initialized
-    let src = state.reg(src_reg)
+    let src = state
+        .reg(src_reg)
         .ok_or(VerifierError::InvalidRegister(src_reg as u8))?;
     if src.reg_type == BpfRegType::NotInit {
         return Err(VerifierError::UninitializedRegister(src_reg as u8));
     }
 
     // Check destination register (pointer)
-    let dst = state.reg(dst_reg)
+    let dst = state
+        .reg(dst_reg)
         .ok_or(VerifierError::InvalidRegister(dst_reg as u8))?
         .clone();
-    
+
     // Destination must be a pointer
     if !dst.is_pointer() {
         return Err(VerifierError::ExpectedPointer(dst_reg as u8));
@@ -121,7 +125,8 @@ pub fn check_atomic_rmw(
 
     // For CMPXCHG, R0 is also used (compare value)
     if is_cmpxchg(insn) {
-        let r0 = state.reg(BPF_REG_0)
+        let r0 = state
+            .reg(BPF_REG_0)
             .ok_or(VerifierError::InvalidRegister(0))?;
         if r0.reg_type == BpfRegType::NotInit {
             return Err(VerifierError::UninitializedRegister(0));
@@ -161,10 +166,11 @@ pub fn check_atomic_load(
     }
 
     // Check source register (pointer)
-    let src = state.reg(src_reg)
+    let src = state
+        .reg(src_reg)
         .ok_or(VerifierError::InvalidRegister(src_reg as u8))?
         .clone();
-    
+
     if !src.is_pointer() {
         return Err(VerifierError::ExpectedPointer(src_reg as u8));
     }
@@ -195,17 +201,19 @@ pub fn check_atomic_store(
     }
 
     // Check source register is initialized
-    let src = state.reg(src_reg)
+    let src = state
+        .reg(src_reg)
         .ok_or(VerifierError::InvalidRegister(src_reg as u8))?;
     if src.reg_type == BpfRegType::NotInit {
         return Err(VerifierError::UninitializedRegister(src_reg as u8));
     }
 
     // Check destination register (pointer)
-    let dst = state.reg(dst_reg)
+    let dst = state
+        .reg(dst_reg)
         .ok_or(VerifierError::InvalidRegister(dst_reg as u8))?
         .clone();
-    
+
     if !dst.is_pointer() {
         return Err(VerifierError::ExpectedPointer(dst_reg as u8));
     }
@@ -217,11 +225,7 @@ pub fn check_atomic_store(
 }
 
 /// Check any atomic instruction
-pub fn check_atomic(
-    state: &mut BpfVerifierState,
-    insn: &BpfInsn,
-    insn_idx: usize,
-) -> Result<()> {
+pub fn check_atomic(state: &mut BpfVerifierState, insn: &BpfInsn, insn_idx: usize) -> Result<()> {
     if is_atomic_load(insn) {
         check_atomic_load(state, insn, insn_idx)
     } else if is_atomic_store(insn) {
@@ -245,9 +249,7 @@ pub fn atomic_ptr_type_ok(reg_type: BpfRegType, _size: u32) -> bool {
         // Memory allocations support atomics
         BpfRegType::PtrToMem => true,
         // Packet data does not support atomics
-        BpfRegType::PtrToPacket |
-        BpfRegType::PtrToPacketMeta |
-        BpfRegType::PtrToPacketEnd => false,
+        BpfRegType::PtrToPacket | BpfRegType::PtrToPacketMeta | BpfRegType::PtrToPacketEnd => false,
         // Context access may be restricted
         BpfRegType::PtrToCtx => false,
         _ => false,
@@ -258,19 +260,35 @@ pub fn atomic_ptr_type_ok(reg_type: BpfRegType, _size: u32) -> bool {
 pub fn atomic_op_name(imm: u32) -> &'static str {
     let op = imm & !BPF_FETCH;
     let fetch = imm & BPF_FETCH != 0;
-    
+
     match op {
         x if x == BPF_ADD as u32 => {
-            if fetch { "atomic_fetch_add" } else { "atomic_add" }
+            if fetch {
+                "atomic_fetch_add"
+            } else {
+                "atomic_add"
+            }
         }
         x if x == BPF_OR as u32 => {
-            if fetch { "atomic_fetch_or" } else { "atomic_or" }
+            if fetch {
+                "atomic_fetch_or"
+            } else {
+                "atomic_or"
+            }
         }
         x if x == BPF_AND as u32 => {
-            if fetch { "atomic_fetch_and" } else { "atomic_and" }
+            if fetch {
+                "atomic_fetch_and"
+            } else {
+                "atomic_and"
+            }
         }
         x if x == BPF_XOR as u32 => {
-            if fetch { "atomic_fetch_xor" } else { "atomic_xor" }
+            if fetch {
+                "atomic_fetch_xor"
+            } else {
+                "atomic_xor"
+            }
         }
         0xe0 => "atomic_xchg",
         0xf0 => "atomic_cmpxchg",

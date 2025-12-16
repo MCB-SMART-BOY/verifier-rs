@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0
+
 //! Control flow graph analysis
 //!
 //! This module handles control flow analysis including:
@@ -6,13 +8,12 @@
 //! - Managing exploration of all paths
 //! - State pruning and merging
 
-use crate::state::verifier_state::{BpfVerifierState, BpfVerifierStackElem, ExplorationStack};
-use crate::core::insn::{check_alu_op, check_cond_jmp_op, check_call, check_exit, check_ld_imm64};
-use crate::core::types::*;
 use crate::core::error::{Result, VerifierError};
+use crate::core::insn::{check_alu_op, check_call, check_cond_jmp_op, check_exit, check_ld_imm64};
+use crate::core::types::*;
+use crate::state::verifier_state::{BpfVerifierStackElem, BpfVerifierState, ExplorationStack};
 
-
-use alloc::{vec, vec::Vec, format};
+use alloc::{format, vec, vec::Vec};
 
 use alloc::collections::{BTreeMap as HashMap, BTreeSet as HashSet};
 
@@ -179,7 +180,11 @@ impl ControlFlowGraph {
         // Third pass: fill in predecessors
         let block_starts: Vec<usize> = cfg.blocks.keys().copied().collect();
         for start in &block_starts {
-            let successors = cfg.blocks.get(start).map(|b| b.successors.clone()).unwrap_or_default();
+            let successors = cfg
+                .blocks
+                .get(start)
+                .map(|b| b.successors.clone())
+                .unwrap_or_default();
             for succ in successors {
                 if let Some(block) = cfg.blocks.get_mut(&succ) {
                     block.predecessors.push(*start);
@@ -207,7 +212,7 @@ impl ControlFlowGraph {
     pub fn compute_postorder(&self, insns: &[BpfInsn], subprog_starts: &[usize]) -> Vec<usize> {
         let mut postorder = Vec::new();
         let mut state: Vec<u8> = vec![0; insns.len()]; // 0=unvisited, 1=discovered, 2=explored
-        
+
         const DISCOVERED: u8 = 1;
         const EXPLORED: u8 = 2;
 
@@ -217,7 +222,7 @@ impl ControlFlowGraph {
             }
 
             let mut stack: Vec<usize> = vec![start];
-            
+
             while let Some(&top) = stack.last() {
                 if state[top] & DISCOVERED == 0 {
                     state[top] |= DISCOVERED;
@@ -232,7 +237,7 @@ impl ControlFlowGraph {
                 // Get successors for this instruction
                 let successors = self.get_insn_successors(insns, top);
                 let mut pushed_any = false;
-                
+
                 for succ in successors {
                     if succ < insns.len() && state[succ] == 0 {
                         stack.push(succ);
@@ -253,7 +258,7 @@ impl ControlFlowGraph {
     /// Get successors for a single instruction (not a basic block)
     fn get_insn_successors(&self, insns: &[BpfInsn], idx: usize) -> Vec<usize> {
         let mut successors = Vec::new();
-        
+
         if idx >= insns.len() {
             return successors;
         }
@@ -310,7 +315,11 @@ impl ControlFlowGraph {
     }
 
     /// Get reverse postorder (useful for forward dataflow analysis)
-    pub fn compute_reverse_postorder(&self, insns: &[BpfInsn], subprog_starts: &[usize]) -> Vec<usize> {
+    pub fn compute_reverse_postorder(
+        &self,
+        insns: &[BpfInsn],
+        subprog_starts: &[usize],
+    ) -> Vec<usize> {
         let mut rpo = self.compute_postorder(insns, subprog_starts);
         rpo.reverse();
         rpo
@@ -322,7 +331,7 @@ impl ControlFlowGraph {
         let mut loop_headers = HashSet::new();
         let mut visited = HashSet::new();
         let mut in_stack = HashSet::new();
-        
+
         if insns.is_empty() {
             return loop_headers;
         }
@@ -368,7 +377,7 @@ impl ControlFlowGraph {
                 in_stack.remove(&idx);
             }
         }
-        
+
         loop_headers
     }
 }
@@ -587,7 +596,11 @@ impl Verifier {
             }
 
             // Check if this state was already visited
-            if self.explored.find_equivalent(self.insn_idx, &self.cur_state).is_some() {
+            if self
+                .explored
+                .find_equivalent(self.insn_idx, &self.cur_state)
+                .is_some()
+            {
                 // State is equivalent to an existing one, prune this path
                 if !self.pop_state()? {
                     break; // No more states to explore
@@ -596,7 +609,8 @@ impl Verifier {
             }
 
             // Add current state to explored
-            self.explored.add_state(self.insn_idx, self.cur_state.clone());
+            self.explored
+                .add_state(self.insn_idx, self.cur_state.clone());
 
             // Process the instruction
             let continue_check = self.do_check_insn()?;
@@ -708,7 +722,10 @@ impl Verifier {
         let src_reg = insn.src_reg as usize;
 
         // Source must be a valid pointer
-        let src = self.cur_state.reg(src_reg).ok_or(VerifierError::InvalidRegister(src_reg as u8))?;
+        let src = self
+            .cur_state
+            .reg(src_reg)
+            .ok_or(VerifierError::InvalidRegister(src_reg as u8))?;
         if !src.is_pointer() && !(src.reg_type == BpfRegType::ScalarValue && src.is_const()) {
             return Err(VerifierError::InvalidMemoryAccess(
                 "LDX source must be a pointer".into(),
@@ -729,7 +746,10 @@ impl Verifier {
         let src_reg = insn.src_reg as usize;
 
         // Destination must be a valid pointer
-        let dst = self.cur_state.reg(dst_reg).ok_or(VerifierError::InvalidRegister(dst_reg as u8))?;
+        let dst = self
+            .cur_state
+            .reg(dst_reg)
+            .ok_or(VerifierError::InvalidRegister(dst_reg as u8))?;
         if !dst.is_pointer() {
             return Err(VerifierError::InvalidMemoryAccess(
                 "STX destination must be a pointer".into(),
@@ -737,7 +757,10 @@ impl Verifier {
         }
 
         // Source must be initialized
-        let src = self.cur_state.reg(src_reg).ok_or(VerifierError::InvalidRegister(src_reg as u8))?;
+        let src = self
+            .cur_state
+            .reg(src_reg)
+            .ok_or(VerifierError::InvalidRegister(src_reg as u8))?;
         if src.reg_type == BpfRegType::NotInit {
             return Err(VerifierError::UninitializedRegister(src_reg as u8));
         }

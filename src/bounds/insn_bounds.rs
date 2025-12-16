@@ -1,16 +1,17 @@
+// SPDX-License-Identifier: GPL-2.0
+
 //! Bounds analysis integration with instruction verification
 //!
 //! This module connects the bounds tracking system with instruction verification,
 //! providing bounds propagation through ALU operations, bounds checking for
 //! memory access, and pointer arithmetic bounds validation.
 
-
 use alloc::{format, string::String, vec::Vec};
 
 use super::bounds::ScalarBounds;
-use crate::state::reg_state::BpfRegState;
-use crate::core::types::*;
 use crate::core::error::{Result, VerifierError};
+use crate::core::types::*;
+use crate::state::reg_state::BpfRegState;
 
 /// Result of bounds analysis for an operation
 #[derive(Debug, Clone)]
@@ -44,24 +45,25 @@ pub fn analyze_alu_bounds(
     is_64bit: bool,
 ) -> Result<BoundsAnalysisResult> {
     let mut result = BoundsAnalysisResult::default();
-    
+
     // Only analyze scalar operations
     if dst_reg.reg_type != BpfRegType::ScalarValue {
         return Ok(result);
     }
-    
+
     // Build ScalarBounds from register state
     let dst_bounds = reg_to_scalar_bounds(dst_reg);
     let src_bounds = reg_to_scalar_bounds(src_reg);
-    
+
     // Perform the operation
     let op = opcode & 0xf0;
     match dst_bounds.alu_op(op, &src_bounds, is_64bit) {
         Ok(new_bounds) => {
             result.new_bounds = Some(new_bounds);
-            
+
             // Check for potential overflow
-            if matches!(op, 0x00 | 0x20) { // ADD or MUL
+            if matches!(op, 0x00 | 0x20) {
+                // ADD or MUL
                 if new_bounds.umax_value < dst_bounds.umin_value {
                     result.overflow = true;
                     result.warnings.push("potential unsigned overflow".into());
@@ -73,7 +75,7 @@ pub fn analyze_alu_bounds(
             return Err(e);
         }
     }
-    
+
     Ok(result)
 }
 
@@ -85,7 +87,7 @@ pub fn analyze_mem_access_bounds(
     write: bool,
 ) -> Result<BoundsAnalysisResult> {
     let mut result = BoundsAnalysisResult::default();
-    
+
     match ptr_reg.reg_type {
         BpfRegType::PtrToStack => {
             analyze_stack_access_bounds(ptr_reg, off, size, &mut result)?;
@@ -106,7 +108,7 @@ pub fn analyze_mem_access_bounds(
             // For other pointer types, defer to type-specific checks
         }
     }
-    
+
     Ok(result)
 }
 
@@ -121,41 +123,41 @@ fn analyze_stack_access_bounds(
     let base_off = reg.off;
     let var_min = reg.var_off.min() as i64;
     let var_max = reg.var_off.max() as i64;
-    
+
     // Stack grows downward, offsets are negative from frame pointer
     let min_total = (base_off as i64) + var_min + (off as i64);
     let max_total = (base_off as i64) + var_max + (off as i64);
-    
+
     // Access end (most negative point)
     let min_end = min_total - (size as i64);
     let _max_end = max_total - (size as i64);
-    
+
     // Check bounds
     if max_total > 0 {
         result.safe = false;
         return Err(VerifierError::StackOutOfBounds(max_total as i32));
     }
-    
+
     if (-min_end) as usize > MAX_BPF_STACK {
         result.safe = false;
         return Err(VerifierError::StackOutOfBounds(min_end as i32));
     }
-    
+
     // Check variable offset
     if !reg.var_off.is_const() {
-        result.warnings.push(format!(
-            "variable stack offset: {} to {}", var_min, var_max
-        ));
-        
+        result
+            .warnings
+            .push(format!("variable stack offset: {} to {}", var_min, var_max));
+
         // Check if variable offset could span slot boundaries
         let slot_span = ((max_total - min_total) / BPF_REG_SIZE as i64) + 1;
         if slot_span > 1 {
-            result.warnings.push(format!(
-                "access may span {} stack slots", slot_span
-            ));
+            result
+                .warnings
+                .push(format!("access may span {} stack slots", slot_span));
         }
     }
-    
+
     result.safe = true;
     Ok(())
 }
@@ -175,40 +177,42 @@ fn analyze_map_value_access_bounds(
         result.warnings.push("map value size unknown".into());
         return Ok(());
     };
-    
+
     // Calculate access range
     let base_off = reg.off as i64;
     let var_min = reg.var_off.min() as i64;
     let var_max = reg.var_off.max() as i64;
-    
+
     let min_off = base_off + var_min + (off as i64);
     let max_off = base_off + var_max + (off as i64);
     let access_end = max_off + (size as i64);
-    
+
     // Check negative offset
     if min_off < 0 {
         result.safe = false;
-        return Err(VerifierError::InvalidMapAccess(
-            format!("negative offset {}", min_off)
-        ));
+        return Err(VerifierError::InvalidMapAccess(format!(
+            "negative offset {}",
+            min_off
+        )));
     }
-    
+
     // Check bounds
     if access_end > value_size as i64 {
         result.safe = false;
-        return Err(VerifierError::InvalidMapAccess(
-            format!("access {}+{} exceeds value_size {}", max_off, size, value_size)
-        ));
+        return Err(VerifierError::InvalidMapAccess(format!(
+            "access {}+{} exceeds value_size {}",
+            max_off, size, value_size
+        )));
     }
-    
+
     // Check write to read-only
     if write && reg.type_flags.contains(BpfTypeFlag::MEM_RDONLY) {
         result.safe = false;
         return Err(VerifierError::InvalidMapAccess(
-            "write to read-only map value".into()
+            "write to read-only map value".into(),
         ));
     }
-    
+
     result.safe = true;
     Ok(())
 }
@@ -224,34 +228,35 @@ fn analyze_packet_access_bounds(
     if reg.mem_size == 0 {
         result.safe = false;
         return Err(VerifierError::InvalidMemoryAccess(
-            "unbounded packet access - requires packet_end check".into()
+            "unbounded packet access - requires packet_end check".into(),
         ));
     }
-    
+
     let base_off = reg.off as i64;
     let var_min = reg.var_off.min() as i64;
     let var_max = reg.var_off.max() as i64;
-    
+
     let max_off = base_off + var_max + (off as i64);
     let access_end = max_off + (size as i64);
-    
+
     if access_end > reg.mem_size as i64 {
         result.safe = false;
-        return Err(VerifierError::InvalidMemoryAccess(
-            format!("packet access {}+{} may exceed range {}", 
-                    max_off, size, reg.mem_size)
-        ));
+        return Err(VerifierError::InvalidMemoryAccess(format!(
+            "packet access {}+{} may exceed range {}",
+            max_off, size, reg.mem_size
+        )));
     }
-    
+
     // Negative offset check
     let min_off = base_off + var_min + (off as i64);
     if min_off < 0 {
         result.safe = false;
-        return Err(VerifierError::InvalidMemoryAccess(
-            format!("packet access with negative offset {}", min_off)
-        ));
+        return Err(VerifierError::InvalidMemoryAccess(format!(
+            "packet access with negative offset {}",
+            min_off
+        )));
     }
-    
+
     result.safe = true;
     Ok(())
 }
@@ -267,35 +272,38 @@ fn analyze_ctx_access_bounds(
     if !reg.var_off.is_const() {
         result.safe = false;
         return Err(VerifierError::InvalidContextAccess(
-            "variable offset context access not allowed".into()
+            "variable offset context access not allowed".into(),
         ));
     }
-    
+
     let total_off = reg.off + off + (reg.var_off.value as i32);
-    
+
     // Negative offset not allowed
     if total_off < 0 {
         result.safe = false;
-        return Err(VerifierError::InvalidContextAccess(
-            format!("negative context offset {}", total_off)
-        ));
+        return Err(VerifierError::InvalidContextAccess(format!(
+            "negative context offset {}",
+            total_off
+        )));
     }
-    
+
     // Size must be valid (1, 2, 4, or 8 bytes)
     if !matches!(size, 1 | 2 | 4 | 8) {
         result.safe = false;
-        return Err(VerifierError::InvalidContextAccess(
-            format!("invalid access size {}", size)
-        ));
+        return Err(VerifierError::InvalidContextAccess(format!(
+            "invalid access size {}",
+            size
+        )));
     }
-    
+
     // Alignment check
     if (total_off as u32) % size != 0 {
         result.warnings.push(format!(
-            "unaligned context access: offset {} size {}", total_off, size
+            "unaligned context access: offset {} size {}",
+            total_off, size
         ));
     }
-    
+
     result.safe = true;
     Ok(())
 }
@@ -313,23 +321,24 @@ fn analyze_mem_ptr_access_bounds(
         let base_off = reg.off as i64;
         let var_max = reg.var_off.max() as i64;
         let access_end = base_off + var_max + (off as i64) + (size as i64);
-        
+
         if access_end > reg.mem_size as i64 {
             result.safe = false;
-            return Err(VerifierError::InvalidMemoryAccess(
-                format!("access exceeds memory size {}", reg.mem_size)
-            ));
+            return Err(VerifierError::InvalidMemoryAccess(format!(
+                "access exceeds memory size {}",
+                reg.mem_size
+            )));
         }
     }
-    
+
     // Check read-only
     if write && reg.type_flags.contains(BpfTypeFlag::MEM_RDONLY) {
         result.safe = false;
         return Err(VerifierError::InvalidMemoryAccess(
-            "write to read-only memory".into()
+            "write to read-only memory".into(),
         ));
     }
-    
+
     result.safe = true;
     Ok(())
 }
@@ -341,10 +350,10 @@ pub fn analyze_ptr_arithmetic(
     is_add: bool,
 ) -> Result<BoundsAnalysisResult> {
     let mut result = BoundsAnalysisResult::default();
-    
+
     // Scalar must have bounded range for safe pointer arithmetic
     let scalar_bounds = reg_to_scalar_bounds(scalar_reg);
-    
+
     match ptr_reg.reg_type {
         BpfRegType::PtrToStack => {
             // Stack pointer arithmetic
@@ -358,7 +367,7 @@ pub fn analyze_ptr_arithmetic(
             } else {
                 (ptr_reg.off as i64).saturating_sub(scalar_bounds.smin_value)
             };
-            
+
             // Check bounds
             if new_off_max > 0 {
                 result.safe = false;
@@ -373,29 +382,31 @@ pub fn analyze_ptr_arithmetic(
             // Map value pointer arithmetic
             if let Some(ref map_info) = ptr_reg.map_ptr {
                 let value_size = map_info.value_size as i64;
-                
+
                 let new_off_max = if is_add {
                     (ptr_reg.off as i64) + scalar_bounds.smax_value
                 } else {
                     (ptr_reg.off as i64) - scalar_bounds.smin_value
                 };
-                
+
                 if new_off_max > value_size {
-                    result.warnings.push(format!(
-                        "pointer may exceed map value size {}", value_size
-                    ));
+                    result
+                        .warnings
+                        .push(format!("pointer may exceed map value size {}", value_size));
                 }
             }
         }
         BpfRegType::PtrToPacket => {
             // Packet pointer arithmetic - needs range tracking
             if !scalar_bounds.is_non_negative() && is_add {
-                result.warnings.push("adding potentially negative value to packet pointer".into());
+                result
+                    .warnings
+                    .push("adding potentially negative value to packet pointer".into());
             }
         }
         _ => {}
     }
-    
+
     result.safe = true;
     Ok(result)
 }
@@ -438,7 +449,7 @@ pub fn refine_bounds_on_branch(
     if reg.reg_type != BpfRegType::ScalarValue {
         return;
     }
-    
+
     let mut bounds = reg_to_scalar_bounds(reg);
     bounds.adjust_for_cmp(cmp_val, cmp_op, branch_taken);
     apply_bounds_to_reg(reg, &bounds);
@@ -452,20 +463,20 @@ pub fn check_div_bounds(divisor_reg: &BpfRegState) -> Result<()> {
             got: format!("{:?}", divisor_reg.reg_type),
         });
     }
-    
+
     // Check if divisor could be zero
     if divisor_reg.umin_value == 0 {
         // Could be zero - check if it's definitely zero
         if divisor_reg.is_const() && divisor_reg.const_value() == 0 {
             return Err(VerifierError::DivisionByZero);
         }
-        
+
         // Potentially zero - needs runtime check or more analysis
         if !divisor_reg.var_off.is_const() || divisor_reg.var_off.value == 0 {
             // Conservative: might be zero
         }
     }
-    
+
     Ok(())
 }
 
@@ -477,14 +488,14 @@ pub fn check_shift_bounds(shift_reg: &BpfRegState, is_64bit: bool) -> Result<()>
             got: format!("{:?}", shift_reg.reg_type),
         });
     }
-    
+
     let max_shift = if is_64bit { 63 } else { 31 };
-    
+
     // Shift amount should be bounded
     if shift_reg.umax_value > max_shift {
         // Shift amount could be too large
         // In BPF, large shifts are masked, so this is a warning not error
     }
-    
+
     Ok(())
 }

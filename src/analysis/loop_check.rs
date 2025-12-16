@@ -1,18 +1,18 @@
+// SPDX-License-Identifier: GPL-2.0
+
 //! Loop detection and bounding
 //!
 //! This module implements loop detection and bounding for BPF programs.
 //! BPF programs traditionally couldn't have loops, but bounded loops are
 //! now supported with proper verification.
 
-
 use alloc::{format, vec, vec::Vec};
-
 
 use alloc::collections::{BTreeMap as HashMap, BTreeSet as HashSet};
 
-use crate::core::types::*;
 use crate::bounds::bounds::ScalarBounds;
 use crate::core::error::{Result, VerifierError};
+use crate::core::types::*;
 
 /// Maximum number of loop iterations for bounded loops
 pub const BPF_MAX_LOOPS: u32 = 8 * 1024 * 1024;
@@ -145,7 +145,7 @@ impl LoopDetector {
     /// Get successor instructions
     fn get_successors(&self, insns: &[BpfInsn], idx: usize) -> Vec<usize> {
         let mut successors = Vec::new();
-        
+
         if idx >= insns.len() {
             return successors;
         }
@@ -271,11 +271,7 @@ impl LoopBoundAnalyzer {
     }
 
     /// Analyze a loop to determine if it's bounded
-    pub fn analyze_loop(
-        &mut self,
-        insns: &[BpfInsn],
-        loop_info: &mut LoopInfo,
-    ) -> Result<()> {
+    pub fn analyze_loop(&mut self, insns: &[BpfInsn], loop_info: &mut LoopInfo) -> Result<()> {
         // Look for common loop patterns:
         // 1. Counter-based: r = 0; while (r < N) { r++; }
         // 2. Iterator-based: bpf_loop helper
@@ -306,13 +302,12 @@ impl LoopBoundAnalyzer {
         }
 
         let op = back_edge_insn.code & 0xf0;
-        
+
         // Check for comparison-based loops
         match op {
-            BPF_JLT | BPF_JLE | BPF_JGT | BPF_JGE |
-            BPF_JSLT | BPF_JSLE | BPF_JSGT | BPF_JSGE => {
+            BPF_JLT | BPF_JLE | BPF_JGT | BPF_JGE | BPF_JSLT | BPF_JSLE | BPF_JSGT | BPF_JSGE => {
                 let var = back_edge_insn.dst_reg;
-                
+
                 // If comparing against immediate, that's our bound
                 if back_edge_insn.code & BPF_X == 0 {
                     let bound = back_edge_insn.imm as u32;
@@ -326,17 +321,13 @@ impl LoopBoundAnalyzer {
     }
 
     /// Check if loop uses bpf_loop helper
-    pub fn check_bpf_loop_helper(
-        &self,
-        insns: &[BpfInsn],
-        loop_info: &LoopInfo,
-    ) -> Option<u32> {
+    pub fn check_bpf_loop_helper(&self, insns: &[BpfInsn], loop_info: &LoopInfo) -> Option<u32> {
         // Look for bpf_loop call which has explicit iteration limit
         for &idx in &loop_info.body {
             if idx >= insns.len() {
                 continue;
             }
-            
+
             let insn = &insns[idx];
             if insn.code == (BPF_JMP | BPF_CALL) {
                 // Check if this is bpf_loop helper
@@ -358,14 +349,15 @@ pub fn verify_loops_bounded(insns: &[BpfInsn]) -> Result<()> {
     }
 
     let mut analyzer = LoopBoundAnalyzer::new();
-    
+
     for loop_info in &mut detector.loops {
         analyzer.analyze_loop(insns, loop_info)?;
-        
+
         if !loop_info.is_bounded {
-            return Err(VerifierError::TooComplex(
-                format!("unbounded loop at instruction {}", loop_info.header)
-            ));
+            return Err(VerifierError::TooComplex(format!(
+                "unbounded loop at instruction {}",
+                loop_info.header
+            )));
         }
     }
 
@@ -386,7 +378,7 @@ pub fn is_loop_exit(insns: &[BpfInsn], idx: usize, loop_info: &LoopInfo) -> bool
     }
 
     let op = insn.code & 0xf0;
-    
+
     // Check if jump target is outside loop
     match op {
         BPF_JA => {

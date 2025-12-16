@@ -1,14 +1,15 @@
+// SPDX-License-Identifier: GPL-2.0
+
 //! Stack state management
 //!
 //! This module handles BPF stack slot tracking, including spilled registers,
 //! dynptrs, iterators, and IRQ flags.
 
-
 use alloc::{format, vec::Vec};
 
-use crate::state::reg_state::BpfRegState;
-use crate::core::types::*;
 use crate::core::error::{Result, VerifierError};
+use crate::core::types::*;
+use crate::state::reg_state::BpfRegState;
 
 /// State of a single stack slot (8 bytes)
 #[derive(Debug, Clone)]
@@ -36,7 +37,9 @@ impl BpfStackState {
 
     /// Check if this slot is valid (has been written)
     pub fn is_valid(&self) -> bool {
-        self.slot_type.iter().any(|t| *t != BpfStackSlotType::Invalid)
+        self.slot_type
+            .iter()
+            .any(|t| *t != BpfStackSlotType::Invalid)
     }
 
     /// Check if entire slot is zero
@@ -156,15 +159,16 @@ pub fn get_spi(off: i32) -> Option<usize> {
 pub fn dynptr_get_spi(reg: &BpfRegState, _allocated_stack: usize) -> Result<usize> {
     let off = reg.off;
     if off < -(MAX_BPF_STACK as i32) || off >= 0 {
-        return Err(VerifierError::InvalidMemoryAccess(
-            format!("invalid dynptr stack offset {}", off)
-        ));
+        return Err(VerifierError::InvalidMemoryAccess(format!(
+            "invalid dynptr stack offset {}",
+            off
+        )));
     }
     let spi = ((-off - 1) as usize) / BPF_REG_SIZE;
     // Dynptr takes 2 slots
     if spi < 1 {
         return Err(VerifierError::InvalidMemoryAccess(
-            "dynptr needs 2 stack slots".into()
+            "dynptr needs 2 stack slots".into(),
         ));
     }
     Ok(spi)
@@ -174,15 +178,17 @@ pub fn dynptr_get_spi(reg: &BpfRegState, _allocated_stack: usize) -> Result<usiz
 pub fn iter_get_spi(reg: &BpfRegState, nr_slots: usize, _allocated_stack: usize) -> Result<usize> {
     let off = reg.off;
     if off < -(MAX_BPF_STACK as i32) || off >= 0 {
-        return Err(VerifierError::InvalidMemoryAccess(
-            format!("invalid iterator stack offset {}", off)
-        ));
+        return Err(VerifierError::InvalidMemoryAccess(format!(
+            "invalid iterator stack offset {}",
+            off
+        )));
     }
     let spi = ((-off - 1) as usize) / BPF_REG_SIZE;
     if spi + 1 < nr_slots {
-        return Err(VerifierError::InvalidMemoryAccess(
-            format!("iterator needs {} stack slots", nr_slots)
-        ));
+        return Err(VerifierError::InvalidMemoryAccess(format!(
+            "iterator needs {} stack slots",
+            nr_slots
+        )));
     }
     Ok(spi)
 }
@@ -274,15 +280,15 @@ impl StackState {
     pub fn spill_reg(&mut self, offset: i32, reg: &BpfRegState) -> Result<()> {
         // Must be 8-byte aligned
         if offset % BPF_REG_SIZE as i32 != 0 {
-            return Err(VerifierError::InvalidMemoryAccess(
-                format!("unaligned spill at offset {}", offset)
-            ));
+            return Err(VerifierError::InvalidMemoryAccess(format!(
+                "unaligned spill at offset {}",
+                offset
+            )));
         }
 
-        let slot = self.offset_to_slot(offset)
-            .ok_or_else(|| VerifierError::InvalidMemoryAccess(
-                format!("invalid stack offset {}", offset)
-            ))?;
+        let slot = self.offset_to_slot(offset).ok_or_else(|| {
+            VerifierError::InvalidMemoryAccess(format!("invalid stack offset {}", offset))
+        })?;
 
         self.ensure_slot(slot);
         self.stack[slot].mark_spill(reg);
@@ -300,27 +306,29 @@ impl StackState {
     pub fn fill_reg(&self, offset: i32) -> Result<BpfRegState> {
         // Must be 8-byte aligned
         if offset % BPF_REG_SIZE as i32 != 0 {
-            return Err(VerifierError::InvalidMemoryAccess(
-                format!("unaligned fill at offset {}", offset)
-            ));
+            return Err(VerifierError::InvalidMemoryAccess(format!(
+                "unaligned fill at offset {}",
+                offset
+            )));
         }
 
-        let slot = self.offset_to_slot(offset)
-            .ok_or_else(|| VerifierError::InvalidMemoryAccess(
-                format!("invalid stack offset {}", offset)
-            ))?;
+        let slot = self.offset_to_slot(offset).ok_or_else(|| {
+            VerifierError::InvalidMemoryAccess(format!("invalid stack offset {}", offset))
+        })?;
 
         if slot >= self.stack.len() {
-            return Err(VerifierError::InvalidMemoryAccess(
-                format!("reading uninitialized stack at offset {}", offset)
-            ));
+            return Err(VerifierError::InvalidMemoryAccess(format!(
+                "reading uninitialized stack at offset {}",
+                offset
+            )));
         }
 
         let stack_slot = &self.stack[slot];
         if !stack_slot.is_spill() {
-            return Err(VerifierError::InvalidMemoryAccess(
-                format!("fill from non-spill slot at offset {}", offset)
-            ));
+            return Err(VerifierError::InvalidMemoryAccess(format!(
+                "fill from non-spill slot at offset {}",
+                offset
+            )));
         }
 
         Ok(stack_slot.spilled_ptr.clone())
@@ -328,10 +336,9 @@ impl StackState {
 
     /// Write misc data to stack
     pub fn write_misc(&mut self, offset: i32, size: usize) -> Result<()> {
-        let slot = self.offset_to_slot(offset)
-            .ok_or_else(|| VerifierError::InvalidMemoryAccess(
-                format!("invalid stack offset {}", offset)
-            ))?;
+        let slot = self.offset_to_slot(offset).ok_or_else(|| {
+            VerifierError::InvalidMemoryAccess(format!("invalid stack offset {}", offset))
+        })?;
 
         self.ensure_slot(slot);
         self.stack[slot].mark_misc(size);
@@ -346,10 +353,9 @@ impl StackState {
 
     /// Write zeros to stack
     pub fn write_zero(&mut self, offset: i32, size: usize) -> Result<()> {
-        let slot = self.offset_to_slot(offset)
-            .ok_or_else(|| VerifierError::InvalidMemoryAccess(
-                format!("invalid stack offset {}", offset)
-            ))?;
+        let slot = self.offset_to_slot(offset).ok_or_else(|| {
+            VerifierError::InvalidMemoryAccess(format!("invalid stack offset {}", offset))
+        })?;
 
         self.ensure_slot(slot);
         self.stack[slot].mark_zero(size);
@@ -414,7 +420,7 @@ impl StackState {
         // Dynptr takes 2 slots: spi (first) and spi-1 (second)
         if spi < 1 {
             return Err(VerifierError::InvalidMemoryAccess(
-                "dynptr needs 2 stack slots".into()
+                "dynptr needs 2 stack slots".into(),
             ));
         }
 
@@ -473,9 +479,10 @@ impl StackState {
         is_rcu: bool,
     ) -> Result<()> {
         if spi + 1 < nr_slots {
-            return Err(VerifierError::InvalidMemoryAccess(
-                format!("iterator needs {} stack slots", nr_slots)
-            ));
+            return Err(VerifierError::InvalidMemoryAccess(format!(
+                "iterator needs {} stack slots",
+                nr_slots
+            )));
         }
 
         // Ensure slots exist

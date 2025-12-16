@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0
+
 //! BTF (BPF Type Format) support
 //!
 //! This module provides basic BTF type handling for the verifier.
@@ -5,12 +7,14 @@
 
 #![allow(missing_docs)] // BTF types have complex internal structure
 
-
-use alloc::{format, string::{String, ToString}, vec::Vec};
+use alloc::{
+    format,
+    string::{String, ToString},
+    vec::Vec,
+};
 
 /// Maximum depth for type resolution to prevent infinite loops in typedef chains
 pub const MAX_RESOLVE_DEPTH: usize = 32;
-
 
 use alloc::collections::BTreeMap as HashMap;
 
@@ -137,7 +141,7 @@ pub struct Btf {
 }
 
 /// BTF String Table
-/// 
+///
 /// The string table stores all strings used in BTF types.
 /// Strings are stored contiguously with null terminators.
 /// Offset 0 always points to an empty string.
@@ -163,7 +167,7 @@ impl BtfStringTable {
     }
 
     /// Add a string to the table and return its offset
-    /// 
+    ///
     /// If the string already exists, returns the existing offset (deduplication)
     pub fn add(&mut self, s: &str) -> u32 {
         // Check for existing string
@@ -243,15 +247,18 @@ impl Btf {
             next_id: 1, // ID 0 is void
             string_table: BtfStringTable::new(),
         };
-        
+
         // Add void type
-        btf.types.insert(0, BtfType {
-            id: 0,
-            kind: BtfKind::Unknown,
-            name: Some("void".into()),
-            ..Default::default()
-        });
-        
+        btf.types.insert(
+            0,
+            BtfType {
+                id: 0,
+                kind: BtfKind::Unknown,
+                name: Some("void".into()),
+                ..Default::default()
+            },
+        );
+
         btf
     }
 
@@ -260,11 +267,11 @@ impl Btf {
         let id = self.next_id;
         self.next_id += 1;
         ty.id = id;
-        
+
         if let Some(ref name) = ty.name {
             self.by_name.entry(name.clone()).or_default().push(id);
         }
-        
+
         self.types.insert(id, ty);
         id
     }
@@ -283,12 +290,15 @@ impl Btf {
     pub fn resolve_type(&self, id: u32) -> Option<&BtfType> {
         let mut current = id;
         let mut depth = 0;
-        
+
         while depth < MAX_RESOLVE_DEPTH {
             let ty = self.types.get(&current)?;
             match ty.kind {
-                BtfKind::Typedef | BtfKind::Volatile | 
-                BtfKind::Const | BtfKind::Restrict | BtfKind::TypeTag => {
+                BtfKind::Typedef
+                | BtfKind::Volatile
+                | BtfKind::Const
+                | BtfKind::Restrict
+                | BtfKind::TypeTag => {
                     current = ty.type_ref;
                     depth += 1;
                 }
@@ -302,10 +312,12 @@ impl Btf {
     pub fn type_size(&self, id: u32) -> Option<u32> {
         let ty = self.resolve_type(id)?;
         match ty.kind {
-            BtfKind::Int | BtfKind::Struct | BtfKind::Union | 
-            BtfKind::Enum | BtfKind::Float | BtfKind::Enum64 => {
-                Some(ty.size)
-            }
+            BtfKind::Int
+            | BtfKind::Struct
+            | BtfKind::Union
+            | BtfKind::Enum
+            | BtfKind::Float
+            | BtfKind::Enum64 => Some(ty.size),
             BtfKind::Ptr => Some(8), // 64-bit pointers
             BtfKind::Array => {
                 let arr = ty.array_info.as_ref()?;
@@ -440,25 +452,20 @@ pub struct BtfFieldAccess {
 }
 
 /// Check if BTF access is valid
-pub fn check_btf_access(
-    btf: &Btf,
-    type_id: u32,
-    offset: i32,
-    size: u32,
-) -> Option<BtfFieldAccess> {
+pub fn check_btf_access(btf: &Btf, type_id: u32, offset: i32, size: u32) -> Option<BtfFieldAccess> {
     if offset < 0 {
         return None;
     }
     let offset = offset as u32;
-    
+
     let ty = btf.resolve_type(type_id)?;
-    
+
     // Check bounds
     if ty.kind == BtfKind::Struct || ty.kind == BtfKind::Union {
         if offset + size > ty.size {
             return None;
         }
-        
+
         // Find the field at this offset
         let bit_offset = offset * 8;
         if let Some(member) = btf.find_member_at_offset(type_id, bit_offset) {
@@ -472,7 +479,7 @@ pub fn check_btf_access(
                 rdonly: false,
             });
         }
-        
+
         // Allow access even without exact field match for raw access
         return Some(BtfFieldAccess {
             type_id,
@@ -483,7 +490,7 @@ pub fn check_btf_access(
             rdonly: false,
         });
     }
-    
+
     None
 }
 
@@ -505,16 +512,18 @@ impl Btf {
         if func.kind != BtfKind::Func {
             return None;
         }
-        
+
         let proto = self.get_type(func.type_ref)?;
         if proto.kind != BtfKind::FuncProto {
             return None;
         }
-        
+
         Some(BtfFuncProto {
             type_id: func_id,
             ret_type: proto.type_ref,
-            params: proto.params.iter()
+            params: proto
+                .params
+                .iter()
                 .map(|p| (p.name.clone(), p.type_id))
                 .collect(),
         })
@@ -543,12 +552,12 @@ pub fn check_type_compat(btf: &Btf, src_id: u32, dst_id: u32) -> BtfTypeCompat {
         Some(t) => t,
         None => return BtfTypeCompat::Incompatible,
     };
-    
+
     // Same type
     if src.id == dst.id {
         return BtfTypeCompat::Exact;
     }
-    
+
     // Same kind checks
     if src.kind == dst.kind {
         match src.kind {
@@ -562,7 +571,7 @@ pub fn check_type_compat(btf: &Btf, src_id: u32, dst_id: u32) -> BtfTypeCompat {
                 // void* is compatible with any pointer
                 let src_target = btf.resolve_type(src.type_ref);
                 let dst_target = btf.resolve_type(dst.type_ref);
-                
+
                 match (src_target, dst_target) {
                     (Some(s), Some(d)) => {
                         // void* accepts any pointer
@@ -586,7 +595,7 @@ pub fn check_type_compat(btf: &Btf, src_id: u32, dst_id: u32) -> BtfTypeCompat {
             _ => {}
         }
     }
-    
+
     // int <-> ptr not allowed in strict mode but allowed in some cases
     // For now, mark as incompatible
     BtfTypeCompat::Incompatible
@@ -604,11 +613,7 @@ pub struct BtfCallVerify {
 }
 
 /// Verify a kfunc call against BTF
-pub fn verify_kfunc_call(
-    btf: &Btf,
-    func_name: &str,
-    arg_types: &[u32],
-) -> BtfCallVerify {
+pub fn verify_kfunc_call(btf: &Btf, func_name: &str, arg_types: &[u32]) -> BtfCallVerify {
     // Find function by name
     let func_ids = btf.find_by_name(func_name);
     if func_ids.is_empty() {
@@ -618,7 +623,7 @@ pub fn verify_kfunc_call(
             ret_type: None,
         };
     }
-    
+
     // Get function prototype
     let func_id = func_ids[0];
     let proto = match btf.get_func_proto(func_id) {
@@ -631,36 +636,35 @@ pub fn verify_kfunc_call(
             };
         }
     };
-    
+
     // Check argument count
     if arg_types.len() != proto.params.len() {
         return BtfCallVerify {
             valid: false,
             error: Some(format!(
                 "kfunc '{}' expects {} args, got {}",
-                func_name, proto.params.len(), arg_types.len()
+                func_name,
+                proto.params.len(),
+                arg_types.len()
             )),
             ret_type: None,
         };
     }
-    
+
     // Check each argument type
-    for (i, ((_name, expected_type), actual_type)) in 
-        proto.params.iter().zip(arg_types.iter()).enumerate() 
+    for (i, ((_name, expected_type), actual_type)) in
+        proto.params.iter().zip(arg_types.iter()).enumerate()
     {
         let compat = check_type_compat(btf, *actual_type, *expected_type);
         if compat == BtfTypeCompat::Incompatible {
             return BtfCallVerify {
                 valid: false,
-                error: Some(format!(
-                    "kfunc '{}' arg {} type mismatch",
-                    func_name, i
-                )),
+                error: Some(format!("kfunc '{}' arg {} type mismatch", func_name, i)),
                 ret_type: None,
             };
         }
     }
-    
+
     BtfCallVerify {
         valid: true,
         error: None,
@@ -674,29 +678,40 @@ pub fn is_trusted_ptr(btf: &Btf, type_id: u32) -> bool {
         Some(t) => t,
         None => return false,
     };
-    
+
     if ty.kind != BtfKind::Ptr {
         return false;
     }
-    
+
     // Check if pointee is a known kernel type
     let target = match btf.resolve_type(ty.type_ref) {
         Some(t) => t,
         None => return false,
     };
-    
+
     // Trusted types are structs with known kernel names
     if target.kind == BtfKind::Struct {
         if let Some(ref name) = target.name {
             // Common trusted kernel types
-            return matches!(name.as_str(),
-                "task_struct" | "file" | "inode" | "socket" | "sock" |
-                "sk_buff" | "net_device" | "bpf_map" | "bpf_prog" |
-                "cgroup" | "pid" | "user_namespace" | "net"
+            return matches!(
+                name.as_str(),
+                "task_struct"
+                    | "file"
+                    | "inode"
+                    | "socket"
+                    | "sock"
+                    | "sk_buff"
+                    | "net_device"
+                    | "bpf_map"
+                    | "bpf_prog"
+                    | "cgroup"
+                    | "pid"
+                    | "user_namespace"
+                    | "net"
             );
         }
     }
-    
+
     false
 }
 
@@ -706,26 +721,33 @@ pub fn type_may_be_acquired(btf: &Btf, type_id: u32) -> bool {
         Some(t) => t,
         None => return false,
     };
-    
+
     if ty.kind != BtfKind::Ptr {
         return false;
     }
-    
+
     let target = match btf.resolve_type(ty.type_ref) {
         Some(t) => t,
         None => return false,
     };
-    
+
     // Types that may be acquired (have reference counting)
     if target.kind == BtfKind::Struct {
         if let Some(ref name) = target.name {
-            return matches!(name.as_str(),
-                "task_struct" | "cgroup" | "file" | "sock" | "socket" |
-                "bpf_rb_node" | "bpf_list_node" | "bpf_refcount"
+            return matches!(
+                name.as_str(),
+                "task_struct"
+                    | "cgroup"
+                    | "file"
+                    | "sock"
+                    | "socket"
+                    | "bpf_rb_node"
+                    | "bpf_list_node"
+                    | "bpf_refcount"
             );
         }
     }
-    
+
     false
 }
 
@@ -735,13 +757,13 @@ pub fn is_dynptr_type(btf: &Btf, type_id: u32) -> bool {
         Some(t) => t,
         None => return false,
     };
-    
+
     if ty.kind == BtfKind::Struct {
         if let Some(ref name) = ty.name {
             return name == "bpf_dynptr";
         }
     }
-    
+
     false
 }
 
@@ -753,13 +775,14 @@ pub fn validate_struct_access(
     size: u32,
     write: bool,
 ) -> Result<BtfFieldAccess, String> {
-    let ty = btf.resolve_type(struct_id)
+    let ty = btf
+        .resolve_type(struct_id)
         .ok_or_else(|| "type not found".to_string())?;
-    
+
     if ty.kind != BtfKind::Struct && ty.kind != BtfKind::Union {
         return Err("not a struct or union".to_string());
     }
-    
+
     // Bounds check
     if offset + size > ty.size {
         return Err(format!(
@@ -767,23 +790,22 @@ pub fn validate_struct_access(
             offset, size, ty.size
         ));
     }
-    
+
     // Find matching member
     let bit_offset = offset * 8;
-    let member = ty.members.iter()
-        .find(|m| m.offset == bit_offset);
-    
+    let member = ty.members.iter().find(|m| m.offset == bit_offset);
+
     if let Some(member) = member {
         let field_ty = btf.resolve_type(member.type_id);
         let is_ptr = field_ty.map(|t| t.kind == BtfKind::Ptr).unwrap_or(false);
-        
+
         // Check write access to read-only fields (future: use BTF tags)
         let rdonly = false; // Would check decl_tag for __attribute__((btf_rdonly))
-        
+
         if write && rdonly {
             return Err("write to read-only field".to_string());
         }
-        
+
         Ok(BtfFieldAccess {
             type_id: struct_id,
             offset,
@@ -820,7 +842,7 @@ pub fn compute_bitfield_offset(member: &BtfMember, btf: &Btf) -> Option<Bitfield
     // For bitfields: offset = (bit_offset << 24) | bit_size
     // Check if this is a bitfield by examining the member type size
     let member_type = btf.resolve_type(member.type_id)?;
-    
+
     if member_type.kind == BtfKind::Int {
         if let Some(encoding) = &member_type.int_encoding {
             // Check if bits < size * 8, indicating a bitfield
@@ -833,7 +855,7 @@ pub fn compute_bitfield_offset(member: &BtfMember, btf: &Btf) -> Option<Bitfield
             }
         }
     }
-    
+
     None
 }
 
@@ -844,13 +866,14 @@ pub fn validate_bitfield_access(
     bit_offset: u32,
     bit_size: u32,
 ) -> Result<(), String> {
-    let ty = btf.resolve_type(struct_id)
+    let ty = btf
+        .resolve_type(struct_id)
         .ok_or_else(|| "type not found".to_string())?;
-    
+
     if ty.kind != BtfKind::Struct && ty.kind != BtfKind::Union {
         return Err("not a struct or union".to_string());
     }
-    
+
     // Find the member containing this bitfield
     for member in &ty.members {
         if let Some(bf) = compute_bitfield_offset(member, btf) {
@@ -859,7 +882,7 @@ pub fn validate_bitfield_access(
             }
         }
     }
-    
+
     // Check bounds
     let struct_bits = ty.size * 8;
     if bit_offset + bit_size > struct_bits {
@@ -868,7 +891,7 @@ pub fn validate_bitfield_access(
             bit_offset, bit_size, struct_bits
         ));
     }
-    
+
     Ok(())
 }
 
@@ -886,12 +909,15 @@ impl ForwardRefState {
     pub fn new() -> Self {
         Self::default()
     }
-    
+
     /// Register a forward reference
     pub fn add_forward_ref(&mut self, name: &str, fwd_id: u32) {
-        self.pending.entry(name.to_string()).or_default().push(fwd_id);
+        self.pending
+            .entry(name.to_string())
+            .or_default()
+            .push(fwd_id);
     }
-    
+
     /// Resolve a forward reference
     pub fn resolve(&mut self, name: &str, resolved_id: u32) {
         if let Some(fwd_ids) = self.pending.remove(name) {
@@ -900,17 +926,17 @@ impl ForwardRefState {
             }
         }
     }
-    
+
     /// Get resolved type for a forward reference
     pub fn get_resolved(&self, fwd_id: u32) -> Option<u32> {
         self.resolved.get(&fwd_id).copied()
     }
-    
+
     /// Check if there are unresolved forward references
     pub fn has_unresolved(&self) -> bool {
         !self.pending.is_empty()
     }
-    
+
     /// Get all unresolved forward reference names
     pub fn unresolved_names(&self) -> Vec<&str> {
         self.pending.keys().map(|s| s.as_str()).collect()
@@ -921,18 +947,18 @@ impl Btf {
     /// Resolve a type including forward references
     pub fn resolve_type_with_fwd(&self, id: u32, fwd_state: &ForwardRefState) -> Option<&BtfType> {
         let ty = self.get_type(id)?;
-        
+
         if ty.kind == BtfKind::Fwd {
             // Check if forward reference is resolved
             if let Some(resolved_id) = fwd_state.get_resolved(id) {
                 return self.get_type(resolved_id);
             }
         }
-        
+
         // Normal resolution through modifiers
         self.resolve_type(id)
     }
-    
+
     /// Check type compatibility with forward reference support
     pub fn types_compatible_fwd(
         &self,
@@ -948,12 +974,12 @@ impl Btf {
             Some(t) => t,
             None => return false,
         };
-        
+
         // Same type
         if src.id == dst.id {
             return true;
         }
-        
+
         // Check forward reference compatibility
         if src.kind == BtfKind::Fwd || dst.kind == BtfKind::Fwd {
             // Forward references are compatible with matching names
@@ -961,12 +987,12 @@ impl Btf {
                 return true;
             }
         }
-        
+
         // Same kind and name
         if src.kind == dst.kind && src.name == dst.name {
             return true;
         }
-        
+
         false
     }
 }
@@ -987,7 +1013,7 @@ impl Enum64Value {
     pub fn value(&self) -> i64 {
         ((self.val_hi32 as i64) << 32) | (self.val_lo32 as i64)
     }
-    
+
     /// Get unsigned 64-bit value
     pub fn uvalue(&self) -> u64 {
         ((self.val_hi32 as u64) << 32) | (self.val_lo32 as u64)
@@ -1184,20 +1210,21 @@ impl DeclTagStore {
 
 /// Validate enum value is within range
 pub fn validate_enum_value(btf: &Btf, enum_id: u32, value: i64) -> Result<(), String> {
-    let ty = btf.resolve_type(enum_id)
+    let ty = btf
+        .resolve_type(enum_id)
         .ok_or_else(|| "enum type not found".to_string())?;
-    
+
     if ty.kind != BtfKind::Enum && ty.kind != BtfKind::Enum64 {
         return Err("not an enum type".to_string());
     }
-    
+
     // For regular enum (32-bit signed)
     if ty.kind == BtfKind::Enum {
         if value < i32::MIN as i64 || value > i32::MAX as i64 {
             return Err(format!("value {} out of range for 32-bit enum", value));
         }
     }
-    
+
     Ok(())
 }
 
@@ -1207,11 +1234,11 @@ pub fn is_variable_length_struct(btf: &Btf, struct_id: u32) -> bool {
         Some(t) => t,
         None => return false,
     };
-    
+
     if ty.kind != BtfKind::Struct {
         return false;
     }
-    
+
     // Check if last member is an array with 0 or 1 elements
     if let Some(last_member) = ty.members.last() {
         if let Some(member_type) = btf.resolve_type(last_member.type_id) {
@@ -1222,32 +1249,34 @@ pub fn is_variable_length_struct(btf: &Btf, struct_id: u32) -> bool {
             }
         }
     }
-    
+
     false
 }
 
 /// Validate function prototype parameters
 pub fn validate_func_proto(btf: &Btf, func_id: u32) -> Result<(), String> {
-    let func = btf.get_type(func_id)
+    let func = btf
+        .get_type(func_id)
         .ok_or_else(|| "function not found".to_string())?;
-    
+
     if func.kind != BtfKind::Func {
         return Err("not a function".to_string());
     }
-    
-    let proto = btf.get_type(func.type_ref)
+
+    let proto = btf
+        .get_type(func.type_ref)
         .ok_or_else(|| "function prototype not found".to_string())?;
-    
+
     if proto.kind != BtfKind::FuncProto {
         return Err("invalid function prototype".to_string());
     }
-    
+
     // Validate return type exists
     if proto.type_ref != 0 {
         btf.get_type(proto.type_ref)
             .ok_or_else(|| "return type not found".to_string())?;
     }
-    
+
     // Validate parameter types
     for (i, param) in proto.params.iter().enumerate() {
         if param.type_id != 0 {
@@ -1255,7 +1284,7 @@ pub fn validate_func_proto(btf: &Btf, func_id: u32) -> Result<(), String> {
                 .ok_or_else(|| format!("parameter {} type not found", i))?;
         }
     }
-    
+
     Ok(())
 }
 
@@ -1265,12 +1294,12 @@ pub fn int_encoding_compatible(src: &BtfIntEncoding, dst: &BtfIntEncoding) -> bo
     if src.is_signed() != dst.is_signed() {
         return false;
     }
-    
+
     // Bits must be compatible (src can be smaller or equal)
     if src.bits > dst.bits {
         return false;
     }
-    
+
     true
 }
 
@@ -1281,31 +1310,36 @@ pub fn validate_nested_access(
     access_path: &[(String, u32)], // (field_name, offset)
 ) -> Result<u32, String> {
     let mut current_type_id = base_type_id;
-    
+
     for (field_name, expected_offset) in access_path {
-        let ty = btf.resolve_type(current_type_id)
+        let ty = btf
+            .resolve_type(current_type_id)
             .ok_or_else(|| format!("type {} not found", current_type_id))?;
-        
+
         if ty.kind != BtfKind::Struct && ty.kind != BtfKind::Union {
             return Err(format!("expected struct/union, got {:?}", ty.kind));
         }
-        
+
         // Find the field
-        let member = ty.members.iter()
+        let member = ty
+            .members
+            .iter()
             .find(|m| m.name.as_deref() == Some(field_name.as_str()))
             .ok_or_else(|| format!("field '{}' not found", field_name))?;
-        
+
         // Verify offset matches
         if member.offset / 8 != *expected_offset {
             return Err(format!(
                 "field '{}' offset mismatch: expected {}, got {}",
-                field_name, expected_offset, member.offset / 8
+                field_name,
+                expected_offset,
+                member.offset / 8
             ));
         }
-        
+
         current_type_id = member.type_id;
     }
-    
+
     Ok(current_type_id)
 }
 
@@ -1372,7 +1406,7 @@ impl UnionAccessTracker {
         variant_type_id: u32,
     ) -> Result<(), String> {
         let key = (ptr_id, offset);
-        
+
         if let Some(existing) = self.states.get(&key) {
             if existing.is_known() && existing.active_variant != variant_idx {
                 // Accessing different variant than what was written
@@ -1382,13 +1416,12 @@ impl UnionAccessTracker {
                 ));
             }
         }
-        
-        self.states.insert(key, UnionVariantState::with_variant(
-            variant_idx,
-            variant_size,
-            variant_type_id,
-        ));
-        
+
+        self.states.insert(
+            key,
+            UnionVariantState::with_variant(variant_idx, variant_size, variant_type_id),
+        );
+
         Ok(())
     }
 
@@ -1485,7 +1518,14 @@ impl<'a> NestedAccessValidator<'a> {
         };
 
         // Traverse the type hierarchy to find the field at this offset
-        match self.find_field_at_offset_recursive(base_type_id, offset, size, 0, &mut result, is_write) {
+        match self.find_field_at_offset_recursive(
+            base_type_id,
+            offset,
+            size,
+            0,
+            &mut result,
+            is_write,
+        ) {
             Ok(()) => {
                 result.valid = true;
             }
@@ -1510,7 +1550,9 @@ impl<'a> NestedAccessValidator<'a> {
             return Err("nested structure too deep".to_string());
         }
 
-        let ty = self.btf.resolve_type(type_id)
+        let ty = self
+            .btf
+            .resolve_type(type_id)
             .ok_or_else(|| format!("type {} not found", type_id))?;
 
         // Collect type-level permissions
@@ -1529,19 +1571,24 @@ impl<'a> NestedAccessValidator<'a> {
                 if remaining_offset + size > ty.size {
                     return Err(format!(
                         "access at offset {} size {} exceeds {} size {}",
-                        remaining_offset, size,
-                        if ty.kind == BtfKind::Union { "union" } else { "struct" },
+                        remaining_offset,
+                        size,
+                        if ty.kind == BtfKind::Union {
+                            "union"
+                        } else {
+                            "struct"
+                        },
                         ty.size
                     ));
                 }
 
                 // Find the member containing this offset
                 let _bit_offset = remaining_offset * 8;
-                
+
                 for (member_idx, member) in ty.members.iter().enumerate() {
                     let member_byte_offset = member.offset / 8;
                     let member_size = self.btf.type_size(member.type_id).unwrap_or(0);
-                    
+
                     // For unions, all members start at offset 0
                     let effective_offset = if ty.kind == BtfKind::Union {
                         0
@@ -1550,8 +1597,8 @@ impl<'a> NestedAccessValidator<'a> {
                     };
 
                     // Check if access falls within this member
-                    if remaining_offset >= effective_offset &&
-                       remaining_offset < effective_offset + member_size
+                    if remaining_offset >= effective_offset
+                        && remaining_offset < effective_offset + member_size
                     {
                         // Found the containing member
                         if let Some(ref name) = member.name {
@@ -1633,7 +1680,7 @@ impl<'a> NestedAccessValidator<'a> {
                     result.path.push(format!("[{}]", elem_idx));
 
                     let new_offset = remaining_offset % elem_size;
-                    
+
                     // Recurse into element type
                     let elem_ty = self.btf.resolve_type(arr.elem_type);
                     if let Some(et) = elem_ty {
@@ -1720,7 +1767,9 @@ impl<'a> NestedAccessValidator<'a> {
 
             // Collect type permissions
             if let Some(tags) = self.decl_tags {
-                result.permissions.merge(&tags.get_type_permissions(current_type_id));
+                result
+                    .permissions
+                    .merge(&tags.get_type_permissions(current_type_id));
             }
 
             if ty.kind != BtfKind::Struct && ty.kind != BtfKind::Union {
@@ -1740,13 +1789,12 @@ impl<'a> NestedAccessValidator<'a> {
             for (member_idx, member) in ty.members.iter().enumerate() {
                 if member.name.as_deref() == Some(*field_name) {
                     result.path.push(field_name.to_string());
-                    
+
                     // Collect member permissions
                     if let Some(tags) = self.decl_tags {
-                        result.permissions.merge(&tags.get_member_permissions(
-                            current_type_id,
-                            member_idx as i32,
-                        ));
+                        result.permissions.merge(
+                            &tags.get_member_permissions(current_type_id, member_idx as i32),
+                        );
                     }
 
                     // For unions, track variant
@@ -1848,7 +1896,9 @@ impl<'a> BtfTypeWalker<'a> {
         }
         self.visited.push(type_id);
 
-        let ty = self.btf.resolve_type(type_id)
+        let ty = self
+            .btf
+            .resolve_type(type_id)
             .ok_or_else(|| format!("type {} not found", type_id))?;
 
         let mut fields = Vec::new();
@@ -1878,11 +1928,8 @@ impl<'a> BtfTypeWalker<'a> {
                             if let Some(ref name) = member.name {
                                 self.path.push(name.clone());
                             }
-                            let nested = self.walk_type_impl(
-                                member.type_id,
-                                member_offset,
-                                depth + 1,
-                            )?;
+                            let nested =
+                                self.walk_type_impl(member.type_id, member_offset, depth + 1)?;
                             fields.extend(nested);
                             if member.name.is_some() {
                                 self.path.pop();
@@ -1894,7 +1941,8 @@ impl<'a> BtfTypeWalker<'a> {
             BtfKind::Array => {
                 if let Some(ref arr) = ty.array_info {
                     let elem_size = self.btf.type_size(arr.elem_type).unwrap_or(0) * 8;
-                    for i in 0..arr.nelems.min(64) { // Limit array expansion
+                    for i in 0..arr.nelems.min(64) {
+                        // Limit array expansion
                         let elem_offset = bit_offset + i * elem_size;
                         fields.push(FieldPath {
                             name: format!("[{}]", i),
@@ -1945,7 +1993,7 @@ impl<'a> BtfTypeWalker<'a> {
     ) -> Result<Option<FieldPath>, String> {
         let fields = self.walk_type(type_id)?;
         let bit_offset = byte_offset * 8;
-        
+
         Ok(fields.into_iter().find(|f| f.bit_offset == bit_offset))
     }
 
@@ -1956,7 +2004,9 @@ impl<'a> BtfTypeWalker<'a> {
         offset: u32,
         size: u32,
     ) -> Result<AccessValidation, String> {
-        let ty = self.btf.resolve_type(type_id)
+        let ty = self
+            .btf
+            .resolve_type(type_id)
             .ok_or_else(|| "type not found".to_string())?;
 
         // Bounds check
@@ -2165,7 +2215,8 @@ fn classify_kfunc_return(btf: &Btf, type_id: u32) -> KfuncReturnType {
 
     match ty.kind {
         BtfKind::Int => {
-            let signed = ty.int_encoding
+            let signed = ty
+                .int_encoding
                 .as_ref()
                 .map(|e| e.is_signed())
                 .unwrap_or(false);
@@ -2195,9 +2246,7 @@ fn classify_kfunc_param(btf: &Btf, type_id: u32) -> KfuncParamKind {
     };
 
     match ty.kind {
-        BtfKind::Int | BtfKind::Enum | BtfKind::Enum64 => {
-            KfuncParamKind::Scalar
-        }
+        BtfKind::Int | BtfKind::Enum | BtfKind::Enum64 => KfuncParamKind::Scalar,
         BtfKind::Ptr => {
             let target = btf.resolve_type(ty.type_ref);
             match target {
@@ -2216,9 +2265,7 @@ fn classify_kfunc_param(btf: &Btf, type_id: u32) -> KfuncParamKind {
                         nullable: false,
                     }
                 }
-                Some(t) if t.kind == BtfKind::FuncProto => {
-                    KfuncParamKind::Callback
-                }
+                Some(t) if t.kind == BtfKind::FuncProto => KfuncParamKind::Callback,
                 _ => {
                     // Generic pointer to memory
                     KfuncParamKind::PtrToMem {
@@ -2233,11 +2280,7 @@ fn classify_kfunc_param(btf: &Btf, type_id: u32) -> KfuncParamKind {
 }
 
 /// Infer kfunc flags from name and signature
-fn infer_kfunc_flags(
-    name: &str,
-    ret_type: &KfuncReturnType,
-    params: &[KfuncParam],
-) -> KfuncFlags {
+fn infer_kfunc_flags(name: &str, ret_type: &KfuncReturnType, params: &[KfuncParam]) -> KfuncFlags {
     let mut flags = KfuncFlags::empty();
 
     // Check for acquire/release patterns in name
@@ -2249,7 +2292,13 @@ fn infer_kfunc_flags(
     }
 
     // Check return type
-    if matches!(ret_type, KfuncReturnType::Pointer { may_be_null: true, .. }) {
+    if matches!(
+        ret_type,
+        KfuncReturnType::Pointer {
+            may_be_null: true,
+            ..
+        }
+    ) {
         flags.insert(KfuncFlags::RET_NULL);
     }
     if matches!(ret_type, KfuncReturnType::AcquiredPointer { .. }) {
@@ -2280,7 +2329,9 @@ pub fn validate_kfunc_call(
     if arg_regs.len() != meta.params.len() {
         return Err(format!(
             "kfunc '{}' expects {} args, got {}",
-            meta.name, meta.params.len(), arg_regs.len()
+            meta.name,
+            meta.params.len(),
+            arg_regs.len()
         ));
     }
 

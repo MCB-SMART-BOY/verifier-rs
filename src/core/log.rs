@@ -1,15 +1,16 @@
+// SPDX-License-Identifier: GPL-2.0
+
 //! Verbose logging for BPF verifier
 //!
 //! This module provides structured logging for the verification process,
 //! useful for debugging and understanding why programs pass or fail.
 
+use crate::core::types::*;
 use crate::state::reg_state::BpfRegState;
 use crate::state::verifier_state::BpfVerifierState;
-use crate::core::types::*;
 use core::fmt::Write;
 
-
-use alloc::{string::String, format};
+use alloc::{format, string::String};
 
 /// Log level for verifier output
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
@@ -131,7 +132,7 @@ impl VerifierLog {
     }
 
     /// Truncate the log buffer to the specified length
-    /// 
+    ///
     /// This is used for log rollback when popping states from the stack.
     pub fn truncate(&mut self, len: usize) {
         if len < self.buffer.len() {
@@ -147,9 +148,9 @@ impl VerifierLog {
 /// Format a register state for logging
 pub fn fmt_reg(reg: &BpfRegState, regno: usize) -> String {
     let mut s = String::new();
-    
+
     write!(s, "R{}", regno).unwrap();
-    
+
     match reg.reg_type {
         BpfRegType::NotInit => {
             write!(s, "=<not_init>").unwrap();
@@ -162,8 +163,12 @@ pub fn fmt_reg(reg: &BpfRegState, regno: usize) -> String {
                 if reg.umin_value == reg.umax_value {
                     write!(s, "={}", reg.umin_value).unwrap();
                 } else {
-                    write!(s, "=scalar(umin={},umax={})", 
-                           reg.umin_value, reg.umax_value).unwrap();
+                    write!(
+                        s,
+                        "=scalar(umin={},umax={})",
+                        reg.umin_value, reg.umax_value
+                    )
+                    .unwrap();
                 }
                 if reg.precise {
                     write!(s, " P").unwrap();
@@ -233,7 +238,7 @@ pub fn fmt_reg(reg: &BpfRegState, regno: usize) -> String {
 /// Format register state summary (only non-trivial registers)
 pub fn fmt_regs(state: &BpfVerifierState) -> String {
     let mut s = String::new();
-    
+
     if let Some(func) = state.cur_func() {
         let mut first = true;
         for (i, reg) in func.regs.iter().enumerate() {
@@ -246,7 +251,7 @@ pub fn fmt_regs(state: &BpfVerifierState) -> String {
             }
         }
     }
-    
+
     s
 }
 
@@ -283,11 +288,14 @@ pub fn fmt_insn(insn: &BpfInsn, idx: usize) -> String {
             };
 
             if src_type == BPF_X {
-                write!(s, "{}{} r{}, r{}", op_name, width, 
-                       insn.dst_reg, insn.src_reg).unwrap();
+                write!(
+                    s,
+                    "{}{} r{}, r{}",
+                    op_name, width, insn.dst_reg, insn.src_reg
+                )
+                .unwrap();
             } else {
-                write!(s, "{}{} r{}, {}", op_name, width,
-                       insn.dst_reg, insn.imm).unwrap();
+                write!(s, "{}{} r{}, {}", op_name, width, insn.dst_reg, insn.imm).unwrap();
             }
         }
         BPF_LDX => {
@@ -298,8 +306,12 @@ pub fn fmt_insn(insn: &BpfInsn, idx: usize) -> String {
                 x if x == BPF_DW => "64",
                 _ => "?",
             };
-            write!(s, "ldx{} r{}, [r{}+{}]", size,
-                   insn.dst_reg, insn.src_reg, insn.off).unwrap();
+            write!(
+                s,
+                "ldx{} r{}, [r{}+{}]",
+                size, insn.dst_reg, insn.src_reg, insn.off
+            )
+            .unwrap();
         }
         BPF_STX | BPF_ST => {
             let size = match insn.code & 0x18 {
@@ -310,11 +322,19 @@ pub fn fmt_insn(insn: &BpfInsn, idx: usize) -> String {
                 _ => "?",
             };
             if class == BPF_STX {
-                write!(s, "stx{} [r{}+{}], r{}", size,
-                       insn.dst_reg, insn.off, insn.src_reg).unwrap();
+                write!(
+                    s,
+                    "stx{} [r{}+{}], r{}",
+                    size, insn.dst_reg, insn.off, insn.src_reg
+                )
+                .unwrap();
             } else {
-                write!(s, "st{} [r{}+{}], {}", size,
-                       insn.dst_reg, insn.off, insn.imm).unwrap();
+                write!(
+                    s,
+                    "st{} [r{}+{}], {}",
+                    size, insn.dst_reg, insn.off, insn.imm
+                )
+                .unwrap();
             }
         }
         BPF_JMP | BPF_JMP32 => {
@@ -353,11 +373,19 @@ pub fn fmt_insn(insn: &BpfInsn, idx: usize) -> String {
                         _ => "jmp?",
                     };
                     if src_type == BPF_X {
-                        write!(s, "{}{} r{}, r{}, +{}", op_name, width,
-                               insn.dst_reg, insn.src_reg, insn.off).unwrap();
+                        write!(
+                            s,
+                            "{}{} r{}, r{}, +{}",
+                            op_name, width, insn.dst_reg, insn.src_reg, insn.off
+                        )
+                        .unwrap();
                     } else {
-                        write!(s, "{}{} r{}, {}, +{}", op_name, width,
-                               insn.dst_reg, insn.imm, insn.off).unwrap();
+                        write!(
+                            s,
+                            "{}{} r{}, {}, +{}",
+                            op_name, width, insn.dst_reg, insn.imm, insn.off
+                        )
+                        .unwrap();
                     }
                 }
             }
@@ -385,7 +413,7 @@ pub fn log_insn(log: &mut VerifierLog, insn: &BpfInsn, idx: usize, state: &BpfVe
 
     let insn_str = fmt_insn(insn, idx);
     let regs_str = fmt_regs(state);
-    
+
     let msg = format!("{} ; {}", insn_str, regs_str);
     log.trace(&msg);
 }
@@ -396,10 +424,12 @@ pub fn log_branch(log: &mut VerifierLog, idx: usize, taken: bool, target: usize)
         return;
     }
 
-    let msg = format!("{}: branch {} -> {}", 
-                      idx, 
-                      if taken { "taken" } else { "not taken" },
-                      target);
+    let msg = format!(
+        "{}: branch {} -> {}",
+        idx,
+        if taken { "taken" } else { "not taken" },
+        target
+    );
     log.debug(&msg);
 }
 

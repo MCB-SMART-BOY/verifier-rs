@@ -1,16 +1,15 @@
+// SPDX-License-Identifier: GPL-2.0
+
 //!
 
 //! This module integrates range refinement into the verification process,
 
 //! propagating refined register bounds to both taken and not-taken branches.
 
-
-
 use alloc::vec::Vec;
 
 use crate::bounds::range_refine::{
-    BranchCond, BranchOutcome,
-    determine_branch_outcome, refine_reg_const, refine_reg_reg,
+    determine_branch_outcome, refine_reg_const, refine_reg_reg, BranchCond, BranchOutcome,
 };
 use crate::core::types::*;
 use crate::state::reg_state::BpfRegState;
@@ -62,10 +61,7 @@ impl BranchStateResult {
 }
 
 /// Process a conditional branch and produce refined states for both paths.
-pub fn process_conditional_branch(
-    state: &BpfVerifierState,
-    insn: &BpfInsn,
-) -> BranchStateResult {
+pub fn process_conditional_branch(state: &BpfVerifierState, insn: &BpfInsn) -> BranchStateResult {
     let op = insn.code & 0xf0;
     let src_type = insn.code & 0x08;
     let dst_reg = insn.dst_reg as usize;
@@ -112,20 +108,56 @@ pub fn process_conditional_branch(
     match outcome {
         BranchOutcome::AlwaysTaken => {
             let mut taken = state.clone();
-            apply_refinements(&mut taken, dst_reg, &dst, src_const, src_reg_state.as_ref(), insn.src_reg as usize, cond, true);
+            apply_refinements(
+                &mut taken,
+                dst_reg,
+                &dst,
+                src_const,
+                src_reg_state.as_ref(),
+                insn.src_reg as usize,
+                cond,
+                true,
+            );
             BranchStateResult::taken_only(taken)
         }
         BranchOutcome::NeverTaken => {
             let mut fallthrough = state.clone();
-            apply_refinements(&mut fallthrough, dst_reg, &dst, src_const, src_reg_state.as_ref(), insn.src_reg as usize, cond, false);
+            apply_refinements(
+                &mut fallthrough,
+                dst_reg,
+                &dst,
+                src_const,
+                src_reg_state.as_ref(),
+                insn.src_reg as usize,
+                cond,
+                false,
+            );
             BranchStateResult::fallthrough_only(fallthrough)
         }
         BranchOutcome::Unknown => {
             let mut taken = state.clone();
             let mut fallthrough = state.clone();
 
-            apply_refinements(&mut taken, dst_reg, &dst, src_const, src_reg_state.as_ref(), insn.src_reg as usize, cond, true);
-            apply_refinements(&mut fallthrough, dst_reg, &dst, src_const, src_reg_state.as_ref(), insn.src_reg as usize, cond, false);
+            apply_refinements(
+                &mut taken,
+                dst_reg,
+                &dst,
+                src_const,
+                src_reg_state.as_ref(),
+                insn.src_reg as usize,
+                cond,
+                true,
+            );
+            apply_refinements(
+                &mut fallthrough,
+                dst_reg,
+                &dst,
+                src_const,
+                src_reg_state.as_ref(),
+                insn.src_reg as usize,
+                cond,
+                false,
+            );
 
             BranchStateResult::both(taken, fallthrough)
         }
@@ -170,11 +202,7 @@ fn apply_refinements(
 
 /// Check if a NULL check pattern is detected and handle it.
 /// This handles both immediate comparisons (ptr == 0) and register comparisons.
-pub fn handle_null_check(
-    state: &mut BpfVerifierState,
-    insn: &BpfInsn,
-    branch_taken: bool,
-) -> bool {
+pub fn handle_null_check(state: &mut BpfVerifierState, insn: &BpfInsn, branch_taken: bool) -> bool {
     let op = insn.code & 0xf0;
     let src_type = insn.code & 0x08;
     let dst_reg = insn.dst_reg as usize;
@@ -278,8 +306,10 @@ fn handle_null_check_reg(
     };
 
     // Check if either register is a known NULL (scalar with value 0)
-    let dst_is_null = dst.reg_type == BpfRegType::ScalarValue && dst.is_const() && dst.const_value() == 0;
-    let src_is_null = src.reg_type == BpfRegType::ScalarValue && src.is_const() && src.const_value() == 0;
+    let dst_is_null =
+        dst.reg_type == BpfRegType::ScalarValue && dst.is_const() && dst.const_value() == 0;
+    let src_is_null =
+        src.reg_type == BpfRegType::ScalarValue && src.is_const() && src.const_value() == 0;
 
     // Check if either side has PTR_MAYBE_NULL
     let dst_maybe_null = dst.type_flags.contains(BpfTypeFlag::PTR_MAYBE_NULL);

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0
+
 //!
 
 //! This module provides validation logic specific to each BPF program type.
@@ -5,8 +7,6 @@
 //! Different program types have different context structures, allowed helpers,
 
 //! return value requirements, and access permissions.
-
-
 
 use alloc::{format, string::String, vec, vec::Vec};
 
@@ -998,9 +998,7 @@ fn flow_dissector_info() -> ProgTypeInfo {
         prog_type: BpfProgType::FlowDissector,
         ctx_size: 24, // __sk_buff flow dissector ctx
         ctx_fields: Vec::new(),
-        allowed_helpers: vec![
-            BpfFuncId::SkbLoadBytes,
-        ],
+        allowed_helpers: vec![BpfFuncId::SkbLoadBytes],
         ret_range: BpfRetvalRange::new(0, 1),
         has_direct_packet_access: true,
         can_tail_call: false,
@@ -1310,14 +1308,23 @@ impl ProgTypeValidator {
         if min > self.info.ret_range.maxval || max < self.info.ret_range.minval {
             return Err(VerifierError::InvalidFunctionCall(format!(
                 "return range [{}, {}] doesn't overlap with allowed range [{}, {}] for {:?}",
-                min, max, self.info.ret_range.minval, self.info.ret_range.maxval, self.info.prog_type
+                min,
+                max,
+                self.info.ret_range.minval,
+                self.info.ret_range.maxval,
+                self.info.prog_type
             )));
         }
         Ok(())
     }
 
     /// Check if context access at the given offset is valid.
-    pub fn validate_ctx_access(&self, offset: u32, size: u32, is_write: bool) -> Result<FieldAccess> {
+    pub fn validate_ctx_access(
+        &self,
+        offset: u32,
+        size: u32,
+        is_write: bool,
+    ) -> Result<FieldAccess> {
         // Check if within context size
         if self.info.ctx_size > 0 && offset + size > self.info.ctx_size {
             return Err(VerifierError::InvalidMemoryAccess(format!(
@@ -1415,14 +1422,14 @@ impl ProgTypeValidator {
         // Check sleepable kfuncs
         if kfunc_caps.contains(KfuncCapabilities::SLEEPABLE) && !self.info.is_sleepable {
             return Err(VerifierError::InvalidFunctionCall(
-                "sleepable kfunc called from non-sleepable program".into()
+                "sleepable kfunc called from non-sleepable program".into(),
             ));
         }
 
         // Check destructive kfuncs require CAP_SYS_BOOT
         if kfunc_caps.contains(KfuncCapabilities::DESTRUCTIVE) {
             return Err(VerifierError::PermissionDenied(
-                "destructive kfunc requires CAP_SYS_BOOT".into()
+                "destructive kfunc requires CAP_SYS_BOOT".into(),
             ));
         }
 
@@ -1442,8 +1449,12 @@ impl ProgTypeValidator {
             ProgFeature::BoundedLoops => true,
             ProgFeature::Kfunc => matches!(
                 self.info.prog_type,
-                BpfProgType::Tracing | BpfProgType::Lsm | BpfProgType::StructOps |
-                BpfProgType::Syscall | BpfProgType::SchedCls | BpfProgType::Xdp
+                BpfProgType::Tracing
+                    | BpfProgType::Lsm
+                    | BpfProgType::StructOps
+                    | BpfProgType::Syscall
+                    | BpfProgType::SchedCls
+                    | BpfProgType::Xdp
             ),
             ProgFeature::Arena => matches!(
                 self.info.prog_type,
@@ -1557,10 +1568,7 @@ pub fn get_allowed_attach_types(prog_type: BpfProgType) -> Vec<BpfAttachType> {
             BpfAttachType::TraceIter,
             BpfAttachType::TraceRawTp,
         ],
-        BpfProgType::Lsm => vec![
-            BpfAttachType::LsmMac,
-            BpfAttachType::LsmCgroup,
-        ],
+        BpfProgType::Lsm => vec![BpfAttachType::LsmMac, BpfAttachType::LsmCgroup],
         BpfProgType::FlowDissector => vec![BpfAttachType::FlowDissector],
         BpfProgType::SkLookup => vec![BpfAttachType::SkLookup],
         BpfProgType::Xdp => vec![
@@ -1576,10 +1584,7 @@ pub fn get_allowed_attach_types(prog_type: BpfProgType) -> Vec<BpfAttachType> {
         BpfProgType::Kprobe => vec![BpfAttachType::TraceKprobeMulti],
         BpfProgType::StructOps => vec![BpfAttachType::StructOps],
         BpfProgType::Netfilter => vec![BpfAttachType::Netfilter],
-        BpfProgType::SchedCls => vec![
-            BpfAttachType::TcxIngress,
-            BpfAttachType::TcxEgress,
-        ],
+        BpfProgType::SchedCls => vec![BpfAttachType::TcxIngress, BpfAttachType::TcxEgress],
         _ => Vec::new(), // Other types don't require specific attach type
     }
 }
@@ -1695,11 +1700,11 @@ pub fn validate_extension_target(
 
     // Target must be a valid program type for extension
     match target_prog_type {
-        BpfProgType::Xdp |
-        BpfProgType::SchedCls |
-        BpfProgType::SchedAct |
-        BpfProgType::Tracing |
-        BpfProgType::SocketFilter => Ok(()),
+        BpfProgType::Xdp
+        | BpfProgType::SchedCls
+        | BpfProgType::SchedAct
+        | BpfProgType::Tracing
+        | BpfProgType::SocketFilter => Ok(()),
         _ => Err(VerifierError::TypeMismatch {
             expected: "valid extension target".into(),
             got: format!("{:?}", target_prog_type),
@@ -1708,10 +1713,7 @@ pub fn validate_extension_target(
 }
 
 /// Validate struct_ops program requirements
-pub fn validate_struct_ops_prog(
-    prog_type: BpfProgType,
-    func_proto: &str,
-) -> Result<()> {
+pub fn validate_struct_ops_prog(prog_type: BpfProgType, func_proto: &str) -> Result<()> {
     if prog_type != BpfProgType::StructOps {
         return Err(VerifierError::TypeMismatch {
             expected: "BPF_PROG_TYPE_STRUCT_OPS".into(),
@@ -1722,7 +1724,7 @@ pub fn validate_struct_ops_prog(
     // Validate function prototype format
     if func_proto.is_empty() {
         return Err(VerifierError::InvalidFunctionCall(
-            "struct_ops requires BTF function prototype".into()
+            "struct_ops requires BTF function prototype".into(),
         ));
     }
 

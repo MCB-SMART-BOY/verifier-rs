@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0
+
 //! Sleepable context validation
 //!
 //! This module implements validation for sleepable BPF programs.
@@ -14,14 +16,13 @@
 //! - When RCU lock is released, MEM_RCU pointers become invalid
 //! - Global functions that might_sleep propagate this property to callers
 
-
 use alloc::{format, vec::Vec};
 
 use crate::core::error::{Result, VerifierError};
 use crate::core::types::BpfTypeFlag;
-use crate::state::verifier_state::BpfVerifierState;
 use crate::state::reference::ReferenceManager;
 use crate::state::reg_state::BpfRegState;
+use crate::state::verifier_state::BpfVerifierState;
 
 /// Context state for sleepable validation
 #[derive(Debug, Clone, Default)]
@@ -64,7 +65,7 @@ impl SleepableContext {
     pub fn leave_atomic(&mut self) -> Result<()> {
         if self.atomic_depth == 0 {
             return Err(VerifierError::Internal(
-                "leaving atomic context without entering".into()
+                "leaving atomic context without entering".into(),
             ));
         }
         self.atomic_depth -= 1;
@@ -152,10 +153,7 @@ pub fn check_sleepable_call(
 }
 
 /// Check if entering a non-sleepable context is valid
-pub fn check_enter_non_sleepable(
-    state: &BpfVerifierState,
-    context_name: &str,
-) -> Result<()> {
+pub fn check_enter_non_sleepable(state: &BpfVerifierState, context_name: &str) -> Result<()> {
     // This is always allowed - we're just tracking state
     let _ = (state, context_name);
     Ok(())
@@ -170,7 +168,7 @@ pub fn is_sleepable_helper(helper_id: u32) -> bool {
         209 | // bpf_copy_from_user_task
         195 | // bpf_ima_inode_hash
         174 | // bpf_find_vma (can sleep)
-        210   // bpf_ima_file_hash
+        210 // bpf_ima_file_hash
     )
 }
 
@@ -180,7 +178,7 @@ pub fn is_forbidden_in_sleepable(helper_id: u32) -> bool {
         helper_id,
         12 | // bpf_tail_call - changes control flow
         25 | // bpf_get_prandom_u32 - atomic context may be required
-        35   // bpf_spin_lock - should use res_spin_lock in sleepable
+        35 // bpf_spin_lock - should use res_spin_lock in sleepable
     )
 }
 
@@ -224,13 +222,12 @@ pub fn check_kfunc_sleepable_compat(
 /// Validate that program can be marked sleepable
 pub fn validate_sleepable_prog(prog_type: crate::core::types::BpfProgType) -> Result<()> {
     use crate::core::types::BpfProgType;
-    
+
     // Only certain program types can be sleepable
     match prog_type {
-        BpfProgType::Tracing |
-        BpfProgType::Lsm |
-        BpfProgType::StructOps |
-        BpfProgType::Syscall => Ok(()),
+        BpfProgType::Tracing | BpfProgType::Lsm | BpfProgType::StructOps | BpfProgType::Syscall => {
+            Ok(())
+        }
         _ => Err(VerifierError::InvalidFunctionCall(format!(
             "{:?} programs cannot be sleepable",
             prog_type
@@ -239,46 +236,41 @@ pub fn validate_sleepable_prog(prog_type: crate::core::types::BpfProgType) -> Re
 }
 
 /// Check callback context for sleepable restrictions
-pub fn check_callback_sleepable(
-    state: &BpfVerifierState,
-    callback_sleepable: bool,
-) -> Result<()> {
+pub fn check_callback_sleepable(state: &BpfVerifierState, callback_sleepable: bool) -> Result<()> {
     if callback_sleepable && !state.in_sleepable {
         return Err(VerifierError::InvalidFunctionCall(
-            "sleepable callback requires sleepable program".into()
+            "sleepable callback requires sleepable program".into(),
         ));
     }
     Ok(())
 }
 
 /// Check if we're in a sleepable context (kernel's in_sleepable_context)
-/// 
+///
 /// Returns true only if:
 /// - No active RCU locks
 /// - No active preempt locks  
 /// - No active IRQ state
 /// - Program is sleepable
 pub fn in_sleepable_context(state: &BpfVerifierState, refs: &ReferenceManager) -> bool {
-    refs.active_rcu_locks == 0 &&
-    refs.active_preempt_locks == 0 &&
-    refs.active_irq_id == 0 &&
-    state.in_sleepable
+    refs.active_rcu_locks == 0
+        && refs.active_preempt_locks == 0
+        && refs.active_irq_id == 0
+        && state.in_sleepable
 }
 
 /// Check if we're in RCU read-side critical section (kernel's in_rcu_cs)
-/// 
+///
 /// Returns true if:
 /// - Active RCU locks, OR
 /// - Active spin locks, OR
 /// - Not in sleepable program
 pub fn in_rcu_cs(state: &BpfVerifierState, refs: &ReferenceManager) -> bool {
-    refs.active_rcu_locks > 0 ||
-    refs.active_locks > 0 ||
-    !state.in_sleepable
+    refs.active_rcu_locks > 0 || refs.active_locks > 0 || !state.in_sleepable
 }
 
 /// Clear MEM_RCU flag from a register when RCU lock is released
-/// 
+///
 /// When bpf_rcu_read_unlock is called and the RCU lock count drops to zero,
 /// all pointers with MEM_RCU flag must have this flag cleared since they
 /// are no longer protected.
@@ -303,19 +295,19 @@ pub struct RcuClearInfo {
 }
 
 /// Find all registers and stack slots with MEM_RCU flag
-/// 
+///
 /// This is used when RCU lock is released to find all pointers that
 /// need their MEM_RCU flag cleared.
 pub fn find_rcu_protected_regs(state: &BpfVerifierState) -> Vec<RcuClearInfo> {
     let mut result = Vec::new();
-    
+
     // Check all frames
     for (frame_idx, maybe_func_state) in state.frame.iter().enumerate() {
         let func_state = match maybe_func_state {
             Some(fs) => fs,
             None => continue,
         };
-        
+
         // Check registers
         for (reg_idx, reg) in func_state.regs.iter().enumerate() {
             if reg.type_flags.contains(BpfTypeFlag::MEM_RCU) {
@@ -326,7 +318,7 @@ pub fn find_rcu_protected_regs(state: &BpfVerifierState) -> Vec<RcuClearInfo> {
                 });
             }
         }
-        
+
         // Check spilled registers on stack
         // stack.stack is Vec<BpfStackState>, each slot is 8 bytes
         for (slot_idx, slot) in func_state.stack.stack.iter().enumerate() {
@@ -342,12 +334,12 @@ pub fn find_rcu_protected_regs(state: &BpfVerifierState) -> Vec<RcuClearInfo> {
             }
         }
     }
-    
+
     result
 }
 
 /// Check if a global function call is valid in current context
-/// 
+///
 /// Global functions that might sleep cannot be called from:
 /// - RCU read-side critical section
 /// - Preempt-disabled region  
@@ -362,40 +354,40 @@ pub fn check_global_func_sleepable(
     if !might_sleep {
         return Ok(());
     }
-    
+
     if refs.active_rcu_locks > 0 {
         return Err(VerifierError::InvalidFunctionCall(format!(
             "global function '{}' that may sleep cannot be called in RCU read-side critical section",
             func_name
         )));
     }
-    
+
     if refs.active_preempt_locks > 0 {
         return Err(VerifierError::InvalidFunctionCall(format!(
             "global function '{}' that may sleep cannot be called in preempt-disabled region",
             func_name
         )));
     }
-    
+
     if refs.active_irq_id != 0 {
         return Err(VerifierError::InvalidFunctionCall(format!(
             "global function '{}' that may sleep cannot be called in IRQ-disabled region",
             func_name
         )));
     }
-    
+
     if !state.in_sleepable {
         return Err(VerifierError::InvalidFunctionCall(format!(
             "global function '{}' that may sleep cannot be called from non-sleepable program",
             func_name
         )));
     }
-    
+
     Ok(())
 }
 
 /// Propagate might_sleep property from callee to caller
-/// 
+///
 /// If a subprogram calls another subprogram that might_sleep,
 /// the caller also might_sleep.
 pub fn propagate_might_sleep(caller_might_sleep: &mut bool, callee_might_sleep: bool) {
@@ -403,7 +395,7 @@ pub fn propagate_might_sleep(caller_might_sleep: &mut bool, callee_might_sleep: 
 }
 
 /// Check kfunc RCU/preempt restrictions
-/// 
+///
 /// Handles special kfuncs:
 /// - bpf_rcu_read_lock: increments RCU lock count
 /// - bpf_rcu_read_unlock: decrements RCU lock count, clears MEM_RCU
@@ -443,7 +435,7 @@ pub fn check_kfunc_sync_context(
     is_sleepable: bool,
 ) -> Result<()> {
     let action = get_kfunc_sync_action(kfunc_name);
-    
+
     match action {
         KfuncSyncAction::RcuUnlock => {
             if refs.active_rcu_locks == 0 {
@@ -463,7 +455,7 @@ pub fn check_kfunc_sync_context(
         }
         _ => {}
     }
-    
+
     // Check sleepable kfuncs
     if is_sleepable {
         if refs.active_rcu_locks > 0 {
@@ -472,14 +464,14 @@ pub fn check_kfunc_sync_context(
                 kfunc_name
             )));
         }
-        
+
         if refs.active_preempt_locks > 0 {
             return Err(VerifierError::InvalidKfunc(format!(
                 "kernel func {} is sleepable within non-preemptible region",
                 kfunc_name
             )));
         }
-        
+
         if refs.active_irq_id != 0 {
             return Err(VerifierError::InvalidKfunc(format!(
                 "kernel func {} is sleepable within IRQ-disabled region",
@@ -487,17 +479,14 @@ pub fn check_kfunc_sync_context(
             )));
         }
     }
-    
+
     Ok(())
 }
 
 /// Apply synchronization state changes after kfunc call
-pub fn apply_kfunc_sync_action(
-    refs: &mut ReferenceManager,
-    kfunc_name: &str,
-) -> Result<bool> {
+pub fn apply_kfunc_sync_action(refs: &mut ReferenceManager, kfunc_name: &str) -> Result<bool> {
     let action = get_kfunc_sync_action(kfunc_name);
-    
+
     match action {
         KfuncSyncAction::RcuLock => {
             refs.rcu_lock();
@@ -521,7 +510,7 @@ pub fn apply_kfunc_sync_action(
 }
 
 /// Validate iterator access under RCU protection
-/// 
+///
 /// Iterators that return RCU-protected pointers (KF_RCU_PROTECTED)
 /// must be used within an RCU read-side critical section.
 pub fn check_iter_rcu_protected(

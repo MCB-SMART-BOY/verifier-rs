@@ -1,18 +1,22 @@
+// SPDX-License-Identifier: GPL-2.0
+
 //! Subprogram and function call handling
 //!
 //! This module handles BPF subprograms (functions within a BPF program),
 //! including call tracking, stack depth calculation, and callback handling.
 
+use alloc::{
+    format,
+    string::{String, ToString},
+    vec,
+    vec::Vec,
+};
 
-use alloc::{format, string::{String, ToString}, vec, vec::Vec};
+use alloc::collections::BTreeMap as HashMap;
 
-
-use alloc::collections::{BTreeMap as HashMap};
-
-use crate::core::types::*;
-use crate::state::verifier_state::{BpfVerifierState, BpfFuncState};
 use crate::core::error::{Result, VerifierError};
-
+use crate::core::types::*;
+use crate::state::verifier_state::{BpfFuncState, BpfVerifierState};
 
 /// Maximum call stack depth
 pub const MAX_CALL_FRAMES: usize = MAX_BPF_STACK_FRAMES;
@@ -35,7 +39,7 @@ pub struct SubprogInfo {
     /// Whether this subprogram has tail calls
     pub has_tail_call: bool,
     /// Whether tail calls can reach this subprogram
-    /// 
+    ///
     /// This is propagated from callers: if any function that calls this
     /// subprogram has tail_call_reachable set, this is also set.
     pub tail_call_reachable: bool,
@@ -75,7 +79,7 @@ impl SubprogManager {
             end: insn_cnt,
             ..Default::default()
         });
-        
+
         // Map all instructions to subprog 0 initially
         for i in 0..insn_cnt {
             self.insn_to_subprog.insert(i, 0);
@@ -237,9 +241,9 @@ impl CallState {
         if self.callchain.len() <= 1 {
             return Err(VerifierError::Internal("call stack underflow".into()));
         }
-        self.callchain.pop().ok_or_else(|| {
-            VerifierError::Internal("call stack inconsistency".into())
-        })
+        self.callchain
+            .pop()
+            .ok_or_else(|| VerifierError::Internal("call stack inconsistency".into()))
     }
 
     /// Get call depth
@@ -250,10 +254,7 @@ impl CallState {
 
 /// Check maximum stack depth for all subprograms
 /// Uses iterative DFS to avoid stack overflow in kernel mode
-pub fn check_max_stack_depth(
-    subprogs: &SubprogManager,
-    call_state: &CallState,
-) -> Result<i32> {
+pub fn check_max_stack_depth(subprogs: &SubprogManager, call_state: &CallState) -> Result<i32> {
     let mut max_depth: i32 = 0;
     let mut visited = vec![false; subprogs.count()];
     let mut stack_depth_arr = vec![0i32; subprogs.count()];
@@ -276,7 +277,7 @@ pub fn check_max_stack_depth(
     // Iterative DFS through call graph
     // Stack contains: (subprog_idx, callee_idx, current_total_stack, call_depth)
     let mut stack: Vec<(usize, usize, i32, usize)> = Vec::new();
-    
+
     // Start from main (subprog 0)
     let initial_total = stack_depth_arr[0];
     if initial_total > MAX_BPF_STACK as i32 {
@@ -308,7 +309,7 @@ pub fn check_max_stack_depth(
 
             // Push current state back with updated callee index
             stack.push((idx, callee_idx, current_stack, depth));
-            
+
             // Push callee to explore
             stack.push((callee, 0, total, depth + 1));
             break;
@@ -329,15 +330,15 @@ pub fn setup_func_entry(
     subprogs: &SubprogManager,
     callee_idx: usize,
 ) -> Result<BpfFuncState> {
-    let subprog = subprogs.get(callee_idx)
-        .ok_or(VerifierError::InvalidSubprog(format!("invalid subprog index {}", callee_idx)))?;
+    let subprog = subprogs
+        .get(callee_idx)
+        .ok_or(VerifierError::InvalidSubprog(format!(
+            "invalid subprog index {}",
+            callee_idx
+        )))?;
 
     let frameno = (caller_state.curframe + 1) as u32;
-    let mut callee = BpfFuncState::new(
-        caller_state.insn_idx as i32,
-        frameno,
-        callee_idx as u32,
-    );
+    let mut callee = BpfFuncState::new(caller_state.insn_idx as i32, frameno, callee_idx as u32);
 
     // Copy argument registers R1-R5 from caller
     if let Some(caller_func) = caller_state.cur_func() {
@@ -356,9 +357,7 @@ pub fn setup_func_entry(
 }
 
 /// Prepare return from a function
-pub fn prepare_func_exit(
-    state: &mut BpfVerifierState,
-) -> Result<()> {
+pub fn prepare_func_exit(state: &mut BpfVerifierState) -> Result<()> {
     if state.curframe == 0 {
         // Exit from main - this is program exit
         return Ok(());
@@ -376,7 +375,7 @@ pub fn prepare_func_exit(
     // Set R0 in caller to return value
     if let Some(func) = state.cur_func_mut() {
         func.regs[BPF_REG_0] = ret_reg;
-        
+
         // Clear caller-saved registers R1-R5
         for i in 1..=5 {
             func.regs[i].mark_not_init(false);
@@ -410,10 +409,10 @@ pub fn get_call_target(insn: &BpfInsn, insn_idx: usize) -> usize {
 }
 
 /// BTF-based subprogram call argument checking
-/// 
+///
 /// This validates that the caller's register state matches the callee's
 /// expected argument types based on BTF function information.
-/// 
+///
 /// Returns:
 /// - Ok(()) if types match or BTF info is not available
 /// - Err if there's a type mismatch
@@ -427,14 +426,14 @@ pub fn btf_check_subprog_call(
         return Ok(());
     }
 
-    let caller = state.cur_func().ok_or(
-        VerifierError::Internal("no current function for subprog call".into())
-    )?;
+    let caller = state.cur_func().ok_or(VerifierError::Internal(
+        "no current function for subprog call".into(),
+    ))?;
 
     // Check each argument register
     for i in 1..=subprog.arg_cnt as usize {
         let reg = &caller.regs[i];
-        
+
         // For global functions, arguments must be properly typed
         if subprog.is_global {
             // Global functions expect specific types from BTF
@@ -481,7 +480,7 @@ pub fn btf_check_subprog_call(
 }
 
 /// Check compatibility between caller and callee for a subprogram call
-/// 
+///
 /// This performs various compatibility checks including:
 /// - Stack depth limits
 /// - Argument type matching
@@ -493,12 +492,18 @@ pub fn check_subprog_call_compat(
     callee_idx: usize,
     is_sleepable_prog: bool,
 ) -> Result<()> {
-    let caller = subprogs.get(caller_idx).ok_or(
-        VerifierError::InvalidSubprog(format!("invalid caller subprog {}", caller_idx))
-    )?;
-    let callee = subprogs.get(callee_idx).ok_or(
-        VerifierError::InvalidSubprog(format!("invalid callee subprog {}", callee_idx))
-    )?;
+    let caller = subprogs
+        .get(caller_idx)
+        .ok_or(VerifierError::InvalidSubprog(format!(
+            "invalid caller subprog {}",
+            caller_idx
+        )))?;
+    let callee = subprogs
+        .get(callee_idx)
+        .ok_or(VerifierError::InvalidSubprog(format!(
+            "invalid callee subprog {}",
+            callee_idx
+        )))?;
 
     // Check stack depth
     let combined_stack = caller.stack_depth + callee.stack_depth;
@@ -509,14 +514,14 @@ pub fn check_subprog_call_compat(
     // Check sleepable compatibility
     if callee.might_sleep && !is_sleepable_prog {
         return Err(VerifierError::PermissionDenied(
-            "cannot call sleepable function from non-sleepable context".into()
+            "cannot call sleepable function from non-sleepable context".into(),
         ));
     }
 
     // Check tail call restrictions
     if callee.has_tail_call && state.curframe > 0 {
         return Err(VerifierError::InvalidFunctionCall(
-            "tail_call not allowed in subprograms".into()
+            "tail_call not allowed in subprograms".into(),
         ));
     }
 
@@ -527,14 +532,12 @@ pub fn check_subprog_call_compat(
 }
 
 /// Validate global function signature against BTF
-/// 
+///
 /// Global functions have stricter requirements:
 /// - All arguments must be BTF-typed
 /// - Return type must be scalar or void
 /// - Cannot access caller's stack
-pub fn check_global_func_signature(
-    subprog: &SubprogInfo,
-) -> Result<()> {
+pub fn check_global_func_signature(subprog: &SubprogInfo) -> Result<()> {
     if !subprog.is_global {
         return Ok(());
     }
@@ -542,30 +545,28 @@ pub fn check_global_func_signature(
     // Global functions must have BTF info
     if subprog.btf_id == 0 {
         return Err(VerifierError::InvalidFunctionCall(
-            "global function must have BTF type info".into()
+            "global function must have BTF type info".into(),
         ));
     }
 
     // Check argument count is reasonable
     if subprog.arg_cnt > 5 {
-        return Err(VerifierError::InvalidFunctionCall(
-            format!("global function has {} args, max is 5", subprog.arg_cnt)
-        ));
+        return Err(VerifierError::InvalidFunctionCall(format!(
+            "global function has {} args, max is 5",
+            subprog.arg_cnt
+        )));
     }
 
     Ok(())
 }
 
 /// Mark subprogram properties based on its instructions
-/// 
+///
 /// This scans a subprogram to determine:
 /// - Whether it changes packet data
 /// - Whether it might sleep
 /// - Whether it has tail calls
-pub fn mark_subprog_properties(
-    subprog: &mut SubprogInfo,
-    insns: &[BpfInsn],
-) {
+pub fn mark_subprog_properties(subprog: &mut SubprogInfo, insns: &[BpfInsn]) {
     let start = subprog.start;
     let end = subprog.end.min(insns.len());
 
@@ -600,7 +601,7 @@ fn changes_pkt_data(helper_id: u32) -> bool {
         50 |  // bpf_skb_change_tail
         51 |  // bpf_skb_change_head
         98 |  // bpf_xdp_adjust_head
-        65    // bpf_xdp_adjust_tail
+        65 // bpf_xdp_adjust_tail
     )
 }
 
@@ -611,7 +612,7 @@ fn might_sleep(helper_id: u32) -> bool {
         130 | // bpf_copy_from_user
         148 | // bpf_copy_from_user_task
         171 | // bpf_ima_file_hash
-        174   // bpf_find_vma
+        174 // bpf_find_vma
     )
 }
 
@@ -620,7 +621,7 @@ fn might_sleep(helper_id: u32) -> bool {
 // ============================================================================
 
 /// Maximum stack depth when tail calls are present
-/// 
+///
 /// When a subprogram has tail calls and the call stack of previous frames
 /// is too large, tail calls are not allowed as they would overflow.
 pub const MAX_TAIL_CALL_STACK: i32 = 256;
@@ -647,10 +648,7 @@ impl TailCallContext {
     }
 
     /// Build context from subprogram info and call sites
-    pub fn build(
-        subprogs: &SubprogManager,
-        call_sites: &[CallSite],
-    ) -> Self {
+    pub fn build(subprogs: &SubprogManager, call_sites: &[CallSite]) -> Self {
         let cnt = subprogs.count();
         let mut ctx = Self::new(cnt);
 
@@ -678,7 +676,7 @@ impl TailCallContext {
     }
 
     /// Propagate tail call reachability through the call graph
-    /// 
+    ///
     /// If a function A calls function B, and B has tail_call_reachable,
     /// then A also becomes tail_call_reachable (in reverse - if A has
     /// tail calls, all functions it can reach get the flag).
@@ -726,7 +724,7 @@ impl TailCallContext {
 }
 
 /// Validate tail call usage in subprograms
-/// 
+///
 /// This checks various restrictions on tail calls:
 /// - Tail calls not allowed in async callbacks
 /// - Stack depth limit when tail calls present
@@ -756,22 +754,24 @@ pub fn validate_tail_calls(
         if let Some(info) = subprogs.get(i) {
             // Async callbacks can't have tail calls
             if info.is_async_cb && info.has_tail_call {
-                return Err(VerifierError::InvalidFunctionCall(
-                    format!("subprog {} is async callback, incompatible with tail calls", i)
-                ));
+                return Err(VerifierError::InvalidFunctionCall(format!(
+                    "subprog {} is async callback, incompatible with tail calls",
+                    i
+                )));
             }
 
             // Tail calls require scalar return type for non-main functions
             if i > 0 && info.has_tail_call && !info.returns_scalar {
                 return Err(VerifierError::InvalidFunctionCall(
-                    "tail_call is only allowed in functions that return 'int'".into()
+                    "tail_call is only allowed in functions that return 'int'".into(),
                 ));
             }
 
             // Refcounted arguments conflict with tail calls
             if info.has_refcounted_args && info.has_tail_call {
                 return Err(VerifierError::InvalidFunctionCall(format!(
-                    "subprog {} has refcounted args, incompatible with tail calls", i
+                    "subprog {} has refcounted args, incompatible with tail calls",
+                    i
                 )));
             }
         }
@@ -781,24 +781,22 @@ pub fn validate_tail_calls(
 }
 
 /// Check tail call compatibility for a specific call
-/// 
+///
 /// Called when processing a bpf_tail_call helper.
-pub fn check_tail_call_compat(
-    state: &BpfVerifierState,
-    subprogs: &SubprogManager,
-) -> Result<()> {
+pub fn check_tail_call_compat(state: &BpfVerifierState, subprogs: &SubprogManager) -> Result<()> {
     // Can't tail call from a subprogram (curframe > 0)
     if state.curframe > 0 {
         return Err(VerifierError::InvalidFunctionCall(
-            "tail_call not allowed in subprograms".into()
+            "tail_call not allowed in subprograms".into(),
         ));
     }
 
     // Check stack depth
-    let current_stack = state.cur_func()
+    let current_stack = state
+        .cur_func()
         .map(|f| f.stack.allocated_stack as i32)
         .unwrap_or(0);
-    
+
     if current_stack > MAX_TAIL_CALL_STACK {
         return Err(VerifierError::InvalidFunctionCall(format!(
             "tail_call not allowed when stack usage is {} bytes (max {})",
@@ -813,7 +811,7 @@ pub fn check_tail_call_compat(
             if let Some(info) = subprogs.get(i) {
                 if !info.is_global && info.stack_depth + current_stack > MAX_BPF_STACK as i32 {
                     return Err(VerifierError::InvalidFunctionCall(
-                        "mixing of tail_calls and bpf-to-bpf calls may exceed stack limit".into()
+                        "mixing of tail_calls and bpf-to-bpf calls may exceed stack limit".into(),
                     ));
                 }
             }
@@ -824,37 +822,35 @@ pub fn check_tail_call_compat(
 }
 
 /// Check for resource leaks before tail call
-/// 
+///
 /// Tail calls transfer control and don't return, so any acquired
 /// resources must be released first.
-pub fn check_tail_call_resources(
-    state: &BpfVerifierState,
-) -> Result<()> {
+pub fn check_tail_call_resources(state: &BpfVerifierState) -> Result<()> {
     // Check for unreleased references
     if !state.refs.is_empty() {
         return Err(VerifierError::InvalidState(
-            "tail_call with unreleased references".into()
+            "tail_call with unreleased references".into(),
         ));
     }
 
     // Check for unreleased locks
     if state.refs.active_locks > 0 {
         return Err(VerifierError::InvalidState(
-            "tail_call with held locks".into()
+            "tail_call with held locks".into(),
         ));
     }
 
     // Check for active RCU read lock
     if state.refs.in_rcu() {
         return Err(VerifierError::InvalidState(
-            "tail_call inside rcu_read_lock region".into()
+            "tail_call inside rcu_read_lock region".into(),
         ));
     }
 
     // Check spin lock state
     if state.lock_state.has_locks() {
         return Err(VerifierError::InvalidState(
-            "tail_call with held spin lock".into()
+            "tail_call with held spin lock".into(),
         ));
     }
 
@@ -862,10 +858,7 @@ pub fn check_tail_call_resources(
 }
 
 /// Full tail call verification combining all checks
-pub fn verify_tail_call(
-    state: &BpfVerifierState,
-    subprogs: &SubprogManager,
-) -> Result<()> {
+pub fn verify_tail_call(state: &BpfVerifierState, subprogs: &SubprogManager) -> Result<()> {
     check_tail_call_compat(state, subprogs)?;
     check_tail_call_resources(state)?;
     Ok(())

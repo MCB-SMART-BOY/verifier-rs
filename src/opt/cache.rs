@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0
+
 //! Cache optimization for the BPF verifier.
 //!
 //! This module provides optimized caching structures and algorithms
@@ -8,10 +10,9 @@
 
 #![allow(missing_docs)] // Performance optimization internals
 
-use crate::state::verifier_state::BpfVerifierState;
-use crate::state::reg_state::BpfRegState;
 use crate::core::types::*;
-
+use crate::state::reg_state::BpfRegState;
+use crate::state::verifier_state::BpfVerifierState;
 
 use alloc::{vec, vec::Vec};
 
@@ -22,7 +23,7 @@ use alloc::boxed::Box;
 // ============================================================================
 
 /// A simple bloom filter for fast negative lookups
-/// 
+///
 /// Used to quickly determine if a state definitely doesn't exist in the cache,
 /// avoiding expensive full comparisons. False positives are possible but
 /// false negatives are not.
@@ -40,36 +41,36 @@ pub struct BloomFilter {
 
 impl BloomFilter {
     /// Create a new bloom filter with the given capacity and error rate
-    /// 
+    ///
     /// # Arguments
     /// * `expected_items` - Expected number of items to insert
-    /// * `false_positive_rate` - Desired false positive rate (0.0 to 1.0)
-    pub fn new(expected_items: usize, false_positive_rate: f64) -> Self {
+    /// * `false_positive_rate_permille` - Desired false positive rate in permille (1 = 0.1%, 10 = 1%, etc.)
+    pub fn new(expected_items: usize, false_positive_rate_permille: u32) -> Self {
         // Calculate optimal number of bits and hash functions
         // m = -n * ln(p) / (ln(2)^2)
         // k = (m/n) * ln(2)
-        // 
+        //
         // For no_std compatibility, we use a simplified calculation
         // with precomputed values for common false positive rates
         let n = expected_items.max(1);
-        
+
         // Use lookup table for bits per item based on false positive rate
         // These are precomputed from: -ln(p) / (ln(2)^2)
-        let bits_per_item = if false_positive_rate <= 0.001 {
-            14  // ~0.1% FPR
-        } else if false_positive_rate <= 0.01 {
-            10  // ~1% FPR
-        } else if false_positive_rate <= 0.05 {
-            6   // ~5% FPR
+        let bits_per_item = if false_positive_rate_permille <= 1 {
+            14 // ~0.1% FPR
+        } else if false_positive_rate_permille <= 10 {
+            10 // ~1% FPR
+        } else if false_positive_rate_permille <= 50 {
+            6 // ~5% FPR
         } else {
-            4   // ~10%+ FPR
+            4 // ~10%+ FPR
         };
-        
+
         let num_bits = (n * bits_per_item).max(64);
         // Optimal k = (m/n) * ln(2) ≈ bits_per_item * 0.693
         let num_hashes = ((bits_per_item * 7) / 10).max(1).min(16);
         let num_words = (num_bits + 63) / 64;
-        
+
         Self {
             bits: vec![0u64; num_words],
             num_bits,
@@ -95,7 +96,7 @@ impl BloomFilter {
             let bit_idx = self.get_bit_index(hash, i);
             let word_idx = bit_idx / 64;
             let bit_pos = bit_idx % 64;
-            
+
             if word_idx < self.bits.len() {
                 self.bits[word_idx] |= 1u64 << bit_pos;
             }
@@ -104,7 +105,7 @@ impl BloomFilter {
     }
 
     /// Check if a hash value might be in the filter
-    /// 
+    ///
     /// Returns:
     /// - `false` if the value is definitely not in the filter
     /// - `true` if the value might be in the filter (possible false positive)
@@ -113,11 +114,11 @@ impl BloomFilter {
             let bit_idx = self.get_bit_index(hash, i);
             let word_idx = bit_idx / 64;
             let bit_pos = bit_idx % 64;
-            
+
             if word_idx >= self.bits.len() {
                 return false;
             }
-            
+
             if (self.bits[word_idx] & (1u64 << bit_pos)) == 0 {
                 return false;
             }
@@ -147,26 +148,31 @@ impl BloomFilter {
         self.count
     }
 
-    /// Estimate the current false positive rate
-    pub fn estimated_fpr(&self) -> f64 {
-        let bits_set: usize = self.bits.iter()
-            .map(|w| w.count_ones() as usize)
-            .sum();
-        
-        let fill_ratio = bits_set as f64 / self.num_bits as f64;
-        // Manual power calculation for no_std compatibility
-        let mut result = 1.0;
-        for _ in 0..self.num_hashes {
-            result *= fill_ratio;
+    /// Estimate the current false positive rate as percentage (0-100)
+    pub fn estimated_fpr_percent(&self) -> u32 {
+        let bits_set: usize = self.bits.iter().map(|w| w.count_ones() as usize).sum();
+
+        if self.num_bits == 0 {
+            return 100;
         }
-        result
+
+        // Calculate fill ratio as percentage (0-100)
+        let fill_percent = (bits_set * 100) / self.num_bits;
+
+        // Approximate FPR = fill_ratio^num_hashes as percentage
+        // Use integer exponentiation with percentage scaling
+        let mut result: u64 = 100; // Start at 100%
+        for _ in 0..self.num_hashes {
+            result = (result * fill_percent as u64) / 100;
+        }
+        result as u32
     }
 }
 
 impl Default for BloomFilter {
     fn default() -> Self {
-        // Default: 10000 items, 1% false positive rate
-        Self::new(10000, 0.01)
+        // Default: 10000 items, 1% false positive rate (10 permille)
+        Self::new(10000, 10)
     }
 }
 
@@ -175,7 +181,7 @@ impl Default for BloomFilter {
 // ============================================================================
 
 /// A compact fingerprint of a verifier state for fast comparison
-/// 
+///
 /// The fingerprint captures the essential characteristics of a state
 /// in a fixed-size structure, enabling fast equality checks before
 /// performing full state comparison.
@@ -204,16 +210,14 @@ impl StateFingerprint {
         if let Some(func) = state.cur_func() {
             // Hash register types
             for (i, reg) in func.regs.iter().enumerate() {
-                reg_types_hash = reg_types_hash.rotate_left(3) 
-                    ^ ((reg.reg_type as u32) << (i % 8));
+                reg_types_hash = reg_types_hash.rotate_left(3) ^ ((reg.reg_type as u32) << (i % 8));
             }
 
             // Hash bounds (sample key registers)
             for reg in &func.regs[..5] {
                 if reg.reg_type == BpfRegType::ScalarValue {
-                    bounds_hash = bounds_hash.wrapping_add(
-                        (reg.umin_value as u32) ^ (reg.umax_value as u32)
-                    );
+                    bounds_hash =
+                        bounds_hash.wrapping_add((reg.umin_value as u32) ^ (reg.umax_value as u32));
                 }
             }
 
@@ -298,7 +302,12 @@ pub enum CompressedBounds {
     /// Small range (fits in 32 bits)
     SmallRange { min: u32, max: u32 },
     /// Full range (needs full 64-bit bounds)
-    FullRange { umin: u64, umax: u64, smin: i64, smax: i64 },
+    FullRange {
+        umin: u64,
+        umax: u64,
+        smin: i64,
+        smax: i64,
+    },
 }
 
 impl CompressedRegState {
@@ -306,7 +315,7 @@ impl CompressedRegState {
     pub fn compress(reg: &BpfRegState) -> Self {
         let type_flags = (reg.type_flags.bits() & 0xFF) as u8;
         let off = reg.off.clamp(i16::MIN as i32, i16::MAX as i32) as i16;
-        
+
         let bounds = if reg.reg_type != BpfRegType::ScalarValue {
             CompressedBounds::Unknown
         } else if reg.umin_value == reg.umax_value {
@@ -353,7 +362,12 @@ impl CompressedRegState {
                 reg.smin_value = min as i64;
                 reg.smax_value = max as i64;
             }
-            CompressedBounds::FullRange { umin, umax, smin, smax } => {
+            CompressedBounds::FullRange {
+                umin,
+                umax,
+                smin,
+                smax,
+            } => {
                 reg.umin_value = umin;
                 reg.umax_value = umax;
                 reg.smin_value = smin;
@@ -395,14 +409,14 @@ pub struct CacheStats {
     pub hits: u64,
     /// Hash collisions (different states, same hash)
     pub hash_collisions: u64,
-    /// Average comparison time (microseconds)
-    pub avg_comparison_time_us: f64,
+    /// Average comparison time (microseconds, scaled by 100)
+    pub avg_comparison_time_us_scaled: u64,
     /// Peak memory usage (bytes)
     pub peak_memory_bytes: usize,
     /// Current memory usage (bytes)
     pub current_memory_bytes: usize,
-    /// Compression ratio (original/compressed)
-    pub compression_ratio: f64,
+    /// Compression ratio as percentage (100 = 1:1, 50 = 2:1 compression)
+    pub compression_ratio_percent: u32,
 }
 
 impl CacheStats {
@@ -449,30 +463,30 @@ impl CacheStats {
         }
     }
 
-    /// Get bloom filter efficiency (rejections / lookups)
-    pub fn bloom_efficiency(&self) -> f64 {
+    /// Get bloom filter efficiency as percentage (0-100)
+    pub fn bloom_efficiency_percent(&self) -> u32 {
         if self.lookups == 0 {
-            0.0
+            0
         } else {
-            self.bloom_rejections as f64 / self.lookups as f64
+            ((self.bloom_rejections * 100) / self.lookups) as u32
         }
     }
 
-    /// Get hit rate (hits / lookups)
-    pub fn hit_rate(&self) -> f64 {
+    /// Get hit rate as percentage (0-100)
+    pub fn hit_rate_percent(&self) -> u32 {
         if self.lookups == 0 {
-            0.0
+            0
         } else {
-            self.hits as f64 / self.lookups as f64
+            ((self.hits * 100) / self.lookups) as u32
         }
     }
 
-    /// Get collision rate (collisions / full_comparisons)
-    pub fn collision_rate(&self) -> f64 {
+    /// Get collision rate as percentage (0-100)
+    pub fn collision_rate_percent(&self) -> u32 {
         if self.full_comparisons == 0 {
-            0.0
+            0
         } else {
-            self.hash_collisions as f64 / self.full_comparisons as f64
+            ((self.hash_collisions * 100) / self.full_comparisons) as u32
         }
     }
 
@@ -487,7 +501,7 @@ impl CacheStats {
 // ============================================================================
 
 /// Optimized state cache with bloom filter and fingerprinting
-/// 
+///
 /// Combines multiple optimization techniques:
 /// 1. Bloom filter for fast negative lookups
 /// 2. Fingerprinting for quick compatibility checks
@@ -508,7 +522,7 @@ impl OptimizedStateCache {
     /// Create a new optimized cache
     pub fn new(expected_states: usize) -> Self {
         Self {
-            bloom: BloomFilter::new(expected_states, 0.01),
+            bloom: BloomFilter::new(expected_states, 10), // 1% FPR = 10 permille
             stats: CacheStats::new(),
             use_bloom: true,
             use_fingerprint: true,
@@ -516,13 +530,9 @@ impl OptimizedStateCache {
     }
 
     /// Create with custom configuration
-    pub fn with_config(
-        expected_states: usize,
-        use_bloom: bool,
-        use_fingerprint: bool,
-    ) -> Self {
+    pub fn with_config(expected_states: usize, use_bloom: bool, use_fingerprint: bool) -> Self {
         Self {
-            bloom: BloomFilter::new(expected_states, 0.01),
+            bloom: BloomFilter::new(expected_states, 10), // 1% FPR = 10 permille
             stats: CacheStats::new(),
             use_bloom,
             use_fingerprint,
@@ -567,7 +577,7 @@ impl OptimizedStateCache {
     /// Record a cache lookup attempt
     pub fn record_lookup(&mut self, bloom_passed: bool, fingerprint_passed: bool, hit: bool) {
         self.stats.record_lookup();
-        
+
         if !bloom_passed {
             self.stats.record_bloom_rejection();
         } else if !fingerprint_passed {
@@ -586,9 +596,9 @@ impl OptimizedStateCache {
         self.stats.reset();
     }
 
-    /// Get the estimated bloom filter false positive rate
-    pub fn bloom_fpr(&self) -> f64 {
-        self.bloom.estimated_fpr()
+    /// Get the estimated bloom filter false positive rate as percentage (0-100)
+    pub fn bloom_fpr_percent(&self) -> u32 {
+        self.bloom.estimated_fpr_percent()
     }
 
     /// Enable/disable bloom filter
@@ -613,7 +623,7 @@ impl Default for OptimizedStateCache {
 // ============================================================================
 
 /// A pool for reusing state allocations
-/// 
+///
 /// Reduces allocation overhead by reusing state objects instead of
 /// creating new ones. This is particularly beneficial for verification
 /// of complex programs that create many states.
@@ -668,13 +678,13 @@ impl StatePool {
         self.available.len()
     }
 
-    /// Get reuse ratio
-    pub fn reuse_ratio(&self) -> f64 {
+    /// Get reuse ratio as percentage (0-100)
+    pub fn reuse_ratio_percent(&self) -> u32 {
         let total = self.allocations + self.reuses;
         if total == 0 {
-            0.0
+            0
         } else {
-            self.reuses as f64 / total as f64
+            ((self.reuses as u64 * 100) / total as u64) as u32
         }
     }
 

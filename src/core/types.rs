@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0
+
 //! Core BPF types and constants
 //!
 //! This module defines the fundamental types used throughout the BPF verifier,
@@ -138,7 +140,6 @@ pub enum BpfRegType {
     PtrToRdWrBuf = 21,
 }
 
-
 impl BpfRegType {
     /// Get the base type (without flags)
     pub fn base_type(self) -> Self {
@@ -152,10 +153,7 @@ impl BpfRegType {
 
     /// Check if this is a packet pointer type
     pub fn is_pkt_pointer(&self) -> bool {
-        matches!(
-            self,
-            BpfRegType::PtrToPacket | BpfRegType::PtrToPacketMeta
-        )
+        matches!(self, BpfRegType::PtrToPacket | BpfRegType::PtrToPacketMeta)
     }
 }
 
@@ -337,8 +335,7 @@ pub enum RefStateType {
 
 impl RefStateType {
     /// Mask for lock types
-    pub const LOCK_MASK: u32 =
-        RefStateType::Lock as u32 | RefStateType::ResLock as u32;
+    pub const LOCK_MASK: u32 = RefStateType::Lock as u32 | RefStateType::ResLock as u32;
 }
 
 // ============================================================================
@@ -921,7 +918,7 @@ pub enum BpfFuncId {
 
 impl BpfFuncId {
     /// Create a BpfFuncId from an instruction immediate value
-    /// 
+    ///
     /// Returns Unspec for unknown/invalid function IDs.
     pub fn from_imm(imm: i32) -> Self {
         if imm < 0 {

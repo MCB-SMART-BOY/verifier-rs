@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0
+
 //! Register spill and fill tracking for stack operations.
 //!
 //! This module implements precise tracking of register values when they are
@@ -8,7 +10,7 @@
 use crate::core::error::{Result, VerifierError};
 use crate::core::types::*;
 use crate::state::reg_state::BpfRegState;
-use crate::state::stack_state::{BpfStackState, get_spi};
+use crate::state::stack_state::{get_spi, BpfStackState};
 use crate::state::verifier_state::BpfVerifierState;
 
 /// Result of a stack read operation.
@@ -52,9 +54,9 @@ impl SpillFillTracker {
             return Err(VerifierError::StackOutOfBounds(stack_off));
         }
 
-        let func = state.cur_func_mut().ok_or(VerifierError::Internal(
-            "no current function".into(),
-        ))?;
+        let func = state
+            .cur_func_mut()
+            .ok_or(VerifierError::Internal("no current function".into()))?;
 
         // Grow stack if needed
         if abs_off > func.stack.allocated_stack {
@@ -120,9 +122,9 @@ impl SpillFillTracker {
             return Err(VerifierError::StackOutOfBounds(stack_off));
         }
 
-        let func = state.cur_func().ok_or(VerifierError::Internal(
-            "no current function".into(),
-        ))?;
+        let func = state
+            .cur_func()
+            .ok_or(VerifierError::Internal("no current function".into()))?;
 
         let spi = get_spi(stack_off).ok_or(VerifierError::StackOutOfBounds(stack_off))?;
         if spi >= func.stack.stack.len() {
@@ -147,9 +149,7 @@ impl SpillFillTracker {
                     Ok(StackReadResult::Initialized)
                 }
             }
-            BpfStackSlotType::Zero => {
-                Ok(StackReadResult::Zero)
-            }
+            BpfStackSlotType::Zero => Ok(StackReadResult::Zero),
             BpfStackSlotType::Misc => {
                 // Initialized but unknown value
                 Ok(StackReadResult::Initialized)
@@ -158,33 +158,23 @@ impl SpillFillTracker {
                 // Reading uninitialized data
                 Ok(StackReadResult::Uninitialized)
             }
-            BpfStackSlotType::Dynptr => {
-                Ok(StackReadResult::Dynptr(slot.spilled_ptr.clone()))
-            }
-            BpfStackSlotType::Iter => {
-                Ok(StackReadResult::Iterator(slot.spilled_ptr.clone()))
-            }
-            BpfStackSlotType::IrqFlag => {
-                Err(VerifierError::InvalidMemoryAccess(
-                    "cannot read IRQ flag directly".into(),
-                ))
-            }
+            BpfStackSlotType::Dynptr => Ok(StackReadResult::Dynptr(slot.spilled_ptr.clone())),
+            BpfStackSlotType::Iter => Ok(StackReadResult::Iterator(slot.spilled_ptr.clone())),
+            BpfStackSlotType::IrqFlag => Err(VerifierError::InvalidMemoryAccess(
+                "cannot read IRQ flag directly".into(),
+            )),
         }
     }
 
     /// Check if a stack range is readable.
-    pub fn check_stack_read(
-        state: &BpfVerifierState,
-        stack_off: i32,
-        size: usize,
-    ) -> Result<bool> {
+    pub fn check_stack_read(state: &BpfVerifierState, stack_off: i32, size: usize) -> Result<bool> {
         if stack_off >= 0 {
             return Err(VerifierError::StackOutOfBounds(stack_off));
         }
 
-        let func = state.cur_func().ok_or(VerifierError::Internal(
-            "no current function".into(),
-        ))?;
+        let func = state
+            .cur_func()
+            .ok_or(VerifierError::Internal("no current function".into()))?;
 
         // For stack access at offset -8 with size 8, we check the slot at SPI 0
         // The slot covers bytes at offsets -8 through -1
@@ -208,7 +198,8 @@ impl SpillFillTracker {
             let start_byte = ((-stack_off - 1) as usize) % BPF_REG_SIZE;
             for i in 0..size {
                 let byte_idx = (start_byte + BPF_REG_SIZE - i) % BPF_REG_SIZE;
-                if byte_idx < BPF_REG_SIZE && slot.slot_type[byte_idx] == BpfStackSlotType::Invalid {
+                if byte_idx < BPF_REG_SIZE && slot.slot_type[byte_idx] == BpfStackSlotType::Invalid
+                {
                     return Ok(false);
                 }
             }
@@ -227,14 +218,16 @@ impl SpillFillTracker {
             return Err(VerifierError::StackOutOfBounds(stack_off));
         }
 
-        let func = state.cur_func().ok_or(VerifierError::Internal(
-            "no current function".into(),
-        ))?;
+        let func = state
+            .cur_func()
+            .ok_or(VerifierError::Internal("no current function".into()))?;
 
         // Check for special slots that cannot be overwritten
         for i in 0..size {
             let byte_off = stack_off - i as i32;
-            let Some(spi) = get_spi(byte_off) else { continue; };
+            let Some(spi) = get_spi(byte_off) else {
+                continue;
+            };
 
             if spi < func.stack.stack.len() {
                 let slot = &func.stack.stack[spi];
@@ -287,11 +280,7 @@ impl SpillFillTracker {
     }
 
     /// Store a zero value to the stack.
-    pub fn store_zero(
-        state: &mut BpfVerifierState,
-        stack_off: i32,
-        size: usize,
-    ) -> Result<()> {
+    pub fn store_zero(state: &mut BpfVerifierState, stack_off: i32, size: usize) -> Result<()> {
         if stack_off >= 0 {
             return Err(VerifierError::StackOutOfBounds(stack_off));
         }
@@ -301,9 +290,9 @@ impl SpillFillTracker {
             return Err(VerifierError::StackOutOfBounds(stack_off));
         }
 
-        let func = state.cur_func_mut().ok_or(VerifierError::Internal(
-            "no current function".into(),
-        ))?;
+        let func = state
+            .cur_func_mut()
+            .ok_or(VerifierError::Internal("no current function".into()))?;
 
         // Grow stack if needed
         if abs_off > func.stack.allocated_stack {
@@ -320,9 +309,9 @@ impl SpillFillTracker {
         // Check for special slots
         if !Self::check_stack_write(state, stack_off, size)? {
             // Re-borrow for the actual write
-            let func = state.cur_func_mut().ok_or(VerifierError::Internal(
-                "no current function".into(),
-            ))?;
+            let func = state
+                .cur_func_mut()
+                .ok_or(VerifierError::Internal("no current function".into()))?;
             let slot = &mut func.stack.stack[spi];
 
             if slot.get_type() == BpfStackSlotType::Dynptr
@@ -336,9 +325,9 @@ impl SpillFillTracker {
         }
 
         // Re-borrow for the actual write
-        let func = state.cur_func_mut().ok_or(VerifierError::Internal(
-            "no current function".into(),
-        ))?;
+        let func = state
+            .cur_func_mut()
+            .ok_or(VerifierError::Internal("no current function".into()))?;
         let slot = &mut func.stack.stack[spi];
 
         if size == BPF_REG_SIZE {
@@ -357,17 +346,14 @@ impl SpillFillTracker {
     }
 
     /// Scrub a spilled register (convert to misc when callee-saved).
-    pub fn scrub_spill(
-        state: &mut BpfVerifierState,
-        stack_off: i32,
-    ) -> Result<()> {
+    pub fn scrub_spill(state: &mut BpfVerifierState, stack_off: i32) -> Result<()> {
         if stack_off >= 0 {
             return Ok(());
         }
 
-        let func = state.cur_func_mut().ok_or(VerifierError::Internal(
-            "no current function".into(),
-        ))?;
+        let func = state
+            .cur_func_mut()
+            .ok_or(VerifierError::Internal("no current function".into()))?;
 
         let spi = get_spi(stack_off).ok_or(VerifierError::StackOutOfBounds(stack_off))?;
         if spi < func.stack.stack.len() {

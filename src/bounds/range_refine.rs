@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0
+
 //! Scalar value range refinement on conditional branches.
 //!
 //! This module implements range refinement for scalar values based on
@@ -6,7 +8,10 @@
 //! narrowed accordingly.
 
 use crate::bounds::tnum::Tnum;
-use crate::core::types::{BpfRegType, BPF_JEQ, BPF_JGE, BPF_JGT, BPF_JLE, BPF_JLT, BPF_JNE, BPF_JSGE, BPF_JSGT, BPF_JSLE, BPF_JSLT, BPF_JSET};
+use crate::core::types::{
+    BpfRegType, BPF_JEQ, BPF_JGE, BPF_JGT, BPF_JLE, BPF_JLT, BPF_JNE, BPF_JSET, BPF_JSGE, BPF_JSGT,
+    BPF_JSLE, BPF_JSLT,
+};
 use crate::state::reg_state::BpfRegState;
 
 /// Branch condition for refinement.
@@ -74,7 +79,10 @@ impl BranchCond {
 
     /// Check if this is a signed comparison.
     pub fn is_signed(self) -> bool {
-        matches!(self, BranchCond::Sgt | BranchCond::Sge | BranchCond::Slt | BranchCond::Sle)
+        matches!(
+            self,
+            BranchCond::Sgt | BranchCond::Sge | BranchCond::Slt | BranchCond::Sle
+        )
     }
 }
 
@@ -138,10 +146,10 @@ pub fn refine_reg_const(
     branch_taken: bool,
 ) -> RefinementResult {
     let mut result = RefinementResult::from_reg(reg);
-    
+
     // Get the effective condition based on branch direction
     let eff_cond = if branch_taken { cond } else { cond.negate() };
-    
+
     // Only refine scalar values
     if reg.reg_type != BpfRegType::ScalarValue {
         return result;
@@ -304,7 +312,7 @@ pub fn refine_reg_reg(
                 dst_result.smax = new_smax;
                 dst_result.mark_refined();
             }
-            
+
             // Apply same to src
             if new_umin != src_result.umin || new_umax != src_result.umax {
                 src_result.umin = new_umin;
@@ -481,7 +489,7 @@ fn sync_bounds(result: &mut RefinementResult) {
         result.smin = result.smin.max(result.umin as i64);
         result.smax = result.smax.min(result.umax as i64);
     }
-    
+
     // If smin/smax are non-negative, update umin/umax
     if result.smin >= 0 {
         result.umin = result.umin.max(result.smin as u64);
@@ -609,7 +617,7 @@ pub fn determine_branch_outcome(
             // reg & val != 0
             let known_bits = !dst.var_off.mask;
             let known_value = dst.var_off.value;
-            
+
             // If we know all bits of (reg & val), we can determine outcome
             if (known_bits & src_val) == src_val {
                 if (known_value & src_val) != 0 {

@@ -1,12 +1,17 @@
+// SPDX-License-Identifier: GPL-2.0
+
 //!
 
 //! This module provides detailed validation for kernel function arguments,
 
 //! including type checking, nullability, size validation, and reference handling.
 
-
-
-use alloc::{format, string::{String, ToString}, vec, vec::Vec};
+use alloc::{
+    format,
+    string::{String, ToString},
+    vec,
+    vec::Vec,
+};
 
 use crate::core::error::{Result, VerifierError};
 use crate::core::types::BpfRegType;
@@ -332,20 +337,22 @@ pub fn validate_arg(
             if reg.reg_type != BpfRegType::ScalarValue {
                 return ArgValidationResult::failure(
                     arg_idx,
-                    format!("argument {} must be a scalar, got {:?}", arg_idx, reg.reg_type),
+                    format!(
+                        "argument {} must be a scalar, got {:?}",
+                        arg_idx, reg.reg_type
+                    ),
                 );
             }
             // Check if value is within expected range
-            if constraint.min_size > 0
-                && reg.umax_value < constraint.min_size as u64 {
-                    return ArgValidationResult::failure(
-                        arg_idx,
-                        format!(
-                            "argument {} value {} is below minimum {}",
-                            arg_idx, reg.umax_value, constraint.min_size
-                        ),
-                    );
-                }
+            if constraint.min_size > 0 && reg.umax_value < constraint.min_size as u64 {
+                return ArgValidationResult::failure(
+                    arg_idx,
+                    format!(
+                        "argument {} value {} is below minimum {}",
+                        arg_idx, reg.umax_value, constraint.min_size
+                    ),
+                );
+            }
             if constraint.max_size > 0 && reg.umin_value > constraint.max_size as u64 {
                 return ArgValidationResult::failure(
                     arg_idx,
@@ -361,7 +368,10 @@ pub fn validate_arg(
             if !reg.is_ptr() {
                 return ArgValidationResult::failure(
                     arg_idx,
-                    format!("argument {} must be a pointer, got {:?}", arg_idx, reg.reg_type),
+                    format!(
+                        "argument {} must be a pointer, got {:?}",
+                        arg_idx, reg.reg_type
+                    ),
                 );
             }
             // Size validation would require memory tracking
@@ -371,7 +381,10 @@ pub fn validate_arg(
             if reg.reg_type != BpfRegType::PtrToCtx {
                 return ArgValidationResult::failure(
                     arg_idx,
-                    format!("argument {} must be context pointer, got {:?}", arg_idx, reg.reg_type),
+                    format!(
+                        "argument {} must be context pointer, got {:?}",
+                        arg_idx, reg.reg_type
+                    ),
                 );
             }
         }
@@ -485,30 +498,28 @@ pub fn validate_arg(
     }
 
     // Check alignment if required
-    if constraint.aligned && constraint.alignment > 0
-        && reg.is_ptr() && reg.off != 0 {
-            let off = reg.off.unsigned_abs();
-            if off % constraint.alignment != 0 {
-                return ArgValidationResult::failure(
-                    arg_idx,
-                    format!(
-                        "argument {} offset {} not aligned to {}",
-                        arg_idx, reg.off, constraint.alignment
-                    ),
-                );
-            }
+    if constraint.aligned && constraint.alignment > 0 && reg.is_ptr() && reg.off != 0 {
+        let off = reg.off.unsigned_abs();
+        if off % constraint.alignment != 0 {
+            return ArgValidationResult::failure(
+                arg_idx,
+                format!(
+                    "argument {} offset {} not aligned to {}",
+                    arg_idx, reg.off, constraint.alignment
+                ),
+            );
         }
+    }
 
     let mut result = ArgValidationResult::success(arg_idx);
 
     // Add warnings for potentially unsafe patterns
-    if constraint.kind == ArgKind::PtrToMem && !constraint.readonly
-        && reg.reg_type == BpfRegType::PtrToPacket {
-            result = result.with_warning(format!(
-                "argument {} writes to packet data",
-                arg_idx
-            ));
-        }
+    if constraint.kind == ArgKind::PtrToMem
+        && !constraint.readonly
+        && reg.reg_type == BpfRegType::PtrToPacket
+    {
+        result = result.with_warning(format!("argument {} writes to packet data", arg_idx));
+    }
 
     result
 }
@@ -533,9 +544,11 @@ pub fn validate_kfunc_call(
     // First pass: collect sizes from ConstSize arguments
     for (idx, (reg, constraint)) in regs.iter().zip(signature.args.iter()).enumerate() {
         if constraint.kind == ArgKind::ConstSize
-            && reg.reg_type == BpfRegType::ScalarValue && reg.umin_value == reg.umax_value {
-                sizes[idx] = Some(reg.umin_value);
-            }
+            && reg.reg_type == BpfRegType::ScalarValue
+            && reg.umin_value == reg.umax_value
+        {
+            sizes[idx] = Some(reg.umin_value);
+        }
     }
 
     // Second pass: validate all arguments
@@ -549,7 +562,9 @@ pub fn validate_kfunc_call(
         let result = validate_arg(reg, constraint, idx, size_from_arg);
         if !result.valid {
             return Err(VerifierError::InvalidFunctionCall(
-                result.error.unwrap_or_else(|| format!("argument {} validation failed", idx))
+                result
+                    .error
+                    .unwrap_or_else(|| format!("argument {} validation failed", idx)),
             ));
         }
         results.push(result);
@@ -564,8 +579,7 @@ pub mod signatures {
 
     /// bpf_kfunc_call_test1 (scalar arg)
     pub fn bpf_kfunc_call_test1() -> KfuncSignature {
-        KfuncSignature::new("bpf_kfunc_call_test1")
-            .arg(ArgConstraint::scalar())
+        KfuncSignature::new("bpf_kfunc_call_test1").arg(ArgConstraint::scalar())
     }
 
     /// bpf_kptr_xchg (pointer exchange)
@@ -601,15 +615,15 @@ pub mod signatures {
     pub fn bpf_rbtree_add() -> KfuncSignature {
         KfuncSignature::new("bpf_rbtree_add")
             .arg(ArgConstraint::ptr_to_btf_id(0)) // rbtree root
-            .arg(ArgConstraint::ref_release(0))   // node to add
-            .arg(ArgConstraint::scalar())         // less callback
+            .arg(ArgConstraint::ref_release(0)) // node to add
+            .arg(ArgConstraint::scalar()) // less callback
     }
 
     /// bpf_list_push_front/back
     pub fn bpf_list_push() -> KfuncSignature {
         KfuncSignature::new("bpf_list_push")
             .arg(ArgConstraint::ptr_to_btf_id(0)) // list head
-            .arg(ArgConstraint::ref_release(0))   // node to add
+            .arg(ArgConstraint::ref_release(0)) // node to add
     }
 
     /// bpf_list_pop_front/back
@@ -628,7 +642,6 @@ pub mod signatures {
 
     /// bpf_task_release
     pub fn bpf_task_release() -> KfuncSignature {
-        KfuncSignature::new("bpf_task_release")
-            .arg(ArgConstraint::ref_release(0))
+        KfuncSignature::new("bpf_task_release").arg(ArgConstraint::ref_release(0))
     }
 }

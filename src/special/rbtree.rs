@@ -1,16 +1,15 @@
+// SPDX-License-Identifier: GPL-2.0
+
 //! Rbtree and graph node tracking
 //!
 //! This module implements verification for BPF rbtree operations
 //! and graph data structure nodes (bpf_rb_root, bpf_rb_node, bpf_list_head, etc.)
 
-
 use alloc::{format, vec::Vec};
 
+use crate::core::error::{Result, VerifierError};
 use crate::core::types::*;
 use crate::state::reg_state::BpfRegState;
-use crate::core::error::{Result, VerifierError};
-
-
 
 use alloc::collections::BTreeMap as HashMap;
 
@@ -103,9 +102,7 @@ pub fn is_rbtree_kfunc(kfunc_id: u32) -> bool {
 pub fn is_rbtree_lock_required_kfunc(kfunc_id: u32) -> bool {
     matches!(
         kfunc_id,
-        rbtree_kfuncs::RBTREE_ADD_IMPL
-            | rbtree_kfuncs::RBTREE_REMOVE
-            | rbtree_kfuncs::RBTREE_FIRST
+        rbtree_kfuncs::RBTREE_ADD_IMPL | rbtree_kfuncs::RBTREE_REMOVE | rbtree_kfuncs::RBTREE_FIRST
     )
 }
 
@@ -140,12 +137,9 @@ pub struct GraphNodeState {
 }
 
 /// Mark register as graph node
-pub fn mark_reg_graph_node(
-    reg: &mut BpfRegState,
-    graph_root: &GraphRoot,
-) {
+pub fn mark_reg_graph_node(reg: &mut BpfRegState, graph_root: &GraphRoot) {
     use crate::state::reg_state::BtfInfo;
-    
+
     reg.mark_known(0);
     reg.reg_type = BpfRegType::PtrToBtfId;
     reg.btf_info = Some(BtfInfo::new(graph_root.value_btf_id));
@@ -216,7 +210,7 @@ pub fn in_rbtree_lock_required_cb(cb_state: &RbtreeCallbackState) -> bool {
 // ============================================================================
 
 /// Set up state for rbtree_add comparison callback
-/// 
+///
 /// bpf_rbtree_add_impl(root, node, less_cb) takes a comparison callback
 /// that receives two bpf_rb_node pointers to compare
 pub fn set_rbtree_add_callback_state(
@@ -248,10 +242,7 @@ pub fn set_rbtree_add_callback_state(
 // ============================================================================
 
 /// Validate rbtree root argument
-pub fn validate_rbtree_root_arg(
-    reg: &BpfRegState,
-    expected_btf_id: Option<u32>,
-) -> Result<()> {
+pub fn validate_rbtree_root_arg(reg: &BpfRegState, expected_btf_id: Option<u32>) -> Result<()> {
     // Must be a pointer to bpf_rb_root
     if reg.reg_type != BpfRegType::PtrToBtfId && reg.reg_type != BpfRegType::PtrToMapValue {
         return Err(VerifierError::TypeMismatch {
@@ -273,10 +264,7 @@ pub fn validate_rbtree_root_arg(
 }
 
 /// Validate rbtree node argument
-pub fn validate_rbtree_node_arg(
-    reg: &BpfRegState,
-    must_be_owned: bool,
-) -> Result<()> {
+pub fn validate_rbtree_node_arg(reg: &BpfRegState, must_be_owned: bool) -> Result<()> {
     // Must be a pointer to struct containing bpf_rb_node
     if reg.reg_type != BpfRegType::PtrToBtfId {
         return Err(VerifierError::TypeMismatch {
@@ -288,7 +276,7 @@ pub fn validate_rbtree_node_arg(
     // Check ownership if required
     if must_be_owned && reg.ref_obj_id == 0 {
         return Err(VerifierError::InvalidState(
-            "rbtree_add requires owned node".into()
+            "rbtree_add requires owned node".into(),
         ));
     }
 
@@ -296,10 +284,7 @@ pub fn validate_rbtree_node_arg(
 }
 
 /// Process rbtree_add return
-pub fn process_rbtree_add_return(
-    ret_reg: &mut BpfRegState,
-    node_reg: &BpfRegState,
-) {
+pub fn process_rbtree_add_return(ret_reg: &mut BpfRegState, node_reg: &BpfRegState) {
     // bpf_rbtree_add returns void, but the node is now in the tree
     // The node reference is consumed
     ret_reg.mark_not_init(false);
@@ -320,10 +305,7 @@ pub fn process_rbtree_remove_return(
 }
 
 /// Process rbtree_first return
-pub fn process_rbtree_first_return(
-    ret_reg: &mut BpfRegState,
-    graph_root: &GraphRoot,
-) {
+pub fn process_rbtree_first_return(ret_reg: &mut BpfRegState, graph_root: &GraphRoot) {
     // bpf_rbtree_first returns non-owning reference (or NULL)
     mark_reg_graph_node(ret_reg, graph_root);
     ref_set_non_owning(ret_reg);
@@ -366,22 +348,20 @@ impl GraphNodeTracker {
     }
 
     /// Allocate a new owned node
-    pub fn alloc_node(
-        &mut self,
-        graph_type: GraphType,
-        btf_id: u32,
-        node_offset: i32,
-    ) -> u32 {
+    pub fn alloc_node(&mut self, graph_type: GraphType, btf_id: u32, node_offset: i32) -> u32 {
         let id = self.next_id;
         self.next_id += 1;
 
-        self.nodes.insert(id, GraphNodeState {
-            graph_type,
-            ownership: NodeOwnership::Owned,
-            ref_obj_id: id,
-            btf_id,
-            node_offset,
-        });
+        self.nodes.insert(
+            id,
+            GraphNodeState {
+                graph_type,
+                ownership: NodeOwnership::Owned,
+                ref_obj_id: id,
+                btf_id,
+                node_offset,
+            },
+        );
 
         id
     }
@@ -396,15 +376,13 @@ impl GraphNodeTracker {
         if let Some(node) = self.nodes.get_mut(&ref_obj_id) {
             if node.ownership != NodeOwnership::Owned {
                 return Err(VerifierError::InvalidState(
-                    "can only insert owned nodes".into()
+                    "can only insert owned nodes".into(),
                 ));
             }
             node.ownership = NodeOwnership::InGraph;
             Ok(())
         } else {
-            Err(VerifierError::InvalidState(
-                "node not found".into()
-            ))
+            Err(VerifierError::InvalidState("node not found".into()))
         }
     }
 
@@ -412,16 +390,12 @@ impl GraphNodeTracker {
     pub fn remove_node(&mut self, ref_obj_id: u32) -> Result<()> {
         if let Some(node) = self.nodes.get_mut(&ref_obj_id) {
             if node.ownership != NodeOwnership::InGraph {
-                return Err(VerifierError::InvalidState(
-                    "node not in graph".into()
-                ));
+                return Err(VerifierError::InvalidState("node not in graph".into()));
             }
             node.ownership = NodeOwnership::Owned;
             Ok(())
         } else {
-            Err(VerifierError::InvalidState(
-                "node not found".into()
-            ))
+            Err(VerifierError::InvalidState("node not found".into()))
         }
     }
 
@@ -430,14 +404,12 @@ impl GraphNodeTracker {
         if let Some(node) = self.nodes.remove(&ref_obj_id) {
             if node.ownership != NodeOwnership::Owned {
                 return Err(VerifierError::InvalidState(
-                    "can only release owned nodes".into()
+                    "can only release owned nodes".into(),
                 ));
             }
             Ok(())
         } else {
-            Err(VerifierError::InvalidState(
-                "node not found".into()
-            ))
+            Err(VerifierError::InvalidState("node not found".into()))
         }
     }
 
@@ -489,7 +461,7 @@ pub fn is_graph_kfunc(kfunc_id: u32) -> bool {
 // ============================================================================
 
 /// Calculate pointer to containing structure from node pointer
-/// 
+///
 /// Equivalent to Linux kernel's container_of() macro:
 /// `container_of(ptr, type, member)` -> `(type *)((char *)(ptr) - offsetof(type, member))`
 pub fn container_of_offset(node_ptr_off: i32, node_offset_in_container: i32) -> i32 {
@@ -508,7 +480,7 @@ pub struct ContainerOfInfo {
 }
 
 /// Validate container_of operation
-/// 
+///
 /// When we have a pointer to bpf_rb_node inside a struct, we can convert
 /// it to a pointer to the containing struct using the node offset
 pub fn validate_container_of(
@@ -522,11 +494,11 @@ pub fn validate_container_of(
             got: format!("btf_id {}", node_btf_id),
         });
     }
-    
+
     if node_offset < 0 {
         return Err(VerifierError::InvalidOffset(node_offset as i64));
     }
-    
+
     Ok(())
 }
 
@@ -535,10 +507,7 @@ pub fn validate_container_of(
 // ============================================================================
 
 /// Validate list head argument
-pub fn validate_list_head_arg(
-    reg: &BpfRegState,
-    expected_btf_id: Option<u32>,
-) -> Result<()> {
+pub fn validate_list_head_arg(reg: &BpfRegState, expected_btf_id: Option<u32>) -> Result<()> {
     // Must be a pointer to bpf_list_head
     if reg.reg_type != BpfRegType::PtrToBtfId && reg.reg_type != BpfRegType::PtrToMapValue {
         return Err(VerifierError::TypeMismatch {
@@ -560,10 +529,7 @@ pub fn validate_list_head_arg(
 }
 
 /// Validate list node argument
-pub fn validate_list_node_arg(
-    reg: &BpfRegState,
-    must_be_owned: bool,
-) -> Result<()> {
+pub fn validate_list_node_arg(reg: &BpfRegState, must_be_owned: bool) -> Result<()> {
     // Must be a pointer to struct containing bpf_list_node
     if reg.reg_type != BpfRegType::PtrToBtfId {
         return Err(VerifierError::TypeMismatch {
@@ -575,7 +541,7 @@ pub fn validate_list_node_arg(
     // Check ownership if required
     if must_be_owned && reg.ref_obj_id == 0 {
         return Err(VerifierError::InvalidState(
-            "list push requires owned node".into()
+            "list push requires owned node".into(),
         ));
     }
 
@@ -583,20 +549,13 @@ pub fn validate_list_node_arg(
 }
 
 /// Process list_push return
-pub fn process_list_push_return(
-    ret_reg: &mut BpfRegState,
-    _node_reg: &BpfRegState,
-) {
+pub fn process_list_push_return(ret_reg: &mut BpfRegState, _node_reg: &BpfRegState) {
     // bpf_list_push_* returns void, node is now in list
     ret_reg.mark_not_init(false);
 }
 
 /// Process list_pop return
-pub fn process_list_pop_return(
-    ret_reg: &mut BpfRegState,
-    graph_root: &GraphRoot,
-    ref_obj_id: u32,
-) {
+pub fn process_list_pop_return(ret_reg: &mut BpfRegState, graph_root: &GraphRoot, ref_obj_id: u32) {
     // bpf_list_pop_* returns owned node pointer (or NULL)
     mark_reg_graph_node(ret_reg, graph_root);
     ret_reg.ref_obj_id = ref_obj_id;
@@ -644,12 +603,18 @@ pub struct BpfFieldRecord {
 impl BpfFieldRecord {
     /// Check if this is a graph root field
     pub fn is_graph_root(&self) -> bool {
-        matches!(self.field_type, BpfFieldType::RbRoot | BpfFieldType::ListHead)
+        matches!(
+            self.field_type,
+            BpfFieldType::RbRoot | BpfFieldType::ListHead
+        )
     }
 
     /// Check if this is a graph node field
     pub fn is_graph_node(&self) -> bool {
-        matches!(self.field_type, BpfFieldType::RbNode | BpfFieldType::ListNode)
+        matches!(
+            self.field_type,
+            BpfFieldType::RbNode | BpfFieldType::ListNode
+        )
     }
 
     /// Get the graph type if this is a graph field
@@ -681,11 +646,8 @@ impl BpfFieldRecords {
     pub fn add_record(&mut self, record: BpfFieldRecord) {
         let btf_id = record.container_btf_id;
         let offset = record.offset;
-        
-        self.by_btf_id
-            .entry(btf_id)
-            .or_default()
-            .push(offset);
+
+        self.by_btf_id.entry(btf_id).or_default().push(offset);
         self.records.insert((btf_id, offset), record);
     }
 
@@ -699,7 +661,8 @@ impl BpfFieldRecords {
         self.by_btf_id
             .get(&btf_id)
             .map(|offsets| {
-                offsets.iter()
+                offsets
+                    .iter()
                     .filter_map(|off| self.records.get(&(btf_id, *off)))
                     .collect()
             })
@@ -717,7 +680,7 @@ impl BpfFieldRecords {
         // Search for a matching root with the same value BTF ID
         for record in self.records.values() {
             if record.field_type == target_graph_type {
-                if let (Some(node_val), Some(root_val)) = 
+                if let (Some(node_val), Some(root_val)) =
                     (node_record.graph_value_btf_id, record.graph_value_btf_id)
                 {
                     if node_val == root_val {
@@ -747,12 +710,12 @@ pub fn verify_graph_op_safety(
             if let Some(node) = tracker.get_node(node_ref_id) {
                 if node.ownership != NodeOwnership::Owned {
                     return Err(VerifierError::InvalidState(
-                        "can only insert owned nodes into graph".into()
+                        "can only insert owned nodes into graph".into(),
                     ));
                 }
             } else {
                 return Err(VerifierError::InvalidState(
-                    "node not found for insertion".into()
+                    "node not found for insertion".into(),
                 ));
             }
         }
@@ -761,12 +724,12 @@ pub fn verify_graph_op_safety(
             if let Some(node) = tracker.get_node(node_ref_id) {
                 if node.ownership != NodeOwnership::InGraph {
                     return Err(VerifierError::InvalidState(
-                        "can only remove nodes that are in graph".into()
+                        "can only remove nodes that are in graph".into(),
                     ));
                 }
             } else {
                 return Err(VerifierError::InvalidState(
-                    "node not found for removal".into()
+                    "node not found for removal".into(),
                 ));
             }
         }
@@ -775,7 +738,7 @@ pub fn verify_graph_op_safety(
             Ok(())?;
         }
     }
-    
+
     Ok(())
 }
 

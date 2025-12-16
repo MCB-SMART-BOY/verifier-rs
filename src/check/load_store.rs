@@ -1,10 +1,11 @@
+// SPDX-License-Identifier: GPL-2.0
+
 //! Load and store instruction verification
 //!
 //! This module implements verification for BPF_LDX and BPF_STX instructions,
 //! handling memory loads, stores, and atomic operations.
 //!
 //! Corresponds to check_load_mem() and check_store_reg() in Linux kernel verifier.c
-
 
 use alloc::format;
 
@@ -13,8 +14,8 @@ use crate::core::error::{Result, VerifierError};
 use crate::core::types::*;
 use crate::mem::memory::check_mem_access;
 use crate::state::reg_state::BpfRegState;
-use crate::state::verifier_state::BpfVerifierState;
 use crate::state::spill_fill::{SpillFillTracker, StackReadResult};
+use crate::state::verifier_state::BpfVerifierState;
 
 /// Check a memory load instruction (BPF_LDX)
 ///
@@ -26,7 +27,7 @@ pub fn check_load_mem(
     state: &mut BpfVerifierState,
     insn: &BpfInsn,
     insn_idx: usize,
-    is_ldsx: bool,  // Sign-extending load
+    is_ldsx: bool, // Sign-extending load
     _check_write_mark: bool,
 ) -> Result<()> {
     let dst_reg = insn.dst_reg as usize;
@@ -71,7 +72,16 @@ pub fn check_load_mem(
     )?;
 
     // Set destination register based on loaded value
-    set_load_result(state, dst_reg, &src, insn.off as i32, size, loaded_type, is_ldsx, insn_idx)?;
+    set_load_result(
+        state,
+        dst_reg,
+        &src,
+        insn.off as i32,
+        size,
+        loaded_type,
+        is_ldsx,
+        insn_idx,
+    )?;
 
     // Mark destination as written
     if let Some(dst) = state.reg_mut(dst_reg) {
@@ -273,7 +283,7 @@ fn set_load_result(
                 }
             };
             let stack_off = src.off + off;
-            
+
             match fill_result {
                 StackReadResult::SpilledReg(spilled) => {
                     // Restore the spilled register with full precision
@@ -298,14 +308,15 @@ fn set_load_result(
                 }
                 StackReadResult::Uninitialized => {
                     // This should have been caught by check_mem_access
-                    return Err(VerifierError::InvalidMemoryAccess(
-                        format!("reading uninitialized stack at offset {}", stack_off)
-                    ));
+                    return Err(VerifierError::InvalidMemoryAccess(format!(
+                        "reading uninitialized stack at offset {}",
+                        stack_off
+                    )));
                 }
                 StackReadResult::Dynptr(_) | StackReadResult::Iterator(_) => {
                     // Special slots - should not be read directly
                     return Err(VerifierError::InvalidMemoryAccess(
-                        "cannot read special stack slot directly".into()
+                        "cannot read special stack slot directly".into(),
                     ));
                 }
             }
@@ -447,9 +458,9 @@ fn update_stack_on_store(
     }
 
     // Ensure stack is allocated to this depth
-    let func = state.cur_func_mut().ok_or(VerifierError::Internal(
-        "no current function".into(),
-    ))?;
+    let func = state
+        .cur_func_mut()
+        .ok_or(VerifierError::Internal("no current function".into()))?;
 
     if stack_off as usize > func.stack.allocated_stack {
         func.stack.grow(stack_off as usize)?;
@@ -471,10 +482,10 @@ fn update_stack_on_store(
 /// Convert BPF size code to bytes
 pub fn bpf_size_to_bytes(size_code: u8) -> u32 {
     match size_code {
-        0 => 4,  // BPF_W (32-bit)
-        1 => 2,  // BPF_H (16-bit)
-        2 => 1,  // BPF_B (8-bit)
-        3 => 8,  // BPF_DW (64-bit)
+        0 => 4, // BPF_W (32-bit)
+        1 => 2, // BPF_H (16-bit)
+        2 => 1, // BPF_B (8-bit)
+        3 => 8, // BPF_DW (64-bit)
         _ => 0,
     }
 }

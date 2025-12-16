@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0
+
 //! BTF verifier integration
 //!
 //! This module provides integration between BTF type information and the BPF verifier.
@@ -9,17 +11,19 @@
 
 #![allow(missing_docs)]
 
-
-use alloc::{format, string::{String, ToString}, vec::Vec};
-
+use alloc::{
+    format,
+    string::{String, ToString},
+    vec::Vec,
+};
 
 use alloc::collections::BTreeMap as HashMap;
 
+use super::btf::{Btf, BtfKind, BtfPermissions, DeclTagStore};
+use super::core::{apply_core_relos, CoreReloStats};
+use super::func_info::{BpfCoreRelo, BpfFuncInfo, BpfLineInfo};
 use crate::core::error::{Result, VerifierError};
 use crate::core::types::*;
-use super::btf::{Btf, BtfKind, BtfPermissions, DeclTagStore};
-use super::func_info::{BpfFuncInfo, BpfLineInfo, BpfCoreRelo};
-use super::core::{apply_core_relos, CoreReloStats};
 
 // ============================================================================
 // Source Location Tracking
@@ -120,7 +124,8 @@ impl LineInfoDb {
 
     /// Get a string by offset
     pub fn get_string(&self, offset: u32) -> Option<&str> {
-        self.string_offsets.get(&offset)
+        self.string_offsets
+            .get(&offset)
             .and_then(|&idx| self.strings.get(idx))
             .map(|s| s.as_str())
     }
@@ -129,9 +134,10 @@ impl LineInfoDb {
     pub fn load_func_info(&mut self, btf: &Btf, func_info: &[BpfFuncInfo]) {
         for info in func_info {
             let insn_off = (info.insn_off / 8) as usize;
-            
+
             // Get function name from BTF
-            let name = btf.get_type(info.type_id)
+            let name = btf
+                .get_type(info.type_id)
                 .and_then(|t| t.name.clone())
                 .unwrap_or_else(|| format!("func_{}", insn_off));
 
@@ -150,12 +156,14 @@ impl LineInfoDb {
     pub fn load_line_info(&mut self, line_info: &[BpfLineInfo]) {
         for info in line_info {
             let insn_idx = (info.insn_off / 8) as usize;
-            
+
             // Find owning function
             let func_idx = self.find_func_for_insn(insn_idx);
-            
+
             // Get or add file string
-            let file_idx = self.string_offsets.get(&info.file_name_off)
+            let file_idx = self
+                .string_offsets
+                .get(&info.file_name_off)
                 .copied()
                 .unwrap_or_else(|| {
                     let idx = self.strings.len();
@@ -164,12 +172,15 @@ impl LineInfoDb {
                     idx
                 });
 
-            self.insn_to_line.insert(insn_idx, LineInfoEntry {
-                file_idx,
-                line: info.line_num(),
-                column: info.col_num(),
-                func_idx,
-            });
+            self.insn_to_line.insert(
+                insn_idx,
+                LineInfoEntry {
+                    file_idx,
+                    line: info.line_num(),
+                    column: info.col_num(),
+                    func_idx,
+                },
+            );
         }
     }
 
@@ -187,20 +198,22 @@ impl LineInfoDb {
     /// Get source location for an instruction
     pub fn get_source_location(&self, insn_idx: usize) -> Option<SourceLocation> {
         let entry = self.insn_to_line.get(&insn_idx)?;
-        
-        let file = self.strings.get(entry.file_idx)
+
+        let file = self
+            .strings
+            .get(entry.file_idx)
             .map(|s| s.as_str())
             .unwrap_or("<unknown>");
-        
+
         let mut loc = SourceLocation::new(file, entry.line, entry.column);
-        
+
         // Add function name if available
         if let Some(func_idx) = entry.func_idx {
             if let Some(func) = self.func_info.get(func_idx) {
                 loc.function = Some(func.name.clone());
             }
         }
-        
+
         Some(loc)
     }
 
@@ -233,7 +246,7 @@ impl LineInfoDb {
 // ============================================================================
 
 /// BTF context for verification
-/// 
+///
 /// This holds all BTF-related data needed during verification:
 /// - Program BTF (local types)
 /// - Kernel BTF (target types for CO-RE)
@@ -289,11 +302,7 @@ impl BtfContext {
     }
 
     /// Load function and line info
-    pub fn load_debug_info(
-        &mut self,
-        func_info: &[BpfFuncInfo],
-        line_info: &[BpfLineInfo],
-    ) {
+    pub fn load_debug_info(&mut self, func_info: &[BpfFuncInfo], line_info: &[BpfLineInfo]) {
         if let Some(ref btf) = self.prog_btf {
             self.line_info.load_func_info(btf, func_info);
         }
@@ -306,16 +315,18 @@ impl BtfContext {
         insns: &mut [BpfInsn],
         relos: &[BpfCoreRelo],
     ) -> Result<()> {
-        let local_btf = self.prog_btf.as_ref().ok_or_else(|| {
-            VerifierError::InvalidBtf("CO-RE requires program BTF".into())
-        })?;
-        
-        let target_btf = self.kernel_btf.as_ref().ok_or_else(|| {
-            VerifierError::InvalidBtf("CO-RE requires kernel BTF".into())
-        })?;
+        let local_btf = self
+            .prog_btf
+            .as_ref()
+            .ok_or_else(|| VerifierError::InvalidBtf("CO-RE requires program BTF".into()))?;
+
+        let target_btf = self
+            .kernel_btf
+            .as_ref()
+            .ok_or_else(|| VerifierError::InvalidBtf("CO-RE requires kernel BTF".into()))?;
 
         let stats = apply_core_relos(insns, relos, local_btf, target_btf)?;
-        
+
         if !stats.all_succeeded() {
             // Log errors but don't fail - some relos may be optional
             for err in &stats.errors {
@@ -323,7 +334,7 @@ impl BtfContext {
                 let _ = err;
             }
         }
-        
+
         self.core_relo_stats = Some(stats);
         Ok(())
     }
@@ -363,15 +374,13 @@ impl BtfContext {
         };
 
         if offset < 0 {
-            return Err(VerifierError::InvalidMemoryAccess(
-                "negative offset".into()
-            ));
+            return Err(VerifierError::InvalidMemoryAccess("negative offset".into()));
         }
         let offset = offset as u32;
 
-        let ty = btf.resolve_type(type_id).ok_or_else(|| {
-            VerifierError::InvalidBtf(format!("type {} not found", type_id))
-        })?;
+        let ty = btf
+            .resolve_type(type_id)
+            .ok_or_else(|| VerifierError::InvalidBtf(format!("type {} not found", type_id)))?;
 
         // Check bounds
         if offset + size > ty.size {
@@ -387,7 +396,7 @@ impl BtfContext {
         // Check write permissions
         if is_write && permissions.rdonly {
             return Err(VerifierError::InvalidMemoryAccess(
-                "write to read-only field".into()
+                "write to read-only field".into(),
             ));
         }
 
@@ -399,45 +408,40 @@ impl BtfContext {
     }
 
     /// Find field at a specific offset
-    fn find_field_at_offset(
-        &self,
-        type_id: u32,
-        offset: u32,
-    ) -> Result<(u32, BtfPermissions)> {
-        let btf = self.prog_btf.as_ref().ok_or_else(|| {
-            VerifierError::InvalidBtf("no BTF available".into())
-        })?;
-        let ty = btf.resolve_type(type_id).ok_or_else(|| {
-            VerifierError::InvalidBtf("type not found".into())
-        })?;
+    fn find_field_at_offset(&self, type_id: u32, offset: u32) -> Result<(u32, BtfPermissions)> {
+        let btf = self
+            .prog_btf
+            .as_ref()
+            .ok_or_else(|| VerifierError::InvalidBtf("no BTF available".into()))?;
+        let ty = btf
+            .resolve_type(type_id)
+            .ok_or_else(|| VerifierError::InvalidBtf("type not found".into()))?;
 
         let mut permissions = self.decl_tags.get_type_permissions(type_id);
 
         match ty.kind {
             BtfKind::Struct | BtfKind::Union => {
                 let _bit_offset = offset * 8;
-                
+
                 for (idx, member) in ty.members.iter().enumerate() {
                     let member_offset = if ty.kind == BtfKind::Union {
                         0
                     } else {
                         member.offset / 8
                     };
-                    
+
                     let member_size = btf.type_size(member.type_id).unwrap_or(0);
-                    
+
                     if offset >= member_offset && offset < member_offset + member_size {
                         // Merge member permissions
-                        let member_perms = self.decl_tags.get_member_permissions(
-                            type_id,
-                            idx as i32,
-                        );
+                        let member_perms =
+                            self.decl_tags.get_member_permissions(type_id, idx as i32);
                         permissions.merge(&member_perms);
-                        
+
                         return Ok((member.type_id, permissions));
                     }
                 }
-                
+
                 // No exact field match, return base type
                 Ok((0, permissions))
             }
@@ -483,22 +487,21 @@ impl BtfContext {
 
         let func_id = func_ids[0];
         let proto = btf.get_func_proto(func_id).ok_or_else(|| {
-            VerifierError::InvalidFunctionCall(format!(
-                "'{}' is not a function",
-                func_name
-            ))
+            VerifierError::InvalidFunctionCall(format!("'{}' is not a function", func_name))
         })?;
 
         // Check argument count
         if arg_btf_ids.len() != proto.params.len() {
             return Err(VerifierError::InvalidFunctionCall(format!(
                 "kfunc '{}' expects {} args, got {}",
-                func_name, proto.params.len(), arg_btf_ids.len()
+                func_name,
+                proto.params.len(),
+                arg_btf_ids.len()
             )));
         }
 
         // Determine if this is an acquire/release function
-        let acquires_ref = func_name.contains("_acquire") 
+        let acquires_ref = func_name.contains("_acquire")
             || func_name.contains("_get")
             || func_name.contains("_new");
         let releases_ref = func_name.contains("_release")
@@ -518,7 +521,7 @@ impl BtfContext {
     pub fn get_func_proto(&self, func_id: u32) -> Option<FuncProtoInfo> {
         let btf = self.prog_btf.as_ref()?;
         let proto = btf.get_func_proto(func_id)?;
-        
+
         Some(FuncProtoInfo {
             type_id: proto.type_id,
             ret_type_id: proto.ret_type,
@@ -608,12 +611,18 @@ impl<'a> ErrorFormatter<'a> {
         };
 
         // Try to get type and field names
-        let type_info = self.btf_ctx.prog_btf.as_ref()
+        let type_info = self
+            .btf_ctx
+            .prog_btf
+            .as_ref()
             .and_then(|btf| btf.get_type(type_id))
             .and_then(|ty| ty.name.clone());
 
         if let Some(type_name) = type_info {
-            format!("{}: {} (type '{}' offset {})", prefix, error, type_name, offset)
+            format!(
+                "{}: {} (type '{}' offset {})",
+                prefix, error, type_name, offset
+            )
         } else {
             format!("{}: {} (type {} offset {})", prefix, error, type_id, offset)
         }

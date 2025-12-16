@@ -1,17 +1,17 @@
+// SPDX-License-Identifier: GPL-2.0
+
 //! Strongly Connected Components (SCC) analysis for BPF programs.
 //!
 //! This module implements Tarjan's algorithm for finding SCCs in the control
 //! flow graph. SCCs are critical for bounded loop verification - each SCC
 //! represents a potential loop that needs iteration bounds checking.
 
-
 use alloc::{format, vec::Vec};
-
 
 use alloc::collections::{BTreeMap as HashMap, BTreeSet as HashSet};
 
-use crate::core::types::*;
 use crate::core::error::{Result, VerifierError};
+use crate::core::types::*;
 
 /// State of a node during SCC traversal.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -325,10 +325,9 @@ impl SccComputer {
                 // Check predecessors for entries
                 if let Some(preds) = self.predecessors.get(&member) {
                     for &pred in preds {
-                        if !members.contains(&pred)
-                            && !scc.entries.contains(&member) {
-                                scc.entries.push(member);
-                            }
+                        if !members.contains(&pred) && !scc.entries.contains(&member) {
+                            scc.entries.push(member);
+                        }
                     }
                 }
 
@@ -338,8 +337,8 @@ impl SccComputer {
                         if members.contains(&succ) {
                             // Internal edge - check if it's a back edge
                             // A back edge goes to a node with smaller/equal DFS index
-                            if let (Some(&m_idx), Some(&s_idx)) = 
-                                (self.indices.get(&member), self.indices.get(&succ)) 
+                            if let (Some(&m_idx), Some(&s_idx)) =
+                                (self.indices.get(&member), self.indices.get(&succ))
                             {
                                 if s_idx <= m_idx {
                                     scc.back_edges.push((member, succ));
@@ -356,12 +355,13 @@ impl SccComputer {
             }
 
             // SCC is a loop if it has back edges or more than one member with internal edges
-            scc.is_loop = !scc.back_edges.is_empty() || 
-                (scc.members.len() > 1 && scc.members.iter().any(|&m| {
-                    self.successors.get(&m).is_some_and(|succs| {
-                        succs.iter().any(|s| members.contains(s))
-                    })
-                }));
+            scc.is_loop = !scc.back_edges.is_empty()
+                || (scc.members.len() > 1
+                    && scc.members.iter().any(|&m| {
+                        self.successors
+                            .get(&m)
+                            .is_some_and(|succs| succs.iter().any(|s| members.contains(s)))
+                    }));
 
             if scc.is_loop {
                 analysis.loop_sccs.push(scc.id);
@@ -369,7 +369,8 @@ impl SccComputer {
         }
 
         // Compute topological order of SCCs
-        analysis.topo_order = Self::compute_scc_topo_order(&analysis.sccs, &self.successors, &analysis.insn_to_scc);
+        analysis.topo_order =
+            Self::compute_scc_topo_order(&analysis.sccs, &self.successors, &analysis.insn_to_scc);
 
         // Compute nesting depth
         Self::compute_nesting(&mut analysis);
@@ -400,14 +401,17 @@ impl SccComputer {
                     for &succ in succs {
                         if let Some(&succ_scc) = insn_to_scc.get(&succ) {
                             if succ_scc != scc.id
-                                && scc_edges.get(&scc.id).is_none_or(|s| !s.contains(&succ_scc)) {
-                                    if let Some(edges) = scc_edges.get_mut(&scc.id) {
-                                        edges.insert(succ_scc);
-                                    }
-                                    if let Some(deg) = in_degree.get_mut(&succ_scc) {
-                                        *deg += 1;
-                                    }
+                                && scc_edges
+                                    .get(&scc.id)
+                                    .is_none_or(|s| !s.contains(&succ_scc))
+                            {
+                                if let Some(edges) = scc_edges.get_mut(&scc.id) {
+                                    edges.insert(succ_scc);
                                 }
+                                if let Some(deg) = in_degree.get_mut(&succ_scc) {
+                                    *deg += 1;
+                                }
+                            }
                         }
                     }
                 }
@@ -416,7 +420,8 @@ impl SccComputer {
 
         // Kahn's algorithm for topological sort
         let mut order = Vec::new();
-        let mut queue: Vec<usize> = in_degree.iter()
+        let mut queue: Vec<usize> = in_degree
+            .iter()
             .filter(|(_, &deg)| deg == 0)
             .map(|(&id, _)| id)
             .collect();
@@ -698,16 +703,10 @@ pub fn maybe_exit_scc(
 }
 
 /// Add a back edge to the analysis.
-pub fn add_scc_backedge(
-    analysis: &mut SccAnalysis,
-    from: usize,
-    to: usize,
-) -> Result<()> {
+pub fn add_scc_backedge(analysis: &mut SccAnalysis, from: usize, to: usize) -> Result<()> {
     // Find the SCC containing the target
     let scc_id = *analysis.insn_to_scc.get(&to).ok_or_else(|| {
-        VerifierError::InvalidState(format!(
-            "back edge target {} not in any SCC", to
-        ))
+        VerifierError::InvalidState(format!("back edge target {} not in any SCC", to))
     })?;
 
     // Add the back edge to the SCC

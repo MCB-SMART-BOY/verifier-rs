@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0
+
 //! Verification result and error reporting
 //!
 //! This module provides structured verification results with detailed
@@ -8,8 +10,7 @@ use crate::core::types::*;
 use crate::verifier::stats::VerifierStats;
 use core::fmt;
 
-
-use alloc::{string::String, vec::Vec, format};
+use alloc::{format, string::String, vec::Vec};
 
 /// Overall verification result
 #[derive(Debug, Clone)]
@@ -118,20 +119,11 @@ pub struct AbortInfo {
 #[derive(Debug, Clone)]
 pub enum AbortReason {
     /// Complexity limit exceeded
-    ComplexityLimit {
-        limit: u64,
-        reached: u64,
-    },
+    ComplexityLimit { limit: u64, reached: u64 },
     /// State limit exceeded
-    StateLimit {
-        limit: usize,
-        reached: usize,
-    },
+    StateLimit { limit: usize, reached: usize },
     /// Timeout
-    Timeout {
-        limit_ms: u64,
-        elapsed_ms: u64,
-    },
+    Timeout { limit_ms: u64, elapsed_ms: u64 },
     /// User requested abort
     UserAbort,
     /// Internal error
@@ -146,8 +138,8 @@ pub struct VerificationProgress {
     pub insns_verified: usize,
     /// Number of branches explored
     pub branches_explored: usize,
-    /// Percentage of program covered
-    pub coverage_percent: f64,
+    /// Percentage of program covered (0-100)
+    pub coverage_percent: u32,
 }
 
 /// Context in which an error occurred
@@ -168,24 +160,13 @@ pub enum ErrorContext {
         size: u32,
     },
     /// Error during jump verification
-    Jump {
-        jump_type: JumpType,
-        target: usize,
-    },
+    Jump { jump_type: JumpType, target: usize },
     /// Error during call verification
-    Call {
-        call_type: CallType,
-        func_id: i32,
-    },
+    Call { call_type: CallType, func_id: i32 },
     /// Error during return verification
-    Return {
-        frame_depth: u32,
-    },
+    Return { frame_depth: u32 },
     /// Error verifying register state
-    RegisterState {
-        regno: u8,
-        expected: &'static str,
-    },
+    RegisterState { regno: u8, expected: &'static str },
     /// Error during stack access
     StackAccess {
         offset: i32,
@@ -370,15 +351,19 @@ impl ResultBuilder {
     pub fn failure(self, error: VerifierError, insn_idx: usize) -> VerificationOutcome {
         let mut info = FailureInfo::new(error, insn_idx);
         info.partial_stats = Some(self.stats);
-        
+
         // Add suggestions based on error type
         add_error_suggestions(&mut info);
-        
+
         VerificationOutcome::Failure(info)
     }
 
     /// Build aborted result
-    pub fn aborted(self, reason: AbortReason, progress: VerificationProgress) -> VerificationOutcome {
+    pub fn aborted(
+        self,
+        reason: AbortReason,
+        progress: VerificationProgress,
+    ) -> VerificationOutcome {
         VerificationOutcome::Aborted(AbortInfo {
             reason,
             progress,
@@ -397,72 +382,55 @@ impl Default for ResultBuilder {
 fn add_error_suggestions(info: &mut FailureInfo) {
     match &info.error {
         VerifierError::UninitializedRegister(reg) => {
-            info.suggestions.push(format!(
-                "Initialize register R{} before using it", reg
-            ));
-            info.suggestions.push(
-                "Check if a previous branch might leave this register uninitialized".into()
-            );
+            info.suggestions
+                .push(format!("Initialize register R{} before using it", reg));
+            info.suggestions
+                .push("Check if a previous branch might leave this register uninitialized".into());
         }
         VerifierError::InvalidMemoryAccess(msg) => {
             if msg.contains("stack") {
-                info.suggestions.push(
-                    "Ensure stack offset is within bounds (-512 to 0)".into()
-                );
+                info.suggestions
+                    .push("Ensure stack offset is within bounds (-512 to 0)".into());
             }
             if msg.contains("packet") {
-                info.suggestions.push(
-                    "Add a bounds check before accessing packet data".into()
-                );
-                info.suggestions.push(
-                    "Pattern: if (data + offset > data_end) return XDP_DROP;".into()
-                );
+                info.suggestions
+                    .push("Add a bounds check before accessing packet data".into());
+                info.suggestions
+                    .push("Pattern: if (data + offset > data_end) return XDP_DROP;".into());
             }
         }
         VerifierError::InvalidPointerArithmetic(_) => {
-            info.suggestions.push(
-                "Only add/sub constants or bounded scalars to pointers".into()
-            );
-            info.suggestions.push(
-                "Use AND with mask to bound variable offsets".into()
-            );
+            info.suggestions
+                .push("Only add/sub constants or bounded scalars to pointers".into());
+            info.suggestions
+                .push("Use AND with mask to bound variable offsets".into());
         }
         VerifierError::TypeMismatch { expected, .. } => {
-            info.suggestions.push(format!(
-                "Ensure the value is of type {}", expected
-            ));
+            info.suggestions
+                .push(format!("Ensure the value is of type {}", expected));
         }
         VerifierError::UnreleasedReference(_) => {
-            info.suggestions.push(
-                "Call the appropriate release function (e.g., bpf_sk_release)".into()
-            );
-            info.suggestions.push(
-                "Ensure all code paths release acquired references".into()
-            );
+            info.suggestions
+                .push("Call the appropriate release function (e.g., bpf_sk_release)".into());
+            info.suggestions
+                .push("Ensure all code paths release acquired references".into());
         }
         VerifierError::InvalidLock(_) => {
-            info.suggestions.push(
-                "Ensure locks are released in reverse order of acquisition".into()
-            );
-            info.suggestions.push(
-                "Check that all code paths properly release locks".into()
-            );
+            info.suggestions
+                .push("Ensure locks are released in reverse order of acquisition".into());
+            info.suggestions
+                .push("Check that all code paths properly release locks".into());
         }
         VerifierError::BackEdgeDetected => {
-            info.suggestions.push(
-                "Use bpf_loop() helper for bounded iteration".into()
-            );
-            info.suggestions.push(
-                "Unroll small loops manually".into()
-            );
+            info.suggestions
+                .push("Use bpf_loop() helper for bounded iteration".into());
+            info.suggestions.push("Unroll small loops manually".into());
         }
         VerifierError::TooComplex(_) => {
-            info.suggestions.push(
-                "Simplify program logic or split into multiple programs".into()
-            );
-            info.suggestions.push(
-                "Reduce branching and use tail calls for complex flows".into()
-            );
+            info.suggestions
+                .push("Simplify program logic or split into multiple programs".into());
+            info.suggestions
+                .push("Reduce branching and use tail calls for complex flows".into());
         }
         _ => {}
     }
@@ -476,44 +444,63 @@ impl fmt::Display for VerificationOutcome {
                 writeln!(f, "Verification PASSED")?;
                 writeln!(f)?;
                 writeln!(f, "Statistics:")?;
-                writeln!(f, "  Instructions processed: {}", info.stats.insns_processed)?;
+                writeln!(
+                    f,
+                    "  Instructions processed: {}",
+                    info.stats.insns_processed
+                )?;
                 writeln!(f, "  States explored: {}", info.stats.total_states)?;
                 writeln!(f, "  States pruned: {}", info.stats.states_pruned)?;
-                
+
                 if !info.warnings.is_empty() {
                     writeln!(f)?;
                     writeln!(f, "Warnings ({}):", info.warnings.len())?;
                     for warning in &info.warnings {
                         if let Some(idx) = warning.insn_idx {
-                            writeln!(f, "  [{}] insn {}: {}", 
-                                    warning.code as u8, idx, warning.message)?;
+                            writeln!(
+                                f,
+                                "  [{}] insn {}: {}",
+                                warning.code as u8, idx, warning.message
+                            )?;
                         } else {
                             writeln!(f, "  [{}] {}", warning.code as u8, warning.message)?;
                         }
                     }
                 }
-                
+
                 Ok(())
             }
             VerificationOutcome::Failure(info) => {
                 writeln!(f, "Verification FAILED")?;
                 writeln!(f)?;
                 writeln!(f, "Error at instruction {}: {}", info.insn_idx, info.error)?;
-                
+
                 match &info.context {
-                    ErrorContext::MemoryAccess { access_type, ptr_reg, offset, size } => {
-                        writeln!(f, "Context: {:?} access via R{} at offset {} size {}", 
-                                access_type, ptr_reg, offset, size)?;
+                    ErrorContext::MemoryAccess {
+                        access_type,
+                        ptr_reg,
+                        offset,
+                        size,
+                    } => {
+                        writeln!(
+                            f,
+                            "Context: {:?} access via R{} at offset {} size {}",
+                            access_type, ptr_reg, offset, size
+                        )?;
                     }
                     ErrorContext::RegisterState { regno, expected } => {
-                        writeln!(f, "Context: Register R{} expected to be {}", regno, expected)?;
+                        writeln!(
+                            f,
+                            "Context: Register R{} expected to be {}",
+                            regno, expected
+                        )?;
                     }
                     ErrorContext::Call { call_type, func_id } => {
                         writeln!(f, "Context: {:?} call to function {}", call_type, func_id)?;
                     }
                     _ => {}
                 }
-                
+
                 if !info.suggestions.is_empty() {
                     writeln!(f)?;
                     writeln!(f, "Suggestions:")?;
@@ -521,7 +508,7 @@ impl fmt::Display for VerificationOutcome {
                         writeln!(f, "  {}. {}", i + 1, suggestion)?;
                     }
                 }
-                
+
                 if !info.related.is_empty() {
                     writeln!(f)?;
                     writeln!(f, "Related issues:")?;
@@ -529,21 +516,28 @@ impl fmt::Display for VerificationOutcome {
                         writeln!(f, "  - insn {}: {}", related.insn_idx, related.description)?;
                     }
                 }
-                
+
                 Ok(())
             }
             VerificationOutcome::Aborted(info) => {
                 writeln!(f, "Verification ABORTED")?;
                 writeln!(f)?;
-                
+
                 match &info.reason {
                     AbortReason::ComplexityLimit { limit, reached } => {
-                        writeln!(f, "Reason: Complexity limit exceeded ({} / {})", reached, limit)?;
+                        writeln!(
+                            f,
+                            "Reason: Complexity limit exceeded ({} / {})",
+                            reached, limit
+                        )?;
                     }
                     AbortReason::StateLimit { limit, reached } => {
                         writeln!(f, "Reason: State limit exceeded ({} / {})", reached, limit)?;
                     }
-                    AbortReason::Timeout { limit_ms, elapsed_ms } => {
+                    AbortReason::Timeout {
+                        limit_ms,
+                        elapsed_ms,
+                    } => {
                         writeln!(f, "Reason: Timeout ({}ms / {}ms)", elapsed_ms, limit_ms)?;
                     }
                     AbortReason::UserAbort => {
@@ -553,13 +547,21 @@ impl fmt::Display for VerificationOutcome {
                         writeln!(f, "Reason: Internal error - {}", msg)?;
                     }
                 }
-                
+
                 writeln!(f)?;
                 writeln!(f, "Progress before abort:")?;
-                writeln!(f, "  Instructions verified: {}", info.progress.insns_verified)?;
-                writeln!(f, "  Branches explored: {}", info.progress.branches_explored)?;
+                writeln!(
+                    f,
+                    "  Instructions verified: {}",
+                    info.progress.insns_verified
+                )?;
+                writeln!(
+                    f,
+                    "  Branches explored: {}",
+                    info.progress.branches_explored
+                )?;
                 writeln!(f, "  Coverage: {:.1}%", info.progress.coverage_percent)?;
-                
+
                 Ok(())
             }
         }

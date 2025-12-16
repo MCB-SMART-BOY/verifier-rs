@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0
+
 //! BTF CO-RE (Compile Once - Run Everywhere) support
 //!
 //! This module implements CO-RE relocation support, allowing BPF programs
@@ -11,22 +13,20 @@
 
 #![allow(missing_docs)]
 
-
 use alloc::{format, string::String, vec::Vec};
-
 
 use alloc::collections::BTreeMap as HashMap;
 
+use super::btf::{Btf, BtfKind, BtfMember, BtfType, MAX_RESOLVE_DEPTH};
+use super::func_info::{BpfCoreRelo, BpfCoreReloKind};
 use crate::core::error::{Result, VerifierError};
 use crate::core::types::*;
-use super::btf::{Btf, BtfKind, BtfType, BtfMember, MAX_RESOLVE_DEPTH};
-use super::func_info::{BpfCoreRelo, BpfCoreReloKind};
 
 /// Maximum number of access path components
 const MAX_ACCESS_DEPTH: usize = 256;
 
 /// CO-RE access specification
-/// 
+///
 /// Parsed from the access string in a CO-RE relocation.
 /// Format: "0:1:2" means field index 0, then field index 1, then field index 2
 #[derive(Debug, Clone)]
@@ -43,7 +43,7 @@ pub struct CoreAccessSpec {
 #[derive(Debug, Clone)]
 pub enum CoreAccessComponent {
     /// Field access by index
-    Field { 
+    Field {
         /// Field index in the struct
         index: u32,
         /// Field name (for matching)
@@ -102,23 +102,17 @@ impl<'a> CoreReloContext<'a> {
 
     /// Process a single CO-RE relocation
     pub fn process_relo(&mut self, relo: &BpfCoreRelo) -> Result<CoreReloResult> {
-        let kind = BpfCoreReloKind::try_from(relo.kind)
-            .map_err(|_| VerifierError::InvalidBtf(format!(
-                "invalid CO-RE relo kind {}",
-                relo.kind
-            )))?;
+        let kind = BpfCoreReloKind::try_from(relo.kind).map_err(|_| {
+            VerifierError::InvalidBtf(format!("invalid CO-RE relo kind {}", relo.kind))
+        })?;
 
         // Parse the access string
-        let access_str = self.local_btf.get_string(relo.access_str_off)
-            .ok_or_else(|| VerifierError::InvalidBtf(
-                "invalid access string offset".into()
-            ))?;
+        let access_str = self
+            .local_btf
+            .get_string(relo.access_str_off)
+            .ok_or_else(|| VerifierError::InvalidBtf("invalid access string offset".into()))?;
 
-        let local_spec = self.parse_access_spec(
-            self.local_btf,
-            relo.type_id,
-            &access_str,
-        )?;
+        let local_spec = self.parse_access_spec(self.local_btf, relo.type_id, &access_str)?;
 
         // Find matching type in target BTF
         let target_type_id = self.find_target_type(relo.type_id)?;
@@ -130,44 +124,22 @@ impl<'a> CoreReloContext<'a> {
             BpfCoreReloKind::FieldByteSize => {
                 self.relo_field_byte_size(&local_spec, target_type_id)
             }
-            BpfCoreReloKind::FieldExists => {
-                self.relo_field_exists(&local_spec, target_type_id)
-            }
-            BpfCoreReloKind::FieldSigned => {
-                self.relo_field_signed(&local_spec, target_type_id)
-            }
-            BpfCoreReloKind::FieldLshift => {
-                self.relo_field_lshift(&local_spec, target_type_id)
-            }
-            BpfCoreReloKind::FieldRshift => {
-                self.relo_field_rshift(&local_spec, target_type_id)
-            }
-            BpfCoreReloKind::TypeIdLocal => {
-                Ok(CoreReloResult {
-                    success: true,
-                    new_val: relo.type_id as u64,
-                    exists: true,
-                    error: None,
-                })
-            }
-            BpfCoreReloKind::TypeIdTarget => {
-                self.relo_type_id_target(relo.type_id)
-            }
-            BpfCoreReloKind::TypeExists => {
-                self.relo_type_exists(relo.type_id)
-            }
-            BpfCoreReloKind::TypeSize => {
-                self.relo_type_size(relo.type_id)
-            }
-            BpfCoreReloKind::TypeMatches => {
-                self.relo_type_matches(relo.type_id, target_type_id)
-            }
-            BpfCoreReloKind::EnumvalExists => {
-                self.relo_enumval_exists(&local_spec, target_type_id)
-            }
-            BpfCoreReloKind::EnumvalValue => {
-                self.relo_enumval_value(&local_spec, target_type_id)
-            }
+            BpfCoreReloKind::FieldExists => self.relo_field_exists(&local_spec, target_type_id),
+            BpfCoreReloKind::FieldSigned => self.relo_field_signed(&local_spec, target_type_id),
+            BpfCoreReloKind::FieldLshift => self.relo_field_lshift(&local_spec, target_type_id),
+            BpfCoreReloKind::FieldRshift => self.relo_field_rshift(&local_spec, target_type_id),
+            BpfCoreReloKind::TypeIdLocal => Ok(CoreReloResult {
+                success: true,
+                new_val: relo.type_id as u64,
+                exists: true,
+                error: None,
+            }),
+            BpfCoreReloKind::TypeIdTarget => self.relo_type_id_target(relo.type_id),
+            BpfCoreReloKind::TypeExists => self.relo_type_exists(relo.type_id),
+            BpfCoreReloKind::TypeSize => self.relo_type_size(relo.type_id),
+            BpfCoreReloKind::TypeMatches => self.relo_type_matches(relo.type_id, target_type_id),
+            BpfCoreReloKind::EnumvalExists => self.relo_enumval_exists(&local_spec, target_type_id),
+            BpfCoreReloKind::EnumvalValue => self.relo_enumval_value(&local_spec, target_type_id),
         }
     }
 
@@ -192,23 +164,15 @@ impl<'a> CoreReloContext<'a> {
 
         for (i, part) in access_str.split(':').enumerate() {
             if i >= MAX_ACCESS_DEPTH {
-                return Err(VerifierError::InvalidBtf(
-                    "access spec too deep".into()
-                ));
+                return Err(VerifierError::InvalidBtf("access spec too deep".into()));
             }
 
             let idx: u32 = part.parse().map_err(|_| {
-                VerifierError::InvalidBtf(format!(
-                    "invalid access index '{}'",
-                    part
-                ))
+                VerifierError::InvalidBtf(format!("invalid access index '{}'", part))
             })?;
 
             let ty = btf.resolve_type(current_type).ok_or_else(|| {
-                VerifierError::InvalidBtf(format!(
-                    "type {} not found",
-                    current_type
-                ))
+                VerifierError::InvalidBtf(format!("type {} not found", current_type))
             })?;
 
             match ty.kind {
@@ -239,7 +203,7 @@ impl<'a> CoreReloContext<'a> {
                         current_type = arr.elem_type;
                     } else {
                         return Err(VerifierError::InvalidBtf(
-                            "array type missing array info".into()
+                            "array type missing array info".into(),
                         ));
                     }
                 }
@@ -285,9 +249,10 @@ impl<'a> CoreReloContext<'a> {
         // Find by name in target BTF
         let target_id = if let Some(ref name) = local_type.name {
             let candidates = self.target_btf.find_by_name(name);
-            
+
             // Find matching kind
-            candidates.iter()
+            candidates
+                .iter()
                 .filter_map(|&id| self.target_btf.get_type(id))
                 .find(|t| t.kind == local_type.kind)
                 .map(|t| t.id)
@@ -306,12 +271,13 @@ impl<'a> CoreReloContext<'a> {
         field_name: &str,
     ) -> Option<(usize, &BtfMember)> {
         let ty = self.target_btf.resolve_type(target_type_id)?;
-        
+
         if ty.kind != BtfKind::Struct && ty.kind != BtfKind::Union {
             return None;
         }
 
-        ty.members.iter()
+        ty.members
+            .iter()
             .enumerate()
             .find(|(_, m)| m.name.as_deref() == Some(field_name))
     }
@@ -374,10 +340,7 @@ impl<'a> CoreReloContext<'a> {
                                 success: false,
                                 new_val: 0,
                                 exists: false,
-                                error: Some(format!(
-                                    "field '{}' not found in target",
-                                    field_name
-                                )),
+                                error: Some(format!("field '{}' not found in target", field_name)),
                             });
                         }
                     }
@@ -386,9 +349,7 @@ impl<'a> CoreReloContext<'a> {
                     let ty = self.target_btf.resolve_type(current_type);
                     if let Some(ty) = ty {
                         if let Some(ref arr) = ty.array_info {
-                            let elem_size = self.target_btf
-                                .type_size(arr.elem_type)
-                                .unwrap_or(0);
+                            let elem_size = self.target_btf.type_size(arr.elem_type).unwrap_or(0);
                             bit_offset += (*index as u64) * (elem_size as u64) * 8;
                             current_type = arr.elem_type;
                         }
@@ -554,7 +515,10 @@ impl<'a> CoreReloContext<'a> {
         let mut current_type = target_id;
 
         for component in &local_spec.access {
-            if let CoreAccessComponent::Field { name: Some(name), .. } = component {
+            if let CoreAccessComponent::Field {
+                name: Some(name), ..
+            } = component
+            {
                 if let Some((_, member)) = self.find_target_field(current_type, name) {
                     current_type = member.type_id;
                 }
@@ -577,7 +541,7 @@ impl<'a> CoreReloContext<'a> {
     }
 
     /// Relocate: field left shift (for bitfields)
-    /// 
+    ///
     /// For bitfields, calculates how many bits to left-shift to align the field
     /// to the MSB of the containing load size.
     fn relo_field_lshift(
@@ -599,7 +563,7 @@ impl<'a> CoreReloContext<'a> {
 
         // Get bitfield info from target
         let bitfield_info = self.get_target_bitfield_info(local_spec, target_id)?;
-        
+
         match bitfield_info {
             Some((bit_offset, bit_size, load_size)) => {
                 // Calculate left shift to align bitfield to MSB
@@ -607,7 +571,7 @@ impl<'a> CoreReloContext<'a> {
                 let load_bits = load_size * 8;
                 let bit_off_in_load = bit_offset % load_bits;
                 let lshift = load_bits - bit_off_in_load - bit_size;
-                
+
                 Ok(CoreReloResult {
                     success: true,
                     new_val: lshift,
@@ -628,7 +592,7 @@ impl<'a> CoreReloContext<'a> {
     }
 
     /// Relocate: field right shift (for bitfields)
-    /// 
+    ///
     /// For bitfields, calculates how many bits to right-shift after left-shifting
     /// to extract the field value.
     fn relo_field_rshift(
@@ -650,13 +614,13 @@ impl<'a> CoreReloContext<'a> {
 
         // Get bitfield info from target
         let bitfield_info = self.get_target_bitfield_info(local_spec, target_id)?;
-        
+
         match bitfield_info {
             Some((_, bit_size, load_size)) => {
                 // Right shift = load_size * 8 - bit_size (to bring value to LSB)
                 let load_bits = load_size * 8;
                 let rshift = load_bits - bit_size;
-                
+
                 Ok(CoreReloResult {
                     success: true,
                     new_val: rshift,
@@ -677,7 +641,7 @@ impl<'a> CoreReloContext<'a> {
     }
 
     /// Get bitfield information for a field in the target BTF
-    /// 
+    ///
     /// Returns (bit_offset, bit_size, load_size) if the field is a bitfield,
     /// None otherwise.
     fn get_target_bitfield_info(
@@ -710,9 +674,7 @@ impl<'a> CoreReloContext<'a> {
                     let ty = self.target_btf.resolve_type(current_type);
                     if let Some(ty) = ty {
                         if let Some(ref arr) = ty.array_info {
-                            let elem_size = self.target_btf
-                                .type_size(arr.elem_type)
-                                .unwrap_or(0);
+                            let elem_size = self.target_btf.type_size(arr.elem_type).unwrap_or(0);
                             total_bit_offset += (*index as u64) * (elem_size as u64) * 8;
                             current_type = arr.elem_type;
                         }
@@ -729,7 +691,7 @@ impl<'a> CoreReloContext<'a> {
                     if let Some(ref enc) = ty.int_encoding {
                         let bit_size = enc.bits as u64;
                         let type_size = ty.size as u64;
-                        
+
                         // It's a bitfield if the bit size is less than type size * 8
                         // or if there's a bit offset within the type
                         if bit_size < type_size * 8 || enc.offset > 0 {
@@ -895,7 +857,9 @@ impl<'a> CoreReloContext<'a> {
         };
 
         // Get the enum value index from access spec
-        let value_idx = local_spec.access.first()
+        let value_idx = local_spec
+            .access
+            .first()
             .and_then(|c| match c {
                 CoreAccessComponent::Field { index, .. } => Some(*index as usize),
                 _ => None,
@@ -952,7 +916,9 @@ impl<'a> CoreReloContext<'a> {
         };
 
         // Get the enum value index
-        let value_idx = local_spec.access.first()
+        let value_idx = local_spec
+            .access
+            .first()
             .and_then(|c| match c {
                 CoreAccessComponent::Field { index, .. } => Some(*index as usize),
                 _ => None,
@@ -1020,10 +986,7 @@ pub fn apply_core_relos(
         } else {
             stats.failed += 1;
             if let Some(ref err) = result.error {
-                stats.errors.push(format!(
-                    "insn {}: {}",
-                    insn_idx, err
-                ));
+                stats.errors.push(format!("insn {}: {}", insn_idx, err));
             }
         }
     }

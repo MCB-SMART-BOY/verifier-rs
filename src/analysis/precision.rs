@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0
+
 //!
 
 //! This module implements precision tracking for scalar registers.
@@ -46,14 +48,12 @@
 
 //! 4. Continue until we reach the beginning or run out of history
 
-
-
 use alloc::{vec, vec::Vec};
 
-use crate::state::verifier_state::BpfVerifierState;
-use crate::state::reg_state::BpfRegState;
-use crate::core::types::*;
 use crate::core::error::{Result, VerifierError};
+use crate::core::types::*;
+use crate::state::reg_state::BpfRegState;
+use crate::state::verifier_state::BpfVerifierState;
 
 /// Backtrack state for precision propagation
 #[derive(Debug, Clone, Default)]
@@ -125,8 +125,7 @@ impl BacktrackState {
 
     /// Check if completely empty across all frames
     pub fn is_all_empty(&self) -> bool {
-        self.reg_masks.iter().all(|&m| m == 0) && 
-        self.stack_masks.iter().all(|&m| m == 0)
+        self.reg_masks.iter().all(|&m| m == 0) && self.stack_masks.iter().all(|&m| m == 0)
     }
 
     /// Get current frame's register mask
@@ -161,7 +160,7 @@ pub fn backtrack_insn(
             // but if loading from stack, the stack slot needs precision
             if bt.is_reg_set(bt.frame, dst_reg) {
                 bt.clear_reg(bt.frame, dst_reg);
-                
+
                 // If source is stack pointer (R10 + offset), mark stack slot
                 if src_reg == BPF_REG_FP {
                     let off = insn.off as i32;
@@ -190,14 +189,14 @@ pub fn backtrack_insn(
         BPF_JMP | BPF_JMP32 => {
             let op = insn.code & 0xf0;
             let src_type = insn.code & 0x08;
-            
+
             match op {
                 BPF_CALL => {
                     // Function call: return value in R0
                     if bt.is_reg_set(bt.frame, BPF_REG_0) {
                         bt.clear_reg(bt.frame, BPF_REG_0);
                     }
-                    
+
                     // For subprogram calls, handle frame transitions
                     if insn.is_pseudo_call() {
                         // Static subprog call - propagate R1-R5 to caller frame
@@ -218,7 +217,7 @@ pub fn backtrack_insn(
                     // If we're in a subprog, propagate R0 precision to parent
                     let r0_precise = bt.is_reg_set(bt.frame, BPF_REG_0);
                     bt.clear_reg(bt.frame, BPF_REG_0);
-                    
+
                     // Enter caller frame
                     if bt.frame < MAX_BPF_STACK_FRAMES - 1 {
                         bt.frame += 1;
@@ -248,11 +247,10 @@ pub fn backtrack_insn(
         }
         BPF_LD => {
             // LD_IMM64 loads immediate to dst
-            if insn.code == (BPF_LD | BPF_IMM | 0x18)
-                && bt.is_reg_set(bt.frame, dst_reg) {
-                    // Immediate value - no source to track
-                    bt.clear_reg(bt.frame, dst_reg);
-                }
+            if insn.code == (BPF_LD | BPF_IMM | 0x18) && bt.is_reg_set(bt.frame, dst_reg) {
+                // Immediate value - no source to track
+                bt.clear_reg(bt.frame, dst_reg);
+            }
         }
         _ => {}
     }
@@ -285,8 +283,7 @@ fn backtrack_alu(
             }
             // If immediate, precision is satisfied
         }
-        BPF_ADD | BPF_SUB | BPF_MUL | BPF_DIV | BPF_MOD |
-        BPF_OR | BPF_AND | BPF_XOR => {
+        BPF_ADD | BPF_SUB | BPF_MUL | BPF_DIV | BPF_MOD | BPF_OR | BPF_AND | BPF_XOR => {
             // Binary ops: both operands contribute to result
             // Keep dst in precision set (it's used as input)
             if src_type == BPF_X {
@@ -323,7 +320,7 @@ pub fn mark_all_scalars_precise(state: &mut BpfVerifierState) {
                     reg.precise = true;
                 }
             }
-            
+
             // Mark all spilled scalars as precise
             for slot in &mut func.stack.stack {
                 if slot.is_spilled_scalar_reg() {
@@ -335,12 +332,12 @@ pub fn mark_all_scalars_precise(state: &mut BpfVerifierState) {
 }
 
 /// Mark all scalars as imprecise
-/// 
+///
 /// This is called when caching a state to enable more aggressive pruning.
 /// By forgetting precision, we create more generic states that can prune
 /// more future states. If any child path requires precision, it will be
 /// propagated back retroactively.
-/// 
+///
 /// This implements the kernel's `mark_all_scalars_imprecise()` function.
 pub fn mark_all_scalars_imprecise(state: &mut BpfVerifierState) {
     for frame_idx in 0..=state.curframe {
@@ -351,7 +348,7 @@ pub fn mark_all_scalars_imprecise(state: &mut BpfVerifierState) {
                     reg.precise = false;
                 }
             }
-            
+
             // Mark all spilled scalars as imprecise
             for slot in &mut func.stack.stack {
                 if slot.is_spilled_scalar_reg() {
@@ -363,21 +360,18 @@ pub fn mark_all_scalars_imprecise(state: &mut BpfVerifierState) {
 }
 
 /// Widen imprecise scalars between old and current state
-/// 
+///
 /// When revisiting a loop or callback, we widen imprecise scalars to
 /// help convergence. If a scalar changed between iterations but isn't
 /// marked as precise, we reset it to unknown to ensure the loop
 /// eventually terminates.
-/// 
+///
 /// This implements the kernel's `widen_imprecise_scalars()` function.
-pub fn widen_imprecise_scalars(
-    old: &BpfVerifierState,
-    cur: &mut BpfVerifierState,
-) -> Result<()> {
+pub fn widen_imprecise_scalars(old: &BpfVerifierState, cur: &mut BpfVerifierState) -> Result<()> {
     use crate::state::idmap::IdMap;
-    
+
     let mut idmap = IdMap::new();
-    
+
     for frame_idx in (0..=old.curframe.min(cur.curframe)).rev() {
         let old_func = match old.frame.get(frame_idx).and_then(|f| f.as_ref()) {
             Some(f) => f,
@@ -387,25 +381,29 @@ pub fn widen_imprecise_scalars(
             Some(f) => f,
             None => continue,
         };
-        
+
         // Widen registers
         for i in 0..MAX_BPF_REG {
             widen_imprecise_scalar(&old_func.regs[i], &mut cur_func.regs[i], &mut idmap);
         }
-        
+
         // Widen spilled slots
         let num_slots = old_func.stack.stack.len().min(cur_func.stack.stack.len());
         for spi in 0..num_slots {
             let old_slot = &old_func.stack.stack[spi];
             let cur_slot = &mut cur_func.stack.stack[spi];
-            
+
             // Only widen spilled scalars
             if old_slot.is_spilled_scalar_reg() && cur_slot.is_spilled_scalar_reg() {
-                widen_imprecise_scalar(&old_slot.spilled_ptr, &mut cur_slot.spilled_ptr, &mut idmap);
+                widen_imprecise_scalar(
+                    &old_slot.spilled_ptr,
+                    &mut cur_slot.spilled_ptr,
+                    &mut idmap,
+                );
             }
         }
     }
-    
+
     Ok(())
 }
 
@@ -422,17 +420,17 @@ fn widen_imprecise_scalar(
     if cur.reg_type != BpfRegType::ScalarValue {
         return;
     }
-    
+
     // If either is precise, or they're exactly equal, don't widen
     if old.precise || cur.precise {
         return;
     }
-    
+
     // Check if registers are equivalent (considering ID remapping)
     if regs_exact_for_widen(old, cur, idmap) {
         return;
     }
-    
+
     // Widen the current register to unknown
     cur.mark_unknown(false);
 }
@@ -453,17 +451,17 @@ fn regs_exact_for_widen(
     if old.var_off != cur.var_off {
         return false;
     }
-    
+
     // Check IDs are compatible
     if !idmap.check_ids(cur.id, old.id) {
         return false;
     }
-    
+
     true
 }
 
 /// Mark chain of registers as precise
-/// 
+///
 /// This is the main entry point for precision tracking. It marks a register
 /// as needing precision and then backtracks through the instruction history
 /// to mark all contributing values as precise.
@@ -476,7 +474,7 @@ pub fn mark_chain_precision(
 }
 
 /// Internal implementation of precision chain marking
-/// 
+///
 /// Returns true if any register was newly marked as precise
 fn __mark_chain_precision(
     state: &mut BpfVerifierState,
@@ -656,10 +654,7 @@ impl<'a> PrecisionBacktracker<'a> {
     }
 
     /// Run backtracking through jump history
-    pub fn backtrack(
-        &mut self,
-        state: &mut BpfVerifierState,
-    ) -> Result<()> {
+    pub fn backtrack(&mut self, state: &mut BpfVerifierState) -> Result<()> {
         // Process jump history in reverse order
         let history = state.jmp_history.clone();
         let history_len = history.len();
@@ -710,9 +705,10 @@ impl<'a> PrecisionBacktracker<'a> {
                 // Mark registers as precise
                 for regno in 0..MAX_BPF_REG {
                     if (reg_mask & (1 << regno)) != 0
-                        && func.regs[regno].reg_type == BpfRegType::ScalarValue {
-                            func.regs[regno].precise = true;
-                        }
+                        && func.regs[regno].reg_type == BpfRegType::ScalarValue
+                    {
+                        func.regs[regno].precise = true;
+                    }
                 }
 
                 // Mark stack slots as precise
@@ -761,10 +757,10 @@ pub fn mark_jmp_precision(
 }
 
 /// Mark precision for registers used in conditional jump with state cache support
-/// 
+///
 /// This enhanced version can propagate precision through parent state chain
 /// using the state cache for complete backtracking.
-/// 
+///
 /// # Arguments
 /// * `state` - Current verifier state  
 /// * `insns` - Program instructions
@@ -838,8 +834,10 @@ pub fn sync_linked_regs(
                 return Ok(());
             }
             Some((
-                reg.umin_value, reg.umax_value,
-                reg.smin_value, reg.smax_value,
+                reg.umin_value,
+                reg.umax_value,
+                reg.smin_value,
+                reg.smax_value,
                 reg.var_off,
             ))
         } else {
@@ -913,7 +911,7 @@ pub fn collect_linked_regs(
 // ============================================================================
 
 /// Full precision propagation through the entire program
-/// 
+///
 /// This implements the complete backtracking algorithm as in the kernel verifier.
 /// It walks backward through the instruction stream, propagating precision
 /// requirements through data dependencies.
@@ -966,13 +964,13 @@ impl<'a> FullPrecisionTracker<'a> {
     /// Run the full backtracking algorithm
     pub fn propagate(&mut self) -> Result<()> {
         let mut iterations = 0;
-        
+
         while let Some(idx) = self.worklist.pop() {
             iterations += 1;
             if iterations > self.max_iterations {
                 // Hit limit - mark all as precise
                 return Err(VerifierError::TooComplex(
-                    "precision tracking exceeded limit".into()
+                    "precision tracking exceeded limit".into(),
                 ));
             }
 
@@ -995,20 +993,20 @@ impl<'a> FullPrecisionTracker<'a> {
         }
 
         let insn = self.insns[idx];
-        
+
         // Backtrack through this instruction
         backtrack_insn(&mut self.insn_states[idx], &insn, idx, 0)?;
 
         // Check if we need to propagate and find predecessors
         let needs_propagate = !self.insn_states[idx].is_all_empty() && idx > 0;
-        
+
         if needs_propagate {
             // Find predecessors first
             let predecessors = self.find_predecessors(idx);
-            
+
             // Clone the current backtrack state for propagation
             let bt_clone = self.insn_states[idx].clone();
-            
+
             for pred_idx in predecessors {
                 // Merge precision requirements using cloned state
                 self.merge_precision_from(pred_idx, &bt_clone);
@@ -1020,13 +1018,13 @@ impl<'a> FullPrecisionTracker<'a> {
 
         Ok(())
     }
-    
+
     /// Merge precision requirements from a source backtrack state
     fn merge_precision_from(&mut self, target_idx: usize, source: &BacktrackState) {
         if target_idx >= self.insn_states.len() {
             return;
         }
-        
+
         let target = &mut self.insn_states[target_idx];
         // Merge all frame masks
         for i in 0..MAX_BPF_STACK_FRAMES {
@@ -1118,7 +1116,8 @@ impl<'a> FullPrecisionTracker<'a> {
                 for r in 0..MAX_BPF_REG {
                     if (reg_mask & (1 << r)) != 0
                         && func.regs[r].reg_type == BpfRegType::ScalarValue
-                        && !func.regs[r].precise {
+                        && !func.regs[r].precise
+                    {
                         func.regs[r].precise = true;
                         changed = true;
                     }
@@ -1204,13 +1203,10 @@ pub fn analyze_precision_requirements(
 }
 
 /// Check if state pruning is safe given precision requirements
-pub fn is_pruning_safe(
-    cur_state: &BpfVerifierState,
-    cached_state: &BpfVerifierState,
-) -> bool {
+pub fn is_pruning_safe(cur_state: &BpfVerifierState, cached_state: &BpfVerifierState) -> bool {
     // For each precise register in the current state, the cached state
     // must have the same value (not just compatible bounds)
-    
+
     for frame in 0..=cur_state.curframe {
         let cur_func = match cur_state.frame.get(frame).and_then(|f| f.as_ref()) {
             Some(f) => f,
@@ -1234,7 +1230,8 @@ pub fn is_pruning_safe(
                 if cur_reg.umin_value != cached_reg.umin_value
                     || cur_reg.umax_value != cached_reg.umax_value
                     || cur_reg.smin_value != cached_reg.smin_value
-                    || cur_reg.smax_value != cached_reg.smax_value {
+                    || cur_reg.smax_value != cached_reg.smax_value
+                {
                     return false;
                 }
             }
@@ -1252,12 +1249,12 @@ pub fn mark_mem_access_precision(
 ) -> Result<()> {
     // The base register and any registers that contributed to its value
     // need to be marked as precise
-    
+
     let mut backtracker = PrecisionBacktracker::new(insns);
     backtracker.bt.frame = state.curframe;
     backtracker.mark_reg_precise(state.curframe, base_reg);
     backtracker.backtrack(state)?;
-    
+
     Ok(())
 }
 
@@ -1273,11 +1270,11 @@ pub fn mark_mem_access_precision(
 use crate::analysis::prune::{StateCache, StateId};
 
 /// Mark chain precision with parent state traversal
-/// 
+///
 /// This is the enhanced version that walks through the parent state chain
 /// stored in StateCache. It propagates precision marks to parent states
 /// and applies them when states are verified.
-/// 
+///
 /// # Arguments
 /// * `cache` - The state cache containing parent chain information
 /// * `starting_state` - The state where precision is first required
@@ -1285,7 +1282,7 @@ use crate::analysis::prune::{StateCache, StateId};
 /// * `insns` - The program instructions
 /// * `regno` - The register that needs precision (-1 for batch mode with bt)
 /// * `bt` - Optional initial backtrack state for batch mode
-/// 
+///
 /// Returns true if any register was newly marked as precise.
 pub fn mark_chain_precision_with_cache(
     cache: &mut StateCache,
@@ -1298,7 +1295,7 @@ pub fn mark_chain_precision_with_cache(
     let mut changed = false;
     let mut backtrack = BacktrackState::new();
     backtrack.frame = starting_state.curframe;
-    
+
     // Initialize from provided backtrack state or single register
     if let Some(initial_bt) = bt {
         backtrack = initial_bt.clone();
@@ -1313,53 +1310,52 @@ pub fn mark_chain_precision_with_cache(
             }
         }
     }
-    
+
     if backtrack.is_all_empty() {
         return Ok(false);
     }
-    
+
     // First, process the starting state's jump history
     let first_idx = starting_state.first_insn_idx;
     let mut _last_idx = starting_state.last_insn_idx;
     let mut subseq_idx: i32 = -1;
     let mut skip_first = true;
-    
+
     // Process jump history in starting state
     let history = starting_state.jmp_history.clone();
     for i in (0..history.len()).rev() {
         let entry = &history[i];
         let insn_idx = entry.idx as usize;
-        
+
         if skip_first {
             skip_first = false;
             subseq_idx = insn_idx as i32;
             continue;
         }
-        
+
         if insn_idx < insns.len() {
             let insn = &insns[insn_idx];
             backtrack_insn(&mut backtrack, insn, insn_idx, subseq_idx as usize)?;
         }
-        
+
         subseq_idx = insn_idx as i32;
-        
+
         if backtrack.is_all_empty() {
             return Ok(changed);
         }
     }
-    
+
     // Apply precision to starting state
     changed |= apply_precision_to_state(starting_state, &mut backtrack)?;
-    
+
     if backtrack.is_all_empty() {
         return Ok(changed);
     }
-    
+
     // Walk parent chain if we have cache access
-    let mut current_parent_id = starting_id.and_then(|id| {
-        cache.get_by_id(id).and_then(|c| c.parent_id)
-    });
-    
+    let mut current_parent_id =
+        starting_id.and_then(|id| cache.get_by_id(id).and_then(|c| c.parent_id));
+
     while let Some(parent_id) = current_parent_id {
         // Get parent state from cache
         let (parent_state, next_parent) = match cache.get_by_id_mut(parent_id) {
@@ -1369,65 +1365,62 @@ pub fn mark_chain_precision_with_cache(
             }
             None => break,
         };
-        
+
         // Process parent's jump history
         let parent_history = parent_state.jmp_history.clone();
         _last_idx = parent_state.last_insn_idx;
         subseq_idx = first_idx as i32;
-        
+
         for i in (0..parent_history.len()).rev() {
             let entry = &parent_history[i];
             let insn_idx = entry.idx as usize;
-            
+
             if insn_idx < insns.len() {
                 let insn = &insns[insn_idx];
                 backtrack_insn(&mut backtrack, insn, insn_idx, subseq_idx as usize)?;
             }
-            
+
             subseq_idx = insn_idx as i32;
-            
+
             if backtrack.is_all_empty() {
                 break;
             }
         }
-        
+
         // Apply precision to parent state
         changed |= apply_precision_to_state(parent_state, &mut backtrack)?;
-        
+
         if backtrack.is_all_empty() {
             break;
         }
-        
+
         current_parent_id = next_parent;
         // _last_idx preserved for future use in precision tracking
     }
-    
+
     // If we still have pending precision requests, fall back to marking all
     if !backtrack.is_all_empty() {
         mark_all_scalars_precise(starting_state);
         changed = true;
     }
-    
+
     Ok(changed)
 }
 
 /// Apply precision marks from backtrack state to a verifier state
-/// 
+///
 /// Returns true if any changes were made.
-fn apply_precision_to_state(
-    state: &mut BpfVerifierState,
-    bt: &mut BacktrackState,
-) -> Result<bool> {
+fn apply_precision_to_state(state: &mut BpfVerifierState, bt: &mut BacktrackState) -> Result<bool> {
     let mut changed = false;
-    
+
     for fr in 0..=state.curframe {
         let reg_mask = bt.reg_masks[fr];
         let stack_mask = bt.stack_masks[fr];
-        
+
         if reg_mask == 0 && stack_mask == 0 {
             continue;
         }
-        
+
         if let Some(func) = state.frame.get_mut(fr).and_then(|f| f.as_mut()) {
             // Mark registers as precise
             for r in 0..MAX_BPF_REG {
@@ -1446,7 +1439,7 @@ fn apply_precision_to_state(
                     }
                 }
             }
-            
+
             // Mark stack slots as precise
             for spi in 0..64usize {
                 if (stack_mask & (1 << spi)) != 0 {
@@ -1468,23 +1461,19 @@ fn apply_precision_to_state(
             }
         }
     }
-    
+
     Ok(changed)
 }
 
 /// Sync linked registers in backtrack state based on jump history entry
-/// 
+///
 /// When a conditional jump refines bounds on a register, other registers
 /// with the same ID should also be tracked for precision.
-pub fn bt_sync_linked_regs(
-    bt: &mut BacktrackState,
-    state: &BpfVerifierState,
-    linked_regs: u64,
-) {
+pub fn bt_sync_linked_regs(bt: &mut BacktrackState, state: &BpfVerifierState, linked_regs: u64) {
     if linked_regs == 0 {
         return;
     }
-    
+
     // For each bit set in linked_regs, mark that register in backtrack state
     for r in 0..MAX_BPF_REG {
         if (linked_regs & (1 << r)) != 0 {

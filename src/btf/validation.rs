@@ -1,12 +1,16 @@
+// SPDX-License-Identifier: GPL-2.0
+
 //! BTF-based type validation.
 //!
 //! This module provides type-aware verification using BPF Type Format (BTF)
 //! information. BTF enables the verifier to understand struct layouts,
 //! function signatures, and type relationships for more precise validation.
 
-
-use alloc::{format, string::{String, ToString}, vec::Vec};
-
+use alloc::{
+    format,
+    string::{String, ToString},
+    vec::Vec,
+};
 
 use alloc::collections::{BTreeMap as HashMap, BTreeSet as HashSet};
 
@@ -395,10 +399,7 @@ impl BtfTypes {
         let id = self.types.len() as u32;
         if let Some(name) = ty.name() {
             if !name.is_empty() {
-                self.name_map
-                    .entry(name.to_string())
-                    .or_default()
-                    .push(id);
+                self.name_map.entry(name.to_string()).or_default().push(id);
             }
         }
         self.types.push(ty);
@@ -659,9 +660,7 @@ impl BtfValidator {
                     is_bitfield: false,
                 })
             }
-            BtfType::Int {
-                size: int_size, ..
-            } => {
+            BtfType::Int { size: int_size, .. } => {
                 if offset + size > *int_size {
                     return Err(VerifierError::InvalidMemoryAccess(format!(
                         "integer access at offset {} size {} exceeds int size {}",
@@ -694,11 +693,7 @@ impl BtfValidator {
     }
 
     /// Validate function call argument types.
-    pub fn validate_func_args(
-        &self,
-        func_id: u32,
-        arg_types: &[u32],
-    ) -> Result<()> {
+    pub fn validate_func_args(&self, func_id: u32, arg_types: &[u32]) -> Result<()> {
         let proto = match self.types.func_proto(func_id) {
             Some(BtfType::FuncProto { params, .. }) => params,
             _ => return Ok(()), // No prototype info, allow
@@ -805,9 +800,7 @@ impl BtfValidator {
     /// Get the expected argument types for a function.
     pub fn get_func_arg_types(&self, func_id: u32) -> Vec<u32> {
         match self.types.func_proto(func_id) {
-            Some(BtfType::FuncProto { params, .. }) => {
-                params.iter().map(|p| p.type_id).collect()
-            }
+            Some(BtfType::FuncProto { params, .. }) => params.iter().map(|p| p.type_id).collect(),
             _ => Vec::new(),
         }
     }

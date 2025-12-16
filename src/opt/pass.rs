@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0
+
 //! Unified optimization pass framework.
 //!
 //! This module provides a common infrastructure for optimization passes:
@@ -8,13 +10,12 @@
 
 #![allow(missing_docs)]
 
-
 use alloc::{boxed::Box, string::String, vec, vec::Vec};
 
 use core::fmt::Debug;
 
-use crate::core::types::*;
 use crate::core::error::{Result, VerifierError};
+use crate::core::types::*;
 
 // ============================================================================
 // Pass Statistics
@@ -365,13 +366,16 @@ impl OptPass for SpectreMitigationPass {
             let op = insn.code & 0xf0;
 
             // Check for conditional branch followed by memory access
-            let is_cond_jmp = (class == BPF_JMP || class == BPF_JMP32) 
-                && op != BPF_JA && op != BPF_EXIT && op != BPF_CALL;
+            let is_cond_jmp = (class == BPF_JMP || class == BPF_JMP32)
+                && op != BPF_JA
+                && op != BPF_EXIT
+                && op != BPF_CALL;
 
             if is_cond_jmp && i + 2 < ctx.insns.len() {
                 let next = &ctx.insns[i + 1];
                 let next_class = next.class();
-                let is_mem_access = next_class == BPF_LDX || next_class == BPF_STX || next_class == BPF_ST;
+                let is_mem_access =
+                    next_class == BPF_LDX || next_class == BPF_STX || next_class == BPF_ST;
 
                 if is_mem_access {
                     // Check if the memory access uses a register that was
@@ -440,13 +444,8 @@ impl OptPass for ZeroExtendPass {
             // Check for ALU32 operations that need zero extension
             if insn.class() == BPF_ALU && self.needs_zext(insn) {
                 // Insert MOV32 reg, reg to zero-extend upper 32 bits
-                let zext = BpfInsn::new(
-                    BPF_ALU | BPF_MOV | BPF_X,
-                    insn.dst_reg,
-                    insn.dst_reg,
-                    0,
-                    0,
-                );
+                let zext =
+                    BpfInsn::new(BPF_ALU | BPF_MOV | BPF_X, insn.dst_reg, insn.dst_reg, 0, 0);
                 ctx.insns.insert(i + 1, zext);
                 extensions_inserted += 1;
                 i += 1; // Skip inserted instruction
@@ -467,8 +466,20 @@ impl ZeroExtendPass {
     fn needs_zext(&self, insn: &BpfInsn) -> bool {
         // ALU32 operations that produce values needing zero extension
         let op = insn.code & 0xf0;
-        matches!(op, BPF_ADD | BPF_SUB | BPF_MUL | BPF_DIV | BPF_MOD |
-                     BPF_AND | BPF_OR | BPF_XOR | BPF_LSH | BPF_RSH | BPF_ARSH)
+        matches!(
+            op,
+            BPF_ADD
+                | BPF_SUB
+                | BPF_MUL
+                | BPF_DIV
+                | BPF_MOD
+                | BPF_AND
+                | BPF_OR
+                | BPF_XOR
+                | BPF_LSH
+                | BPF_RSH
+                | BPF_ARSH
+        )
     }
 }
 
@@ -657,7 +668,7 @@ impl PassManager {
 
         if order.len() != n {
             return Err(VerifierError::TooComplex(
-                "Circular dependency in optimization passes".into()
+                "Circular dependency in optimization passes".into(),
             ));
         }
 

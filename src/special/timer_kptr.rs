@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0
+
 //! Timer and Kptr special field validation
 //!
 //! This module implements verification for bpf_timer and bpf_kptr special fields
@@ -16,13 +18,12 @@
 //! - Kptr type must match the BTF type declared in the map
 //! - RCU-safe kptrs can be read under RCU protection
 
-
 use alloc::format;
 
-use crate::core::types::*;
 use crate::core::error::{Result, VerifierError};
-use crate::state::reg_state::BpfRegState;
+use crate::core::types::*;
 use crate::state::reference::ReferenceManager;
+use crate::state::reg_state::BpfRegState;
 
 /// Size of bpf_timer struct in bytes
 pub const BPF_TIMER_SIZE: u32 = 16;
@@ -46,7 +47,7 @@ impl KptrType {
     pub fn requires_refcount(&self) -> bool {
         matches!(self, KptrType::Ref | KptrType::Percpu)
     }
-    
+
     /// Check if untrusted pointers are allowed
     pub fn allows_untrusted(&self) -> bool {
         matches!(self, KptrType::Unref)
@@ -91,19 +92,19 @@ impl SpecialFieldType {
             SpecialFieldType::Workqueue => 16,
         }
     }
-    
+
     /// Check if direct BPF access is forbidden
     pub fn forbids_direct_access(&self) -> bool {
         match self {
-            SpecialFieldType::Timer |
-            SpecialFieldType::SpinLock |
-            SpecialFieldType::Kptr(_) |
-            SpecialFieldType::ListHead |
-            SpecialFieldType::ListNode |
-            SpecialFieldType::RbRoot |
-            SpecialFieldType::RbNode |
-            SpecialFieldType::Refcount |
-            SpecialFieldType::Workqueue => true,
+            SpecialFieldType::Timer
+            | SpecialFieldType::SpinLock
+            | SpecialFieldType::Kptr(_)
+            | SpecialFieldType::ListHead
+            | SpecialFieldType::ListNode
+            | SpecialFieldType::RbRoot
+            | SpecialFieldType::RbNode
+            | SpecialFieldType::Refcount
+            | SpecialFieldType::Workqueue => true,
         }
     }
 }
@@ -145,17 +146,17 @@ impl TimerState {
             callback_insn: None,
         }
     }
-    
+
     /// Mark timer as initialized
     pub fn init(&mut self) {
         self.initialized = true;
     }
-    
+
     /// Set callback for timer
     pub fn set_callback(&mut self, insn_idx: usize) -> Result<()> {
         if !self.initialized {
             return Err(VerifierError::InvalidState(
-                "cannot set callback on uninitialized timer".into()
+                "cannot set callback on uninitialized timer".into(),
             ));
         }
         self.callback_set = true;
@@ -190,10 +191,7 @@ impl KptrState {
 }
 
 /// Validate timer pointer argument for timer helpers
-pub fn check_timer_arg(
-    reg: &BpfRegState,
-    regno: u8,
-) -> Result<(u32, u32)> {
+pub fn check_timer_arg(reg: &BpfRegState, regno: u8) -> Result<(u32, u32)> {
     // Must be PTR_TO_MAP_VALUE
     if reg.reg_type != BpfRegType::PtrToMapValue {
         return Err(VerifierError::TypeMismatch {
@@ -201,10 +199,10 @@ pub fn check_timer_arg(
             got: format!("{:?}", reg.reg_type),
         });
     }
-    
+
     // Check offset is valid for timer access
     let timer_off = reg.off as u32;
-    
+
     // Timer should be 8-byte aligned
     if timer_off % 8 != 0 {
         return Err(VerifierError::InvalidPointer(format!(
@@ -212,15 +210,12 @@ pub fn check_timer_arg(
             regno, timer_off
         )));
     }
-    
+
     Ok((reg.map_uid, timer_off))
 }
 
 /// Validate map argument for bpf_timer_init
-pub fn check_timer_init_map_arg(
-    timer_reg: &BpfRegState,
-    map_reg: &BpfRegState,
-) -> Result<()> {
+pub fn check_timer_init_map_arg(timer_reg: &BpfRegState, map_reg: &BpfRegState) -> Result<()> {
     // Map register must be PTR_TO_MAP
     if !matches!(map_reg.reg_type, BpfRegType::ConstPtrToMap) {
         return Err(VerifierError::TypeMismatch {
@@ -228,7 +223,7 @@ pub fn check_timer_init_map_arg(
             got: format!("{:?}", map_reg.reg_type),
         });
     }
-    
+
     // Map UIDs should match (timer must be in the provided map)
     // This prevents:
     //   timer = bpf_map_lookup_elem(inner_map1);
@@ -241,7 +236,7 @@ pub fn check_timer_init_map_arg(
             )));
         }
     }
-    
+
     Ok(())
 }
 
@@ -266,18 +261,19 @@ pub fn check_kptr_access(
                 });
             }
         }
-        
+
         // Check type flags based on kptr type
-        let mut allowed_flags = BpfTypeFlag::PTR_MAYBE_NULL | BpfTypeFlag::PTR_TRUSTED | BpfTypeFlag::MEM_RCU;
-        
+        let mut allowed_flags =
+            BpfTypeFlag::PTR_MAYBE_NULL | BpfTypeFlag::PTR_TRUSTED | BpfTypeFlag::MEM_RCU;
+
         if kptr_type == KptrType::Unref {
             allowed_flags.insert(BpfTypeFlag::PTR_UNTRUSTED);
         }
-        
+
         if kptr_type == KptrType::Percpu {
             allowed_flags.insert(BpfTypeFlag::MEM_PERCPU);
         }
-        
+
         // Check for disallowed flags
         let disallowed = reg.type_flags.difference(allowed_flags);
         if !disallowed.is_empty() {
@@ -286,7 +282,7 @@ pub fn check_kptr_access(
                 got: format!("pointer with flags {:?}", reg.type_flags),
             });
         }
-        
+
         // Check BTF type matches (if available)
         if let Some(btf_info) = &reg.btf_info {
             if target_btf_id != 0 && btf_info.btf_id != target_btf_id {
@@ -306,21 +302,17 @@ pub fn check_kptr_access(
             // or they return an RCU-protected pointer
         }
     }
-    
+
     Ok(())
 }
 
 /// Determine the result type of a kptr load
-pub fn kptr_load_type(
-    kptr_type: KptrType,
-    in_rcu: bool,
-    is_rcu_protected: bool,
-) -> BpfTypeFlag {
+pub fn kptr_load_type(kptr_type: KptrType, in_rcu: bool, is_rcu_protected: bool) -> BpfTypeFlag {
     let mut flags = BpfTypeFlag::PTR_MAYBE_NULL;
-    
+
     if is_rcu_protected && in_rcu {
         flags.insert(BpfTypeFlag::MEM_RCU);
-        
+
         if kptr_type == KptrType::Percpu {
             flags.insert(BpfTypeFlag::MEM_PERCPU);
         } else {
@@ -328,30 +320,27 @@ pub fn kptr_load_type(
             flags.insert(BpfTypeFlag::MEM_ALLOC);
         }
     }
-    
+
     flags
 }
 
 /// Check if timer access is allowed in current context
-pub fn check_timer_context(
-    refs: &ReferenceManager,
-    is_preempt_rt: bool,
-) -> Result<()> {
+pub fn check_timer_context(refs: &ReferenceManager, is_preempt_rt: bool) -> Result<()> {
     // Timer cannot be used in PREEMPT_RT
     if is_preempt_rt {
         return Err(VerifierError::InvalidState(
-            "bpf_timer cannot be used for PREEMPT_RT".into()
+            "bpf_timer cannot be used for PREEMPT_RT".into(),
         ));
     }
-    
+
     // Timer operations should not be called while holding locks
     // (to avoid potential deadlocks)
     if refs.active_locks > 0 {
         return Err(VerifierError::InvalidState(
-            "bpf_timer operations cannot be called while holding spin lock".into()
+            "bpf_timer operations cannot be called while holding spin lock".into(),
         ));
     }
-    
+
     Ok(())
 }
 
@@ -362,10 +351,10 @@ pub fn check_special_field_overlap(
     fields: &[SpecialFieldInfo],
 ) -> Result<()> {
     let access_end = offset as u32 + size;
-    
+
     for field in fields {
         let field_end = field.offset + field.field_type.size();
-        
+
         // Check for overlap
         if (offset as u32) < field_end && field.offset < access_end {
             let field_name = match field.field_type {
@@ -379,22 +368,19 @@ pub fn check_special_field_overlap(
                 SpecialFieldType::Refcount => "refcount",
                 SpecialFieldType::Workqueue => "workqueue",
             };
-            
+
             return Err(VerifierError::InvalidMapAccess(format!(
                 "access at offset {} size {} overlaps with {} field at offset {}",
                 offset, size, field_name, field.offset
             )));
         }
     }
-    
+
     Ok(())
 }
 
 /// Check callback registration for timer
-pub fn check_timer_callback_registration(
-    timer_map_uid: u32,
-    callback_map_uid: u32,
-) -> Result<()> {
+pub fn check_timer_callback_registration(timer_map_uid: u32, callback_map_uid: u32) -> Result<()> {
     // The callback's context (map) must match the timer's map
     if timer_map_uid != 0 && callback_map_uid != 0 {
         if timer_map_uid != callback_map_uid {
@@ -423,23 +409,23 @@ pub fn check_kptr_xchg(
             got: format!("{:?}", dst_reg.reg_type),
         });
     }
-    
+
     // Validate source pointer
     check_kptr_access(src_reg, kptr_type, target_btf_id, true, refs.in_rcu())?;
-    
+
     // If source has a reference, it's being transferred to the kptr
     if src_reg.ref_obj_id != 0 && kptr_type.requires_refcount() {
         // Release the source reference (it's now owned by the kptr)
         refs.release_ptr(src_reg.ref_obj_id)?;
     }
-    
+
     // The old value is returned - acquire a reference for it
     let ret_ref_id = if kptr_type.requires_refcount() {
         refs.acquire_ptr(insn_idx)
     } else {
         0
     };
-    
+
     Ok(ret_ref_id)
 }
 
@@ -490,24 +476,25 @@ pub fn process_wq_func(
     // Verify the register points to a map value
     if reg.reg_type != BpfRegType::PtrToMapValue {
         return Err(VerifierError::InvalidKfunc(
-            "workqueue arg must be pointer to map value".into()
+            "workqueue arg must be pointer to map value".into(),
         ));
     }
-    
+
     // Check offset is valid for workqueue field
     let off = reg.off;
     if off < 0 {
-        return Err(VerifierError::InvalidKfunc(
-            format!("invalid workqueue offset {}", off)
-        ));
+        return Err(VerifierError::InvalidKfunc(format!(
+            "invalid workqueue offset {}",
+            off
+        )));
     }
-    
+
     // Different handling based on kfunc type
     // These are placeholder BTF IDs - real implementation would use actual IDs
     const BPF_WQ_INIT: u32 = 1001;
     const BPF_WQ_SET_CALLBACK: u32 = 1002;
     const BPF_WQ_START: u32 = 1003;
-    
+
     match kfunc_id {
         BPF_WQ_INIT => {
             // Initialize workqueue - creates new workqueue info
@@ -547,31 +534,30 @@ pub fn process_task_work_func(
     // Verify the register points to a map value
     if reg.reg_type != BpfRegType::PtrToMapValue {
         return Err(VerifierError::InvalidKfunc(
-            "task_work arg must be pointer to map value".into()
+            "task_work arg must be pointer to map value".into(),
         ));
     }
-    
+
     // Check offset
     let off = reg.off;
     if off < 0 {
-        return Err(VerifierError::InvalidKfunc(
-            format!("invalid task_work offset {}", off)
-        ));
+        return Err(VerifierError::InvalidKfunc(format!(
+            "invalid task_work offset {}",
+            off
+        )));
     }
-    
+
     // Placeholder BTF IDs
     const BPF_TASK_WORK_INIT: u32 = 2001;
     const BPF_TASK_WORK_SCHEDULE: u32 = 2002;
-    
+
     match kfunc_id {
-        BPF_TASK_WORK_INIT => {
-            Ok(Some(TaskWorkInfo {
-                map_uid,
-                btf_id: 0,
-                offset: off as u32,
-                scheduled: false,
-            }))
-        }
+        BPF_TASK_WORK_INIT => Ok(Some(TaskWorkInfo {
+            map_uid,
+            btf_id: 0,
+            offset: off as u32,
+            scheduled: false,
+        })),
         BPF_TASK_WORK_SCHEDULE => {
             // Schedule the task_work
             Ok(Some(TaskWorkInfo {
@@ -602,18 +588,19 @@ pub fn validate_wq_callback(
             // Allowed
         }
         _ => {
-            return Err(VerifierError::InvalidKfunc(
-                format!("workqueue not allowed in {:?} programs", prog_type)
-            ));
+            return Err(VerifierError::InvalidKfunc(format!(
+                "workqueue not allowed in {:?} programs",
+                prog_type
+            )));
         }
     }
-    
+
     if !wq_info.initialized {
         return Err(VerifierError::InvalidKfunc(
-            "workqueue must be initialized before setting callback".into()
+            "workqueue must be initialized before setting callback".into(),
         ));
     }
-    
+
     Ok(())
 }
 
@@ -629,11 +616,12 @@ pub fn validate_task_work_callback(
             // Allowed
         }
         _ => {
-            return Err(VerifierError::InvalidKfunc(
-                format!("task_work not allowed in {:?} programs", prog_type)
-            ));
+            return Err(VerifierError::InvalidKfunc(format!(
+                "task_work not allowed in {:?} programs",
+                prog_type
+            )));
         }
     }
-    
+
     Ok(())
 }

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0
+
 //! Parallel verification exploration for the BPF verifier.
 //!
 //! This module provides infrastructure for parallel state exploration,
@@ -17,9 +19,8 @@
 //! - Error reporting must be thread-safe
 //! - Memory limits must account for all threads
 
-use crate::state::verifier_state::BpfVerifierState;
 use crate::core::error::VerifierError;
-
+use crate::state::verifier_state::BpfVerifierState;
 
 use alloc::vec::Vec;
 
@@ -48,12 +49,7 @@ pub struct ParallelWorkItem {
 
 impl ParallelWorkItem {
     /// Create a new work item
-    pub fn new(
-        state: BpfVerifierState,
-        insn_idx: usize,
-        prev_insn_idx: usize,
-        id: u64,
-    ) -> Self {
+    pub fn new(state: BpfVerifierState, insn_idx: usize, prev_insn_idx: usize, id: u64) -> Self {
         Self {
             state,
             insn_idx,
@@ -103,7 +99,7 @@ pub enum ExploreResult {
 }
 
 /// Thread-safe work queue for parallel exploration
-/// 
+///
 /// Uses a priority queue to explore more promising paths first.
 /// Work stealing enables load balancing across threads.
 #[derive(Debug)]
@@ -186,16 +182,19 @@ impl WorkQueue {
     }
 
     /// Steal work items for another thread
-    /// 
+    ///
     /// Returns up to `count` items from the low-priority end of the queue.
     pub fn steal(&mut self, count: usize) -> Vec<ParallelWorkItem> {
         let steal_count = count.min(self.items.len() / 2);
         self.items.drain(..steal_count).collect()
     }
 
-    /// Get queue utilization ratio
-    pub fn utilization(&self) -> f64 {
-        self.items.len() as f64 / self.max_size as f64
+    /// Get queue utilization as percentage (0-100)
+    pub fn utilization_percent(&self) -> u32 {
+        if self.max_size == 0 {
+            return 0;
+        }
+        ((self.items.len() * 100) / self.max_size) as u32
     }
 }
 
@@ -384,30 +383,30 @@ impl ParallelStats {
         self.items_stolen += count as u64;
     }
 
-    /// Get branching factor (average branches per branch point)
-    pub fn branching_factor(&self) -> f64 {
+    /// Get branching factor scaled by 100 (average branches per branch point * 100)
+    pub fn branching_factor_scaled(&self) -> u64 {
         if self.items_branched == 0 {
-            0.0
+            0
         } else {
-            self.total_branches as f64 / self.items_branched as f64
+            (self.total_branches * 100) / self.items_branched
         }
     }
 
-    /// Get prune rate
-    pub fn prune_rate(&self) -> f64 {
+    /// Get prune rate as percentage (0-100)
+    pub fn prune_rate_percent(&self) -> u32 {
         if self.items_processed == 0 {
-            0.0
+            0
         } else {
-            self.items_pruned as f64 / self.items_processed as f64
+            ((self.items_pruned * 100) / self.items_processed) as u32
         }
     }
 
-    /// Get completion rate
-    pub fn completion_rate(&self) -> f64 {
+    /// Get completion rate as percentage (0-100)
+    pub fn completion_rate_percent(&self) -> u32 {
         if self.items_processed == 0 {
-            0.0
+            0
         } else {
-            self.items_completed as f64 / self.items_processed as f64
+            ((self.items_completed * 100) / self.items_processed) as u32
         }
     }
 }
@@ -417,7 +416,7 @@ impl ParallelStats {
 // ============================================================================
 
 /// Controller for parallel verification exploration
-/// 
+///
 /// Manages work distribution and result aggregation for parallel verification.
 /// This is the main entry point for parallel exploration.
 #[derive(Debug)]
@@ -480,10 +479,10 @@ impl ParallelExplorer {
                 self.stats.record_branched(new_items.len());
                 for mut new_item in new_items {
                     // Compute priority based on strategy
-                    let priority = self.config.strategy.compute_priority(
-                        &new_item,
-                        self.config.max_depth,
-                    );
+                    let priority = self
+                        .config
+                        .strategy
+                        .compute_priority(&new_item, self.config.max_depth);
                     new_item.priority = priority;
                     self.queue.push(new_item);
                 }
@@ -568,7 +567,7 @@ pub struct MergeResult {
 }
 
 /// Merge results from parallel exploration
-/// 
+///
 /// Combines the results of exploring multiple paths in parallel,
 /// detecting any conflicts or errors.
 pub fn merge_parallel_results(results: Vec<ExploreResult>) -> MergeResult {

@@ -5,15 +5,15 @@
 //! This module implements the overall verification state, including
 //! function frames, register states, and tracking of verification progress.
 
-use alloc::{format, vec::Vec, boxed::Box};
+use alloc::{boxed::Box, format, vec::Vec};
 use core::mem::MaybeUninit;
 
+use crate::core::error::{Result, VerifierError};
+use crate::core::types::*;
+use crate::state::lock_state::LockState;
+use crate::state::reference::ReferenceManager;
 use crate::state::reg_state::BpfRegState;
 use crate::state::stack_state::StackManager;
-use crate::state::reference::ReferenceManager;
-use crate::state::lock_state::LockState;
-use crate::core::types::*;
-use crate::core::error::{Result, VerifierError};
 
 /// State of a single function frame
 #[derive(Debug)]
@@ -52,34 +52,31 @@ impl BpfFuncState {
         state.init_regs();
         state
     }
-    
+
     /// Create a new function state directly on the heap
-    /// 
+    ///
     /// This avoids creating a large temporary on the stack before boxing.
     pub fn new_boxed(callsite: i32, frameno: u32, subprogno: u32) -> Box<Self> {
         let mut uninit: Box<MaybeUninit<Self>> = Box::new_uninit();
         let ptr = uninit.as_mut_ptr();
-        
+
         // SAFETY: We're writing to allocated but uninitialized memory,
         // and we initialize all fields before assuming_init()
         unsafe {
             let regs_ptr = core::ptr::addr_of_mut!((*ptr).regs);
             for i in 0..MAX_BPF_REG {
-                core::ptr::write(
-                    (*regs_ptr).as_mut_ptr().add(i),
-                    BpfRegState::new_not_init()
-                );
+                core::ptr::write((*regs_ptr).as_mut_ptr().add(i), BpfRegState::new_not_init());
             }
-            
+
             core::ptr::write(core::ptr::addr_of_mut!((*ptr).stack), StackManager::new());
             core::ptr::write(core::ptr::addr_of_mut!((*ptr).callsite), callsite);
             core::ptr::write(core::ptr::addr_of_mut!((*ptr).frameno), frameno);
             core::ptr::write(core::ptr::addr_of_mut!((*ptr).subprogno), subprogno);
             core::ptr::write(
                 core::ptr::addr_of_mut!((*ptr).callback_ret_range),
-                BpfRetvalRange::new(0, 0)
+                BpfRetvalRange::new(0, 0),
             );
-            
+
             let mut boxed = uninit.assume_init();
             boxed.init_regs();
             boxed
@@ -91,7 +88,7 @@ impl BpfFuncState {
         for (i, reg) in self.regs.iter_mut().enumerate() {
             reg.mark_not_init(false);
             reg.subreg_def = 0;
-            
+
             if i == BPF_REG_FP {
                 reg.mark_known_zero();
                 reg.reg_type = BpfRegType::PtrToStack;
@@ -120,31 +117,28 @@ impl BpfFuncState {
         self.callback_ret_range = other.callback_ret_range;
         Ok(())
     }
-    
+
     /// Clone into a new boxed allocation
     pub fn clone_boxed(&self) -> Box<Self> {
         let mut uninit: Box<MaybeUninit<Self>> = Box::new_uninit();
         let ptr = uninit.as_mut_ptr();
-        
+
         // SAFETY: Writing to allocated but uninitialized memory
         unsafe {
             let regs_ptr = core::ptr::addr_of_mut!((*ptr).regs);
             for i in 0..MAX_BPF_REG {
-                core::ptr::write(
-                    (*regs_ptr).as_mut_ptr().add(i),
-                    self.regs[i].clone()
-                );
+                core::ptr::write((*regs_ptr).as_mut_ptr().add(i), self.regs[i].clone());
             }
-            
+
             core::ptr::write(core::ptr::addr_of_mut!((*ptr).stack), self.stack.clone());
             core::ptr::write(core::ptr::addr_of_mut!((*ptr).callsite), self.callsite);
             core::ptr::write(core::ptr::addr_of_mut!((*ptr).frameno), self.frameno);
             core::ptr::write(core::ptr::addr_of_mut!((*ptr).subprogno), self.subprogno);
             core::ptr::write(
                 core::ptr::addr_of_mut!((*ptr).callback_ret_range),
-                self.callback_ret_range
+                self.callback_ret_range,
             );
-            
+
             uninit.assume_init()
         }
     }
@@ -223,7 +217,7 @@ impl Clone for BpfVerifierState {
         for frame_opt in &self.frame {
             frames.push(frame_opt.as_ref().map(|f| f.clone_boxed()));
         }
-        
+
         Self {
             frame: frames,
             curframe: self.curframe,
@@ -273,7 +267,7 @@ impl BpfVerifierState {
             cleaned: false,
         }
     }
-    
+
     /// Create a new verifier state directly on the heap
     pub fn new_boxed() -> Box<Self> {
         let mut frames = Vec::with_capacity(MAX_BPF_STACK_FRAMES);
@@ -281,7 +275,7 @@ impl BpfVerifierState {
         for _ in 1..MAX_BPF_STACK_FRAMES {
             frames.push(None);
         }
-        
+
         Box::new(Self {
             frame: frames,
             curframe: 0,
@@ -301,7 +295,7 @@ impl BpfVerifierState {
             cleaned: false,
         })
     }
-    
+
     /// Clone this state into a new boxed allocation
     pub fn clone_boxed(&self) -> Box<Self> {
         Box::new(self.clone())
@@ -309,17 +303,23 @@ impl BpfVerifierState {
 
     /// Get the current function state
     pub fn cur_func(&self) -> Option<&BpfFuncState> {
-        self.frame.get(self.curframe).and_then(|f| f.as_ref().map(|b| b.as_ref()))
+        self.frame
+            .get(self.curframe)
+            .and_then(|f| f.as_ref().map(|b| b.as_ref()))
     }
 
     /// Get the current function state mutably
     pub fn cur_func_mut(&mut self) -> Option<&mut BpfFuncState> {
-        self.frame.get_mut(self.curframe).and_then(|f| f.as_mut().map(|b| b.as_mut()))
+        self.frame
+            .get_mut(self.curframe)
+            .and_then(|f| f.as_mut().map(|b| b.as_mut()))
     }
 
     /// Get a function state by frame number
     pub fn func(&self, frameno: usize) -> Option<&BpfFuncState> {
-        self.frame.get(frameno).and_then(|f| f.as_ref().map(|b| b.as_ref()))
+        self.frame
+            .get(frameno)
+            .and_then(|f| f.as_ref().map(|b| b.as_ref()))
     }
 
     /// Get a register from the current frame

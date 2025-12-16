@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0
+
 //! State merging optimization for BPF verifier
 //!
 //! When multiple execution paths reach the same program point, their states
@@ -12,14 +14,13 @@
 //! - Precision-preserving merging
 //! - Loop-aware state caching
 
-
 use alloc::{boxed::Box, vec::Vec};
 
 use crate::bounds::tnum::Tnum;
 use crate::core::types::*;
 use crate::state::reg_state::BpfRegState;
-use crate::state::verifier_state::{BpfVerifierState, BpfFuncState};
 use crate::state::stack_state::BpfStackState;
+use crate::state::verifier_state::{BpfFuncState, BpfVerifierState};
 
 /// Result of attempting to merge two states.
 #[derive(Debug, Clone)]
@@ -40,10 +41,7 @@ pub enum MergeResult {
 /// input state. This is sound because the merged state is more permissive
 /// than either input - anything safe under the merged state is safe under
 /// both original states.
-pub fn merge_states(
-    state1: &BpfVerifierState,
-    state2: &BpfVerifierState,
-) -> MergeResult {
+pub fn merge_states(state1: &BpfVerifierState, state2: &BpfVerifierState) -> MergeResult {
     // Must have same frame depth
     if state1.curframe != state2.curframe {
         return MergeResult::Incompatible;
@@ -138,10 +136,10 @@ fn reg_subsumes(reg1: &BpfRegState, reg2: &BpfRegState) -> bool {
     match reg1.reg_type {
         BpfRegType::ScalarValue => {
             // reg1 subsumes reg2 if reg1's bounds contain reg2's
-            reg1.umin_value <= reg2.umin_value &&
-            reg1.umax_value >= reg2.umax_value &&
-            reg1.smin_value <= reg2.smin_value &&
-            reg1.smax_value >= reg2.smax_value
+            reg1.umin_value <= reg2.umin_value
+                && reg1.umax_value >= reg2.umax_value
+                && reg1.smin_value <= reg2.smin_value
+                && reg1.smax_value >= reg2.smax_value
         }
         _ => {
             // For pointers, exact match required
@@ -192,29 +190,27 @@ fn regs_exact(reg1: &BpfRegState, reg2: &BpfRegState) -> bool {
     if reg1.reg_type != reg2.reg_type {
         return false;
     }
-    
+
     // Type flags must match
     if reg1.type_flags != reg2.type_flags {
         return false;
     }
-    
+
     // For scalars, check all bounds
     if reg1.reg_type == BpfRegType::ScalarValue {
-        return reg1.umin_value == reg2.umin_value &&
-               reg1.umax_value == reg2.umax_value &&
-               reg1.smin_value == reg2.smin_value &&
-               reg1.smax_value == reg2.smax_value &&
-               reg1.var_off == reg2.var_off;
+        return reg1.umin_value == reg2.umin_value
+            && reg1.umax_value == reg2.umax_value
+            && reg1.smin_value == reg2.smin_value
+            && reg1.smax_value == reg2.smax_value
+            && reg1.var_off == reg2.var_off;
     }
-    
+
     // For pointers, check offset and other fields
-    reg1.off == reg2.off &&
-    reg1.var_off == reg2.var_off &&
-    reg1.map_uid == reg2.map_uid
+    reg1.off == reg2.off && reg1.var_off == reg2.var_off && reg1.map_uid == reg2.map_uid
 }
 
 /// Merge two registers, taking the widest bounds.
-/// 
+///
 /// Implements precision-preserving merge following the kernel's logic:
 /// - If either register is precise, or if they are exact, preserve precision
 /// - Otherwise, widen to unknown for scalars
@@ -233,10 +229,10 @@ fn merge_regs(reg1: &BpfRegState, reg2: &BpfRegState) -> Option<BpfRegState> {
     }
 
     let mut merged = reg1.clone();
-    
+
     // Check if registers are exact (same bounds, same type)
     let is_exact = regs_exact(reg1, reg2);
-    
+
     // Preserve precision if:
     // 1. Either register is marked precise, OR
     // 2. Registers are exactly equal
@@ -251,7 +247,7 @@ fn merge_regs(reg1: &BpfRegState, reg2: &BpfRegState) -> Option<BpfRegState> {
                 merged.smin_value = reg1.smin_value.min(reg2.smin_value);
                 merged.smax_value = reg1.smax_value.max(reg2.smax_value);
                 merged.var_off = merge_tnums(reg1.var_off, reg2.var_off);
-                
+
                 // Keep precise if either was precise (precision propagates)
                 merged.precise = reg1.precise || reg2.precise;
             } else {
@@ -261,12 +257,12 @@ fn merge_regs(reg1: &BpfRegState, reg2: &BpfRegState) -> Option<BpfRegState> {
                 merged.precise = false;
             }
         }
-        BpfRegType::PtrToStack |
-        BpfRegType::PtrToMapValue |
-        BpfRegType::PtrToMapKey |
-        BpfRegType::PtrToCtx |
-        BpfRegType::PtrToPacket |
-        BpfRegType::PtrToMem => {
+        BpfRegType::PtrToStack
+        | BpfRegType::PtrToMapValue
+        | BpfRegType::PtrToMapKey
+        | BpfRegType::PtrToCtx
+        | BpfRegType::PtrToPacket
+        | BpfRegType::PtrToMem => {
             // For pointers, check if they have the same base
             if reg1.off != reg2.off {
                 // Different offsets - take range if possible
@@ -307,8 +303,8 @@ fn types_compatible(t1: BpfRegType, t2: BpfRegType) -> bool {
     // Some pointer types are compatible
     matches!(
         (t1, t2),
-        (BpfRegType::PtrToPacket, BpfRegType::PtrToPacketMeta) |
-        (BpfRegType::PtrToPacketMeta, BpfRegType::PtrToPacket)
+        (BpfRegType::PtrToPacket, BpfRegType::PtrToPacketMeta)
+            | (BpfRegType::PtrToPacketMeta, BpfRegType::PtrToPacket)
     )
 }
 
@@ -462,7 +458,7 @@ impl MergeConfig {
 }
 
 /// Cross-subprogram merge context.
-/// 
+///
 /// This tracks information needed to merge states across subprogram
 /// boundaries, such as when a function returns to multiple call sites.
 #[derive(Debug, Clone)]
@@ -644,12 +640,12 @@ fn merge_regs_with_config(
                 merged.precise = false;
             }
         }
-        BpfRegType::PtrToStack |
-        BpfRegType::PtrToMapValue |
-        BpfRegType::PtrToMapKey |
-        BpfRegType::PtrToCtx |
-        BpfRegType::PtrToPacket |
-        BpfRegType::PtrToMem => {
+        BpfRegType::PtrToStack
+        | BpfRegType::PtrToMapValue
+        | BpfRegType::PtrToMapKey
+        | BpfRegType::PtrToCtx
+        | BpfRegType::PtrToPacket
+        | BpfRegType::PtrToMem => {
             // For pointers, check if they have the same base
             if reg1.off != reg2.off {
                 // Different offsets - take range if possible
@@ -707,11 +703,9 @@ fn merge_stack_slots_with_config(
     match type1 {
         BpfStackSlotType::Spill => {
             // Merge the spilled register
-            if let Some(merged_reg) = merge_regs_with_config(
-                &slot1.spilled_ptr,
-                &slot2.spilled_ptr,
-                config,
-            ) {
+            if let Some(merged_reg) =
+                merge_regs_with_config(&slot1.spilled_ptr, &slot2.spilled_ptr, config)
+            {
                 merged.spilled_ptr = merged_reg;
             } else {
                 // Can't merge - mark as misc
@@ -746,16 +740,16 @@ fn merge_references(
     // (only keep refs that exist in both states)
     let refs1 = state1.refs.refs();
     let refs2 = state2.refs.refs();
-    
+
     // Clear existing refs and rebuild
     merged.refs = state1.refs.clone();
-    
+
     // For each ref in state1, check if it exists in state2
     for r1 in refs1.iter() {
-        let exists_in_s2 = refs2.iter().any(|r2| {
-            r1.ref_type == r2.ref_type && r1.ptr == r2.ptr
-        });
-        
+        let exists_in_s2 = refs2
+            .iter()
+            .any(|r2| r1.ref_type == r2.ref_type && r1.ptr == r2.ptr);
+
         if !exists_in_s2 {
             // Ref only in state1 - might need to mark as potentially released
             // For safety, we keep it but this could be optimized
@@ -764,7 +758,7 @@ fn merge_references(
 }
 
 /// Merge multiple states at once (batch merging).
-/// 
+///
 /// This is more efficient than pairwise merging for join points
 /// with many incoming edges.
 pub fn merge_states_batch(
@@ -802,7 +796,7 @@ pub fn merge_states_batch(
 }
 
 /// Aggressive widening for loop states.
-/// 
+///
 /// When we detect a loop back-edge, we may want to widen scalar
 /// bounds more aggressively to ensure termination.
 pub fn widen_loop_state(state: &mut BpfVerifierState, iteration: u32) {
@@ -834,7 +828,7 @@ fn widen_func_state(func: &mut BpfFuncState, iteration: u32) {
 }
 
 /// Apply widening to a scalar register.
-/// 
+///
 /// After several iterations, we widen bounds to infinity to ensure
 /// the analysis terminates.
 fn widen_scalar_reg(reg: &mut BpfRegState, iteration: u32) {
@@ -891,7 +885,7 @@ pub fn can_merge_cross_subprog(
     // Check reference compatibility
     let refs1 = state1.refs.refs();
     let refs2 = state2.refs.refs();
-    
+
     // Reference counts should match for safe merging
     if refs1.len() != refs2.len() {
         return false;
@@ -901,7 +895,7 @@ pub fn can_merge_cross_subprog(
 }
 
 /// Merge states after returning from a subprogram call.
-/// 
+///
 /// This handles the case where a function can return with different
 /// register states depending on the path taken inside.
 pub fn merge_return_states(
@@ -981,12 +975,7 @@ impl StateMergeCache {
     }
 
     /// Add a state to the cache, potentially merging with existing states.
-    pub fn add_state(
-        &mut self,
-        insn_idx: usize,
-        state: BpfVerifierState,
-        config: &MergeConfig,
-    ) {
+    pub fn add_state(&mut self, insn_idx: usize, state: BpfVerifierState, config: &MergeConfig) {
         if insn_idx >= self.cache.len() {
             return;
         }

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0
+
 //! Main verifier orchestration.
 //!
 //! This module contains the main verification loop, environment setup,

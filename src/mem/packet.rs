@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0
+
 //!
 
 //! This module implements packet data access verification for XDP and TC programs.
@@ -12,13 +14,11 @@
 
 //! to subsequent instructions.
 
-
-
 use alloc::{format, vec::Vec};
 
+use crate::bounds::tnum::Tnum;
 use crate::core::types::*;
 use crate::state::reg_state::BpfRegState;
-use crate::bounds::tnum::Tnum;
 
 use crate::core::error::{Result, VerifierError};
 
@@ -214,8 +214,8 @@ impl PacketBoundsContext {
             0 => self.data_reg = Some(dst_reg),
             8 => self.data_end_reg = Some(dst_reg),
             16 => self.data_meta_reg = Some(dst_reg),
-            76 => self.data_reg = Some(dst_reg),      // SKB data
-            80 => self.data_end_reg = Some(dst_reg),  // SKB data_end
+            76 => self.data_reg = Some(dst_reg),     // SKB data
+            80 => self.data_end_reg = Some(dst_reg), // SKB data_end
             _ => {}
         }
     }
@@ -272,7 +272,11 @@ impl PacketBoundsContext {
 
     /// Get the maximum verified safe offset
     pub fn max_verified_offset(&self) -> i32 {
-        self.verified_ranges.iter().map(|r| r.end).max().unwrap_or(0)
+        self.verified_ranges
+            .iter()
+            .map(|r| r.end)
+            .max()
+            .unwrap_or(0)
     }
 }
 
@@ -317,16 +321,10 @@ impl PacketState {
 }
 
 /// Check packet pointer access
-pub fn check_packet_access(
-    reg: &BpfRegState,
-    off: i32,
-    _size: u32,
-    is_write: bool,
-) -> Result<()> {
+pub fn check_packet_access(reg: &BpfRegState, off: i32, _size: u32, is_write: bool) -> Result<()> {
     // Must be packet pointer type
     match reg.reg_type {
-        BpfRegType::PtrToPacket |
-        BpfRegType::PtrToPacketMeta => {}
+        BpfRegType::PtrToPacket | BpfRegType::PtrToPacketMeta => {}
         _ => {
             return Err(VerifierError::TypeMismatch {
                 expected: "PTR_TO_PACKET or PTR_TO_PACKET_META".into(),
@@ -339,13 +337,14 @@ pub fn check_packet_access(
     let access_off = reg.off + off;
     if access_off < 0 {
         return Err(VerifierError::InvalidMemoryAccess(
-            "negative packet offset".into()
+            "negative packet offset".into(),
         ));
     }
     if access_off > MAX_PACKET_OFF {
-        return Err(VerifierError::InvalidMemoryAccess(
-            format!("packet offset {} exceeds maximum {}", access_off, MAX_PACKET_OFF)
-        ));
+        return Err(VerifierError::InvalidMemoryAccess(format!(
+            "packet offset {} exceeds maximum {}",
+            access_off, MAX_PACKET_OFF
+        )));
     }
 
     // Writes to packet data require special handling
@@ -367,12 +366,12 @@ pub fn analyze_bounds_check(
 ) -> Option<PacketRange> {
     // Common pattern: if (data + N > data_end) goto error;
     // After this check (not taken), we know data + N <= data_end
-    
+
     // data_reg should be PTR_TO_PACKET
     if data_reg.reg_type != BpfRegType::PtrToPacket {
         return None;
     }
-    
+
     // end_reg should be PTR_TO_PACKET_END
     if end_reg.reg_type != BpfRegType::PtrToPacketEnd {
         return None;
@@ -413,14 +412,8 @@ pub fn analyze_bounds_check(
 }
 
 /// Track packet pointer through ALU operation
-pub fn track_packet_alu(
-    dst: &mut BpfRegState,
-    src: &BpfRegState,
-    op: u8,
-    imm: i32,
-) -> Result<()> {
-    if dst.reg_type != BpfRegType::PtrToPacket &&
-       dst.reg_type != BpfRegType::PtrToPacketMeta {
+pub fn track_packet_alu(dst: &mut BpfRegState, src: &BpfRegState, op: u8, imm: i32) -> Result<()> {
+    if dst.reg_type != BpfRegType::PtrToPacket && dst.reg_type != BpfRegType::PtrToPacketMeta {
         return Ok(());
     }
 
@@ -430,18 +423,20 @@ pub fn track_packet_alu(
                 // Adding constant to packet pointer
                 let new_off = dst.off + src.const_value() as i32;
                 if !(0..=MAX_PACKET_OFF).contains(&new_off) {
-                    return Err(VerifierError::InvalidPointerArithmetic(
-                        format!("packet offset {} out of range", new_off)
-                    ));
+                    return Err(VerifierError::InvalidPointerArithmetic(format!(
+                        "packet offset {} out of range",
+                        new_off
+                    )));
                 }
                 dst.off = new_off;
             } else if imm != 0 {
                 // Adding immediate
                 let new_off = dst.off + imm;
                 if !(0..=MAX_PACKET_OFF).contains(&new_off) {
-                    return Err(VerifierError::InvalidPointerArithmetic(
-                        format!("packet offset {} out of range", new_off)
-                    ));
+                    return Err(VerifierError::InvalidPointerArithmetic(format!(
+                        "packet offset {} out of range",
+                        new_off
+                    )));
                 }
                 dst.off = new_off;
             } else {
@@ -454,26 +449,28 @@ pub fn track_packet_alu(
                 let new_off = dst.off - src.const_value() as i32;
                 if new_off < 0 {
                     return Err(VerifierError::InvalidPointerArithmetic(
-                        "negative packet offset".into()
+                        "negative packet offset".into(),
                     ));
                 }
                 dst.off = new_off;
-            } else if src.reg_type == BpfRegType::PtrToPacket ||
-                      src.reg_type == BpfRegType::PtrToPacketEnd {
+            } else if src.reg_type == BpfRegType::PtrToPacket
+                || src.reg_type == BpfRegType::PtrToPacketEnd
+            {
                 // ptr - ptr = scalar (difference)
                 dst.reg_type = BpfRegType::ScalarValue;
                 dst.mark_unknown(false);
             } else {
                 return Err(VerifierError::InvalidPointerArithmetic(
-                    "invalid packet pointer subtraction".into()
+                    "invalid packet pointer subtraction".into(),
                 ));
             }
         }
         _ => {
             // Other operations on packet pointers not allowed
-            return Err(VerifierError::InvalidPointerArithmetic(
-                format!("operation {:02x} not allowed on packet pointer", op)
-            ));
+            return Err(VerifierError::InvalidPointerArithmetic(format!(
+                "operation {:02x} not allowed on packet pointer",
+                op
+            )));
         }
     }
 
@@ -540,7 +537,7 @@ pub fn validate_packet_accesses(
 ) -> Result<()> {
     for access in accesses {
         let mut is_safe = false;
-        
+
         for range in verified_ranges {
             if range.contains(access.offset, access.size) {
                 is_safe = true;
@@ -549,12 +546,10 @@ pub fn validate_packet_accesses(
         }
 
         if !is_safe {
-            return Err(VerifierError::InvalidMemoryAccess(
-                format!(
-                    "packet access at offset {} size {} at insn {} not bounds checked",
-                    access.offset, access.size, access.insn_idx
-                )
-            ));
+            return Err(VerifierError::InvalidMemoryAccess(format!(
+                "packet access at offset {} size {} at insn {} not bounds checked",
+                access.offset, access.size, access.insn_idx
+            )));
         }
     }
 
@@ -600,42 +595,43 @@ pub fn validate_packet_access_full(
     // Cannot read/write through packet_end
     if reg.reg_type == BpfRegType::PtrToPacketEnd {
         return Err(VerifierError::InvalidMemoryAccess(
-            "cannot access memory through PTR_TO_PACKET_END".into()
+            "cannot access memory through PTR_TO_PACKET_END".into(),
         ));
     }
 
     // Check write permission
     if is_write && !check_packet_write_allowed(prog_type) {
-        return Err(VerifierError::InvalidMemoryAccess(
-            format!("packet write not allowed for program type {:?}", prog_type)
-        ));
+        return Err(VerifierError::InvalidMemoryAccess(format!(
+            "packet write not allowed for program type {:?}",
+            prog_type
+        )));
     }
 
     // Calculate actual offset
     let access_off = reg.off + off;
-    
+
     // Check for negative offset
     if access_off < 0 {
-        return Err(VerifierError::InvalidMemoryAccess(
-            format!("negative packet offset {}", access_off)
-        ));
+        return Err(VerifierError::InvalidMemoryAccess(format!(
+            "negative packet offset {}",
+            access_off
+        )));
     }
 
     // Check maximum offset
     if access_off > MAX_PACKET_OFF {
-        return Err(VerifierError::InvalidMemoryAccess(
-            format!("packet offset {} exceeds maximum {}", access_off, MAX_PACKET_OFF)
-        ));
+        return Err(VerifierError::InvalidMemoryAccess(format!(
+            "packet offset {} exceeds maximum {}",
+            access_off, MAX_PACKET_OFF
+        )));
     }
 
     // Check if access is within verified bounds
     if !ctx.is_access_verified(access_off, size) {
-        return Err(VerifierError::InvalidMemoryAccess(
-            format!(
-                "packet access at offset {} size {} not within verified bounds",
-                access_off, size
-            )
-        ));
+        return Err(VerifierError::InvalidMemoryAccess(format!(
+            "packet access at offset {} size {} not within verified bounds",
+            access_off, size
+        )));
     }
 
     Ok(())
@@ -741,23 +737,23 @@ pub fn track_packet_ptr_derivation(
     src: &BpfRegState,
     offset_delta: i32,
 ) -> Result<()> {
-    if src.reg_type != BpfRegType::PtrToPacket && 
-       src.reg_type != BpfRegType::PtrToPacketMeta {
+    if src.reg_type != BpfRegType::PtrToPacket && src.reg_type != BpfRegType::PtrToPacketMeta {
         return Ok(());
     }
 
     let new_off = src.off + offset_delta;
-    
+
     if new_off < 0 {
         return Err(VerifierError::InvalidPointerArithmetic(
-            "packet pointer would have negative offset".into()
+            "packet pointer would have negative offset".into(),
         ));
     }
-    
+
     if new_off > MAX_PACKET_OFF {
-        return Err(VerifierError::InvalidPointerArithmetic(
-            format!("packet offset {} exceeds maximum", new_off)
-        ));
+        return Err(VerifierError::InvalidPointerArithmetic(format!(
+            "packet offset {} exceeds maximum",
+            new_off
+        )));
     }
 
     dst.reg_type = src.reg_type;
@@ -770,7 +766,7 @@ pub fn track_packet_ptr_derivation(
 /// Find packet pointers in registers
 pub fn find_packet_pointers(regs: &[BpfRegState; MAX_BPF_REG]) -> PacketPointers {
     let mut result = PacketPointers::default();
-    
+
     for (i, reg) in regs.iter().enumerate() {
         match reg.reg_type {
             BpfRegType::PtrToPacket => {
@@ -787,7 +783,7 @@ pub fn find_packet_pointers(regs: &[BpfRegState; MAX_BPF_REG]) -> PacketPointers
             _ => {}
         }
     }
-    
+
     result
 }
 
@@ -810,10 +806,7 @@ impl PacketPointers {
 }
 
 /// Compute safe packet range from register bounds
-pub fn compute_safe_range_from_reg(
-    reg: &BpfRegState,
-    verified_length: i32,
-) -> Option<PacketRange> {
+pub fn compute_safe_range_from_reg(reg: &BpfRegState, verified_length: i32) -> Option<PacketRange> {
     if reg.reg_type != BpfRegType::PtrToPacket {
         return None;
     }
@@ -829,10 +822,7 @@ pub fn compute_safe_range_from_reg(
 }
 
 /// Update packet bounds after helper call that may modify packet
-pub fn invalidate_packet_bounds_after_helper(
-    ctx: &mut PacketBoundsContext,
-    helper_id: u32,
-) {
+pub fn invalidate_packet_bounds_after_helper(ctx: &mut PacketBoundsContext, helper_id: u32) {
     // Helpers that can change packet size/contents
     let invalidates = matches!(
         helper_id,
@@ -844,7 +834,7 @@ pub fn invalidate_packet_bounds_after_helper(
         44 | // xdp_adjust_head
         50 | // skb_adjust_room
         54 | // xdp_adjust_meta
-        65   // xdp_adjust_tail
+        65 // xdp_adjust_tail
     );
 
     if invalidates {

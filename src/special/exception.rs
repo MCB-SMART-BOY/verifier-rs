@@ -1,19 +1,18 @@
+// SPDX-License-Identifier: GPL-2.0
+
 //! Exception handling support
 //!
 //! This module implements exception callback verification for BPF programs.
 //! Exception callbacks are used for handling errors in struct_ops programs.
 
-
 use alloc::{format, string::String, vec::Vec};
 
+use alloc::collections::BTreeMap as HashMap;
 
-use alloc::collections::{BTreeMap as HashMap};
-
-use crate::core::types::*;
-use crate::state::verifier_state::BpfVerifierState;
-use crate::state::reg_state::BpfRegState;
 use crate::core::error::{Result, VerifierError};
-
+use crate::core::types::*;
+use crate::state::reg_state::BpfRegState;
+use crate::state::verifier_state::BpfVerifierState;
 
 /// Maximum nesting depth for exception callbacks
 pub const MAX_EXCEPTION_DEPTH: usize = 8;
@@ -59,7 +58,7 @@ impl ExceptionState {
     pub fn enter_exception(&mut self, callback: ExceptionCallback) -> Result<()> {
         if self.exception_depth >= MAX_EXCEPTION_DEPTH {
             return Err(VerifierError::TooComplex(
-                "exception callback nesting too deep".into()
+                "exception callback nesting too deep".into(),
             ));
         }
 
@@ -74,7 +73,7 @@ impl ExceptionState {
     pub fn exit_exception(&mut self) -> Result<()> {
         if !self.in_exception_cb {
             return Err(VerifierError::InvalidState(
-                "not in exception callback".into()
+                "not in exception callback".into(),
             ));
         }
 
@@ -99,24 +98,21 @@ impl ExceptionState {
 }
 
 /// Check bpf_throw() call
-pub fn check_bpf_throw(
-    state: &BpfVerifierState,
-    _exception_state: &ExceptionState,
-) -> Result<()> {
+pub fn check_bpf_throw(state: &BpfVerifierState, _exception_state: &ExceptionState) -> Result<()> {
     // bpf_throw() can only be called in exception callbacks or main prog
     // It aborts the current program execution
 
     // Check that we're not holding any locks
     if state.refs.active_locks > 0 {
         return Err(VerifierError::InvalidState(
-            "cannot bpf_throw with active locks".into()
+            "cannot bpf_throw with active locks".into(),
         ));
     }
 
     // Check RCU state
     if state.refs.active_rcu_locks > 0 {
         return Err(VerifierError::InvalidState(
-            "cannot bpf_throw with active RCU lock".into()
+            "cannot bpf_throw with active RCU lock".into(),
         ));
     }
 
@@ -154,7 +150,8 @@ pub fn check_exception_callback_exit(
     _callback: &ExceptionCallback,
 ) -> Result<()> {
     // Exception callbacks must return 0 or 1
-    let r0 = state.reg(BPF_REG_0)
+    let r0 = state
+        .reg(BPF_REG_0)
         .ok_or(VerifierError::InvalidRegister(0))?;
 
     if r0.reg_type == BpfRegType::NotInit {
@@ -266,7 +263,7 @@ pub fn validate_callback_signature(
     // Check argument count is valid for callback type
     if nargs > 5 {
         return Err(VerifierError::InvalidFunctionCall(
-            "callback has too many arguments".into()
+            "callback has too many arguments".into(),
         ));
     }
 
@@ -287,7 +284,7 @@ pub fn is_bpf_throw_kfunc(insn_imm: i32, insn_off: i16) -> bool {
 }
 
 /// Validate bpf_throw call
-/// 
+///
 /// bpf_throw(u64 cookie) - throws an exception with the given cookie value
 /// This terminates the current execution and transfers to exception handler
 pub fn validate_bpf_throw(
@@ -296,13 +293,14 @@ pub fn validate_bpf_throw(
     cookie_reg: usize,
 ) -> Result<()> {
     // Check cookie argument is valid scalar
-    let cookie = state.reg(cookie_reg)
+    let cookie = state
+        .reg(cookie_reg)
         .ok_or(VerifierError::InvalidRegister(cookie_reg as u8))?;
-    
+
     if cookie.reg_type == BpfRegType::NotInit {
         return Err(VerifierError::UninitializedRegister(cookie_reg as u8));
     }
-    
+
     if cookie.reg_type != BpfRegType::ScalarValue {
         return Err(VerifierError::TypeMismatch {
             expected: "scalar".into(),
@@ -315,7 +313,7 @@ pub fn validate_bpf_throw(
 
     // Verify there's an exception callback registered (if required)
     // Note: bpf_throw without callback causes program abort
-    
+
     Ok(())
 }
 
@@ -331,13 +329,13 @@ pub fn process_bpf_throw(
             reg.mark_not_init(false);
         }
     }
-    
+
     Ok(())
 }
 
 /// Find exception callback instruction offset from BTF
 pub fn find_exception_callback_insn_off(
-    func_info: &[(u32, usize)],  // (btf_id, insn_off) pairs
+    func_info: &[(u32, usize)], // (btf_id, insn_off) pairs
     main_btf_id: u32,
     exception_cb_name: Option<&str>,
     btf_func_ids: &HashMap<String, u32>,
@@ -347,34 +345,36 @@ pub fn find_exception_callback_insn_off(
         Some(name) => name,
         None => return Ok(None),
     };
-    
+
     // Find the BTF ID for the exception callback function
-    let cb_btf_id = btf_func_ids.get(cb_name)
-        .ok_or_else(|| VerifierError::InvalidBtf(format!(
-            "exception callback '{}' could not be found in BTF", cb_name
-        )))?;
-    
+    let cb_btf_id = btf_func_ids.get(cb_name).ok_or_else(|| {
+        VerifierError::InvalidBtf(format!(
+            "exception callback '{}' could not be found in BTF",
+            cb_name
+        ))
+    })?;
+
     // Make sure it's not the main function
     if *cb_btf_id == main_btf_id {
         return Err(VerifierError::InvalidBtf(
-            "exception callback cannot be main function".into()
+            "exception callback cannot be main function".into(),
         ));
     }
-    
+
     // Find the instruction offset for this BTF ID
     for (btf_id, insn_off) in func_info {
         if *btf_id == *cb_btf_id {
             if *insn_off == 0 {
                 return Err(VerifierError::InvalidBtf(
-                    "invalid exception callback insn_off in func_info: 0".into()
+                    "invalid exception callback insn_off in func_info: 0".into(),
                 ));
             }
             return Ok(Some(*insn_off));
         }
     }
-    
+
     Err(VerifierError::InvalidBtf(
-        "exception callback type id not found in func_info".into()
+        "exception callback type id not found in func_info".into(),
     ))
 }
 
@@ -393,7 +393,7 @@ impl SubprogExceptionInfo {
         self.exception_cb_subprog = Some(subprog);
         self.has_exception_support = true;
     }
-    
+
     /// Check if subprogram is the exception callback
     pub fn is_exception_cb(&self, subprog: usize) -> bool {
         self.exception_cb_subprog == Some(subprog)
@@ -409,30 +409,30 @@ pub fn setup_exception_callback_state(
     if let Some(r1) = state.reg_mut(BPF_REG_1) {
         r1.mark_unknown(false);
     }
-    
+
     // R2-R5 are not used by exception callbacks
     for i in 2..=5 {
         if let Some(r) = state.reg_mut(i) {
             r.mark_not_init(false);
         }
     }
-    
+
     // R6-R9 are callee-saved, not initialized
     for i in 6..=9 {
         if let Some(r) = state.reg_mut(i) {
             r.mark_not_init(false);
         }
     }
-    
+
     // R10 = frame pointer (register 10)
     if let Some(r10) = state.reg_mut(10) {
         r10.reg_type = BpfRegType::PtrToStack;
         r10.off = 0;
     }
-    
+
     // Store callback info
     check_exception_callback_entry(state, callback)?;
-    
+
     Ok(())
 }
 
@@ -443,14 +443,14 @@ pub fn verify_exception_callback_exit(
 ) -> Result<()> {
     // Check return value
     check_exception_callback_exit(state, callback)?;
-    
+
     // Check no resources leaked
     if !state.refs.is_empty() {
         return Err(VerifierError::InvalidState(
-            "exception callback leaks acquired references".into()
+            "exception callback leaks acquired references".into(),
         ));
     }
-    
+
     Ok(())
 }
 
@@ -523,7 +523,7 @@ impl WorkqueueState {
     pub fn set_callback(&mut self, callback_insn: usize) -> Result<()> {
         if self.map_uid.is_none() {
             return Err(VerifierError::InvalidState(
-                "workqueue not initialized".into()
+                "workqueue not initialized".into(),
             ));
         }
         self.callback_set = true;
@@ -535,7 +535,7 @@ impl WorkqueueState {
     pub fn start(&mut self) -> Result<()> {
         if !self.callback_set {
             return Err(VerifierError::InvalidState(
-                "workqueue callback not set".into()
+                "workqueue callback not set".into(),
             ));
         }
         self.started = true;
@@ -544,7 +544,7 @@ impl WorkqueueState {
 }
 
 /// Check if async callback is sleepable
-/// 
+///
 /// Timer callbacks are not sleepable by default, but workqueue and
 /// task_work callbacks are always sleepable
 pub fn is_async_cb_sleepable(kfunc_id: u32, is_timer: bool) -> bool {
@@ -552,16 +552,13 @@ pub fn is_async_cb_sleepable(kfunc_id: u32, is_timer: bool) -> bool {
         // Timer callbacks are not sleepable
         return false;
     }
-    
+
     // Workqueue and task_work callbacks are always sleepable
     is_bpf_wq_set_callback_impl_kfunc(kfunc_id) || is_task_work_add_kfunc(kfunc_id)
 }
 
 /// Validate workqueue init arguments
-pub fn validate_wq_init(
-    wq_reg: &BpfRegState,
-    map_reg: &BpfRegState,
-) -> Result<u32> {
+pub fn validate_wq_init(wq_reg: &BpfRegState, map_reg: &BpfRegState) -> Result<u32> {
     // wq_reg should point to bpf_wq in map value
     if wq_reg.reg_type != BpfRegType::PtrToMapValue {
         return Err(VerifierError::TypeMismatch {
@@ -627,78 +624,72 @@ pub fn validate_wq_set_callback(
 }
 
 /// Setup workqueue callback state for verification
-pub fn setup_wq_callback_state(
-    state: &mut BpfVerifierState,
-) -> Result<()> {
+pub fn setup_wq_callback_state(state: &mut BpfVerifierState) -> Result<()> {
     // Workqueue callback signature: int callback(void *map, int *key, void *value)
-    
+
     // R1 = map pointer
     if let Some(r1) = state.reg_mut(1) {
         r1.reg_type = BpfRegType::ConstPtrToMap;
     }
-    
+
     // R2 = key pointer (or NULL)
     if let Some(r2) = state.reg_mut(2) {
         r2.reg_type = BpfRegType::PtrToMapKey;
     }
-    
+
     // R3 = value pointer (map value containing bpf_wq)
     if let Some(r3) = state.reg_mut(3) {
         r3.reg_type = BpfRegType::PtrToMapValue;
     }
-    
+
     // R4-R5 not used
     for i in 4..=5 {
         if let Some(r) = state.reg_mut(i) {
             r.mark_not_init(false);
         }
     }
-    
-    // R6-R9 callee-saved, not initialized  
+
+    // R6-R9 callee-saved, not initialized
     for i in 6..=9 {
         if let Some(r) = state.reg_mut(i) {
             r.mark_not_init(false);
         }
     }
-    
+
     // R10 = frame pointer
     if let Some(r10) = state.reg_mut(10) {
         r10.reg_type = BpfRegType::PtrToStack;
         r10.off = 0;
     }
-    
+
     Ok(())
 }
 
 /// Verify workqueue callback return value
-pub fn verify_wq_callback_return(
-    state: &BpfVerifierState,
-) -> Result<()> {
+pub fn verify_wq_callback_return(state: &BpfVerifierState) -> Result<()> {
     // Workqueue callback returns int (0 on success)
-    let r0 = state.reg(BPF_REG_0)
+    let r0 = state
+        .reg(BPF_REG_0)
         .ok_or(VerifierError::InvalidRegister(0))?;
-    
+
     if r0.reg_type == BpfRegType::NotInit {
         return Err(VerifierError::UninitializedRegister(0));
     }
-    
+
     if r0.reg_type != BpfRegType::ScalarValue {
         return Err(VerifierError::TypeMismatch {
             expected: "scalar return value".into(),
             got: format!("{:?}", r0.reg_type),
         });
     }
-    
+
     Ok(())
 }
 
 /// Check if program type can use workqueues
 pub fn prog_type_can_use_wq(prog_type: BpfProgType) -> bool {
     // Tracing programs cannot use bpf_wq
-    !matches!(
-        prog_type,
-        BpfProgType::Tracing | BpfProgType::RawTracepoint
-    )
+    !matches!(prog_type, BpfProgType::Tracing | BpfProgType::RawTracepoint)
 }
 
 // ============================================================================
@@ -761,7 +752,7 @@ impl ExceptionContext {
     ) -> Result<()> {
         if self.handlers.len() >= MAX_EXCEPTION_DEPTH {
             return Err(VerifierError::TooComplex(
-                "exception handler nesting too deep".into()
+                "exception handler nesting too deep".into(),
             ));
         }
 
@@ -772,10 +763,10 @@ impl ExceptionContext {
 
     /// Pop the current exception handler
     pub fn pop_handler(&mut self) -> Result<ExceptionHandler> {
-        let handler = self.handlers.pop()
-            .ok_or_else(|| VerifierError::InvalidState(
-                "no exception handler to pop".into()
-            ))?;
+        let handler = self
+            .handlers
+            .pop()
+            .ok_or_else(|| VerifierError::InvalidState("no exception handler to pop".into()))?;
         self.resources_per_level.pop();
         Ok(handler)
     }
@@ -806,12 +797,12 @@ impl ExceptionContext {
             // All resources acquired in this handler must be released
             if final_resources.locks_held > entry_resources.locks_held {
                 return Err(VerifierError::InvalidLock(
-                    "exception handler leaks locks".into()
+                    "exception handler leaks locks".into(),
                 ));
             }
             if final_resources.rcu_locks_held > entry_resources.rcu_locks_held {
                 return Err(VerifierError::InvalidLock(
-                    "exception handler leaks RCU locks".into()
+                    "exception handler leaks RCU locks".into(),
                 ));
             }
             // Check reference leaks
@@ -934,9 +925,11 @@ impl CleanupTracker {
 
     /// Remove a cleanup (when resource is released)
     pub fn remove(&mut self, action: CleanupAction, resource_id: u32) -> bool {
-        if let Some(pos) = self.cleanups.iter().position(|c| {
-            c.action == action && c.resource_id == resource_id
-        }) {
+        if let Some(pos) = self
+            .cleanups
+            .iter()
+            .position(|c| c.action == action && c.resource_id == resource_id)
+        {
             self.cleanups.remove(pos);
             true
         } else {
@@ -984,14 +977,14 @@ pub fn verify_exception_safe_callback(
     // Timer callbacks must not throw unhandled exceptions
     if callback_type == AsyncCallbackType::Timer && exception_propagation.is_unhandled() {
         return Err(VerifierError::InvalidState(
-            "timer callback cannot throw unhandled exception".into()
+            "timer callback cannot throw unhandled exception".into(),
         ));
     }
 
     // All callbacks must clean up resources before throwing
     if exception_propagation.exception_thrown && cleanup_tracker.has_pending() {
         return Err(VerifierError::InvalidState(
-            "exception thrown with pending resource cleanup".into()
+            "exception thrown with pending resource cleanup".into(),
         ));
     }
 

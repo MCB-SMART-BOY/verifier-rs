@@ -1,14 +1,15 @@
+// SPDX-License-Identifier: GPL-2.0
+
 //! Return value verification
 //!
 //! This module implements verification of BPF program return values.
 //! Different program types have different requirements for their return values.
 
-
 use alloc::format;
 
+use crate::core::error::{Result, VerifierError};
 use crate::core::types::*;
 use crate::state::verifier_state::BpfVerifierState;
-use crate::core::error::{Result, VerifierError};
 
 /// Return value range
 #[derive(Debug, Clone, Copy, Default)]
@@ -49,32 +50,32 @@ pub fn get_prog_retval_range(prog_type: BpfProgType) -> BpfRetvalRange {
     match prog_type {
         // XDP programs return XDP actions
         BpfProgType::Xdp => BpfRetvalRange::new(0, 5), // XDP_PASS, XDP_DROP, etc.
-        
+
         // Socket filters return packet length or 0
         BpfProgType::SocketFilter => BpfRetvalRange::new(0, i64::MAX),
-        
+
         // TC classifiers return TC actions
         BpfProgType::SchedCls | BpfProgType::SchedAct => BpfRetvalRange::new(-1, 7),
-        
+
         // Tracing programs usually return 0
-        BpfProgType::Tracepoint |
-        BpfProgType::RawTracepoint |
-        BpfProgType::PerfEvent => BpfRetvalRange::new(0, 0),
-        
+        BpfProgType::Tracepoint | BpfProgType::RawTracepoint | BpfProgType::PerfEvent => {
+            BpfRetvalRange::new(0, 0)
+        }
+
         // Kprobes can return 0 or 1
         BpfProgType::Kprobe => BpfRetvalRange::new(0, 1),
-        
+
         // cGroup programs have specific ranges
-        BpfProgType::CgroupSkb |
-        BpfProgType::CgroupSock |
-        BpfProgType::CgroupDevice => BpfRetvalRange::new(0, 1),
-        
+        BpfProgType::CgroupSkb | BpfProgType::CgroupSock | BpfProgType::CgroupDevice => {
+            BpfRetvalRange::new(0, 1)
+        }
+
         // LSM programs return 0 for allow, negative for deny
         BpfProgType::Lsm => BpfRetvalRange::new(i32::MIN as i64, 0),
-        
+
         // Struct ops - depends on the callback
         BpfProgType::StructOps => BpfRetvalRange::unbounded(),
-        
+
         // Default: any return value
         _ => BpfRetvalRange::unbounded(),
     }
@@ -88,7 +89,8 @@ pub fn check_return_code(
     is_exception_exit: bool,
 ) -> Result<()> {
     // Get R0 (return value register)
-    let r0 = state.reg(BPF_REG_0)
+    let r0 = state
+        .reg(BPF_REG_0)
         .ok_or(VerifierError::InvalidRegister(0))?;
 
     // Subprograms can return any value
@@ -119,21 +121,22 @@ pub fn check_return_code(
                 let val = r0.const_value() as i64;
                 if !expected.contains(val) {
                     return Err(VerifierError::TypeMismatch {
-                        expected: format!("return value in range [{}, {}]", 
-                                         expected.minval, expected.maxval),
+                        expected: format!(
+                            "return value in range [{}, {}]",
+                            expected.minval, expected.maxval
+                        ),
                         got: format!("{}", val),
                     });
                 }
             } else {
                 // Check if bounds are within expected range
-                let ret_range = BpfRetvalRange::new(
-                    r0.smin_value,
-                    r0.smax_value,
-                );
+                let ret_range = BpfRetvalRange::new(r0.smin_value, r0.smax_value);
                 if !ret_range.within(&expected) {
                     return Err(VerifierError::TypeMismatch {
-                        expected: format!("return value in range [{}, {}]",
-                                         expected.minval, expected.maxval),
+                        expected: format!(
+                            "return value in range [{}, {}]",
+                            expected.minval, expected.maxval
+                        ),
                         got: format!("range [{}, {}]", r0.smin_value, r0.smax_value),
                     });
                 }
@@ -171,7 +174,8 @@ pub fn do_refine_retval_range(
     expected: &BpfRetvalRange,
 ) -> Result<()> {
     // Get R0
-    let r0 = state.reg_mut(BPF_REG_0)
+    let r0 = state
+        .reg_mut(BPF_REG_0)
         .ok_or(VerifierError::InvalidRegister(0))?;
 
     if r0.reg_type != BpfRegType::ScalarValue {
@@ -195,11 +199,9 @@ pub fn do_refine_retval_range(
 }
 
 /// Check callback return value
-pub fn check_callback_return(
-    state: &BpfVerifierState,
-    expected: &BpfRetvalRange,
-) -> Result<()> {
-    let r0 = state.reg(BPF_REG_0)
+pub fn check_callback_return(state: &BpfVerifierState, expected: &BpfRetvalRange) -> Result<()> {
+    let r0 = state
+        .reg(BPF_REG_0)
         .ok_or(VerifierError::InvalidRegister(0))?;
 
     if r0.reg_type == BpfRegType::NotInit {
@@ -217,8 +219,10 @@ pub fn check_callback_return(
     let ret_range = BpfRetvalRange::new(r0.smin_value, r0.smax_value);
     if !ret_range.within(expected) {
         return Err(VerifierError::TypeMismatch {
-            expected: format!("callback return in [{}, {}]", 
-                             expected.minval, expected.maxval),
+            expected: format!(
+                "callback return in [{}, {}]",
+                expected.minval, expected.maxval
+            ),
             got: format!("range [{}, {}]", r0.smin_value, r0.smax_value),
         });
     }

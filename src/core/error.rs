@@ -73,24 +73,38 @@ impl fmt::Display for VerifierError {
             VerifierError::EmptyProgram => write!(f, "empty program"),
             VerifierError::ProgramTooLarge(n) => write!(f, "program too large: {} instructions", n),
             VerifierError::InvalidInsnIdx(i) => write!(f, "invalid instruction index {}", i),
-            VerifierError::JumpOutOfRange(t, l) => write!(f, "jump out of range: target {}, prog_len {}", t, l),
+            VerifierError::JumpOutOfRange(t, l) => {
+                write!(f, "jump out of range: target {}, prog_len {}", t, l)
+            }
             VerifierError::InvalidJumpTarget(t) => write!(f, "invalid jump target {}", t),
             VerifierError::FallThroughExit => write!(f, "fall through exit"),
-            VerifierError::VerificationLimitExceeded(s) => write!(f, "verification limit exceeded: {}", s),
+            VerifierError::VerificationLimitExceeded(s) => {
+                write!(f, "verification limit exceeded: {}", s)
+            }
             VerifierError::InvalidInstruction(i) => write!(f, "invalid instruction at index {}", i),
             VerifierError::InvalidRegister(r) => write!(f, "invalid register {}", r),
             VerifierError::UninitializedRegister(r) => write!(f, "register {} not initialized", r),
             VerifierError::InvalidMemoryAccess(s) => write!(f, "invalid memory access: {}", s),
-            VerifierError::StackOutOfBounds(o) => write!(f, "out of bounds stack access at offset {}", o),
+            VerifierError::StackOutOfBounds(o) => {
+                write!(f, "out of bounds stack access at offset {}", o)
+            }
             VerifierError::InvalidOffset(o) => write!(f, "invalid offset {}", o),
-            VerifierError::UnreleasedReference(id) => write!(f, "unreleased reference with id {}", id),
-            VerifierError::InvalidPointerArithmetic(s) => write!(f, "invalid pointer arithmetic: {}", s),
+            VerifierError::UnreleasedReference(id) => {
+                write!(f, "unreleased reference with id {}", id)
+            }
+            VerifierError::InvalidPointerArithmetic(s) => {
+                write!(f, "invalid pointer arithmetic: {}", s)
+            }
             VerifierError::TooComplex(s) => write!(f, "program too complex: {}", s),
             VerifierError::InvalidJumpDestination(d) => write!(f, "invalid jump destination {}", d),
             VerifierError::BackEdgeDetected => write!(f, "back-edge detected, loops not allowed"),
-            VerifierError::UnreachableInstruction(i) => write!(f, "unreachable instruction at index {}", i),
+            VerifierError::UnreachableInstruction(i) => {
+                write!(f, "unreachable instruction at index {}", i)
+            }
             VerifierError::InvalidHelperCall(s) => write!(f, "invalid helper call: {}", s),
-            VerifierError::TypeMismatch { expected, got } => write!(f, "type mismatch: expected {}, got {}", expected, got),
+            VerifierError::TypeMismatch { expected, got } => {
+                write!(f, "type mismatch: expected {}, got {}", expected, got)
+            }
             VerifierError::InvalidPointer(s) => write!(f, "invalid pointer: {}", s),
             VerifierError::PermissionDenied(s) => write!(f, "permission denied: {}", s),
             VerifierError::InvalidMapAccess(s) => write!(f, "invalid map access: {}", s),
@@ -102,7 +116,9 @@ impl fmt::Display for VerifierError {
             VerifierError::InvalidLock(s) => write!(f, "invalid lock operation: {}", s),
             VerifierError::InvalidIrq(s) => write!(f, "invalid IRQ operation: {}", s),
             VerifierError::ResourceLimitExceeded(s) => write!(f, "resource limit exceeded: {}", s),
-            VerifierError::ComplexityLimitExceeded(s) => write!(f, "complexity limit exceeded: {}", s),
+            VerifierError::ComplexityLimitExceeded(s) => {
+                write!(f, "complexity limit exceeded: {}", s)
+            }
             VerifierError::Internal(s) => write!(f, "internal error: {}", s),
             VerifierError::OutOfMemory => write!(f, "out of memory"),
             VerifierError::InvalidBtf(s) => write!(f, "invalid BTF: {}", s),
@@ -119,9 +135,17 @@ impl fmt::Display for VerifierError {
             VerifierError::InvalidAtomicOp(op) => write!(f, "invalid atomic operation {:#x}", op),
             VerifierError::InvalidState(s) => write!(f, "invalid state: {}", s),
             VerifierError::InvalidFunctionCall(s) => write!(f, "invalid function call: {}", s),
-            VerifierError::OutOfBounds { offset, size } => write!(f, "out of bounds access at offset {} with size {}", offset, size),
-            VerifierError::InfiniteLoop(i) => write!(f, "infinite loop detected at instruction {}", i),
-            VerifierError::InvalidPointerComparison(s) => write!(f, "invalid pointer comparison: {}", s),
+            VerifierError::OutOfBounds { offset, size } => write!(
+                f,
+                "out of bounds access at offset {} with size {}",
+                offset, size
+            ),
+            VerifierError::InfiniteLoop(i) => {
+                write!(f, "infinite loop detected at instruction {}", i)
+            }
+            VerifierError::InvalidPointerComparison(s) => {
+                write!(f, "invalid pointer comparison: {}", s)
+            }
             VerifierError::InvalidReturnValue(s) => write!(f, "invalid return value: {}", s),
         }
     }
@@ -139,7 +163,7 @@ impl VerifierError {
     }
 
     /// Convert to kernel errno value
-    /// 
+    ///
     /// These correspond to Linux kernel error codes:
     /// - EINVAL (22): Invalid argument
     /// - ENOMEM (12): Out of memory  
@@ -152,21 +176,21 @@ impl VerifierError {
             VerifierError::OutOfMemory => -12, // ENOMEM
 
             // Permission/access errors
-            VerifierError::PermissionDenied(_) => -1,  // EPERM
-            VerifierError::PointerLeak => -1,          // EPERM
+            VerifierError::PermissionDenied(_) => -1, // EPERM
+            VerifierError::PointerLeak => -1,         // EPERM
             VerifierError::InvalidMemoryAccess(_) => -13, // EACCES
-            VerifierError::InvalidMapAccess(_) => -13,    // EACCES
+            VerifierError::InvalidMapAccess(_) => -13, // EACCES
             VerifierError::InvalidContextAccess(_) => -13, // EACCES
 
             // Complexity/size limits
-            VerifierError::ProgramTooLarge(_) => -7,           // E2BIG
-            VerifierError::TooComplex(_) => -7,                // E2BIG
+            VerifierError::ProgramTooLarge(_) => -7, // E2BIG
+            VerifierError::TooComplex(_) => -7,      // E2BIG
             VerifierError::VerificationLimitExceeded(_) => -7, // E2BIG
-            VerifierError::ResourceLimitExceeded(_) => -7,     // E2BIG
-            VerifierError::ComplexityLimitExceeded(_) => -7,   // E2BIG
-            VerifierError::TooManySubprogs => -7,              // E2BIG
-            VerifierError::CallStackOverflow => -7,            // E2BIG
-            VerifierError::StackOverflow(_) => -7,             // E2BIG
+            VerifierError::ResourceLimitExceeded(_) => -7, // E2BIG
+            VerifierError::ComplexityLimitExceeded(_) => -7, // E2BIG
+            VerifierError::TooManySubprogs => -7,    // E2BIG
+            VerifierError::CallStackOverflow => -7,  // E2BIG
+            VerifierError::StackOverflow(_) => -7,   // E2BIG
 
             // All other errors are EINVAL
             _ => -22, // EINVAL

@@ -1,12 +1,12 @@
+// SPDX-License-Identifier: GPL-2.0
+
 //! Register state snapshot and comparison for state pruning.
 //!
 //! This module provides efficient state comparison to determine if a new
 //! verification state is equivalent to or subsumed by a previously seen state,
 //! enabling state pruning to avoid redundant verification paths.
 
-
 use alloc::{boxed::Box, vec::Vec};
-
 
 use alloc::collections::BTreeMap as HashMap;
 
@@ -157,11 +157,11 @@ impl RegsSnapshot {
             ref_obj_id: 0,
             map_uid: 0,
         });
-        
+
         for (i, reg) in regs.iter().enumerate() {
             snapshots[i] = RegSnapshot::from_reg(reg);
         }
-        
+
         Self { regs: snapshots }
     }
 
@@ -230,11 +230,19 @@ impl StackSnapshot {
     }
 
     /// Add a slot to the snapshot.
-    pub fn add_slot(&mut self, offset: i32, slot_type: StackSlotType, spilled: Option<RegSnapshot>) {
-        self.slots.insert(offset, StackSlotSnapshot {
-            slot_type,
-            spilled_reg: spilled.map(Box::new),
-        });
+    pub fn add_slot(
+        &mut self,
+        offset: i32,
+        slot_type: StackSlotType,
+        spilled: Option<RegSnapshot>,
+    ) {
+        self.slots.insert(
+            offset,
+            StackSlotSnapshot {
+                slot_type,
+                spilled_reg: spilled.map(Box::new),
+            },
+        );
         if offset < self.allocated_low {
             self.allocated_low = offset;
         }
@@ -253,7 +261,9 @@ impl StackSnapshot {
                     }
                 }
                 // Check spilled register if present
-                if let (Some(self_spill), Some(other_spill)) = (&slot.spilled_reg, &other_slot.spilled_reg) {
+                if let (Some(self_spill), Some(other_spill)) =
+                    (&slot.spilled_reg, &other_slot.spilled_reg)
+                {
                     if !self_spill.is_substate_of(other_spill) {
                         return false;
                     }
@@ -308,7 +318,7 @@ impl StateSnapshot {
     pub fn is_substate_of(&self, other: &StateSnapshot) -> bool {
         // Quick hash check for fast rejection
         // (Note: equal hashes don't guarantee equality)
-        
+
         // Call depth must match
         if self.call_depth != other.call_depth {
             return false;
@@ -390,10 +400,7 @@ impl StateCache {
 
     /// Add a state to the cache.
     pub fn add_state(&mut self, insn_idx: usize, state: StateSnapshot) {
-        self.states
-            .entry(insn_idx)
-            .or_default()
-            .push(state);
+        self.states.entry(insn_idx).or_default().push(state);
         self.stored += 1;
     }
 
@@ -415,13 +422,13 @@ impl StateCache {
         self.stored = 0;
     }
 
-    /// Get hit rate as a percentage.
-    pub fn hit_rate(&self) -> f64 {
+    /// Get hit rate as a percentage (0-100).
+    pub fn hit_rate_percent(&self) -> u32 {
         let total = self.hits + self.misses;
         if total == 0 {
-            0.0
+            0
         } else {
-            (self.hits as f64 / total as f64) * 100.0
+            ((self.hits as u64 * 100) / total as u64) as u32
         }
     }
 }

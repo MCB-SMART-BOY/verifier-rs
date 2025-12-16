@@ -323,8 +323,8 @@ pub struct LimitWarning {
     pub current: u64,
     /// Maximum allowed.
     pub maximum: u64,
-    /// Percentage of limit used.
-    pub percentage: f64,
+    /// Percentage of limit used (0-100).
+    pub percentage: u32,
     /// Warning message.
     pub message: String,
 }
@@ -537,7 +537,7 @@ impl LimitChecker {
             return Ok(()); // Limit disabled
         }
 
-        let percentage = (current as f64 / maximum as f64) * 100.0;
+        let percentage = ((current * 100) / maximum) as u32;
 
         if current > maximum {
             if self.limits.strict {
@@ -545,7 +545,7 @@ impl LimitChecker {
             } else {
                 self.add_warning(limit_type, current, maximum, percentage);
             }
-        } else if percentage >= 90.0 {
+        } else if percentage >= 90 {
             // Warn when approaching limit
             self.add_warning(limit_type, current, maximum, percentage);
         }
@@ -564,59 +564,42 @@ impl LimitChecker {
                 "verification complexity {} exceeds limit {}",
                 current, maximum
             ),
-            LimitType::CallDepth => format!(
-                "call depth {} exceeds maximum {}",
-                current, maximum
-            ),
-            LimitType::Subprograms => format!(
-                "too many subprograms: {}, maximum {}",
-                current, maximum
-            ),
-            LimitType::CallChain => format!(
-                "call chain length {} exceeds maximum {}",
-                current, maximum
-            ),
-            LimitType::TailCalls => format!(
-                "too many tail calls: {}, maximum {}",
-                current, maximum
-            ),
-            LimitType::Loops => format!(
-                "too many loops: {}, maximum {}",
-                current, maximum
-            ),
-            LimitType::LoopIterations => format!(
-                "loop iterations {} exceed maximum {}",
-                current, maximum
-            ),
+            LimitType::CallDepth => format!("call depth {} exceeds maximum {}", current, maximum),
+            LimitType::Subprograms => {
+                format!("too many subprograms: {}, maximum {}", current, maximum)
+            }
+            LimitType::CallChain => {
+                format!("call chain length {} exceeds maximum {}", current, maximum)
+            }
+            LimitType::TailCalls => {
+                format!("too many tail calls: {}, maximum {}", current, maximum)
+            }
+            LimitType::Loops => format!("too many loops: {}, maximum {}", current, maximum),
+            LimitType::LoopIterations => {
+                format!("loop iterations {} exceed maximum {}", current, maximum)
+            }
             LimitType::StatesPerInsn => format!(
                 "states per instruction {} exceeds maximum {}",
                 current, maximum
             ),
-            LimitType::Time => format!(
-                "verification time exceeded ({}s > {}s)",
-                current, maximum
-            ),
+            LimitType::Time => format!("verification time exceeded ({}s > {}s)", current, maximum),
             LimitType::Memory => format!(
                 "memory usage {} bytes exceeds limit {} bytes",
                 current, maximum
             ),
-            LimitType::BtfTypes => format!(
-                "BTF types {} exceeds limit {}",
-                current, maximum
-            ),
-            LimitType::LogSize => format!(
-                "log size {} bytes exceeds limit {} bytes",
-                current, maximum
-            ),
+            LimitType::BtfTypes => format!("BTF types {} exceeds limit {}", current, maximum),
+            LimitType::LogSize => {
+                format!("log size {} bytes exceeds limit {} bytes", current, maximum)
+            }
         };
 
         VerifierError::ComplexityLimitExceeded(msg)
     }
 
     /// Add a warning.
-    fn add_warning(&mut self, limit_type: LimitType, current: u64, maximum: u64, percentage: f64) {
+    fn add_warning(&mut self, limit_type: LimitType, current: u64, maximum: u64, percentage: u32) {
         let message = format!(
-            "{:?} at {:.1}% of limit ({}/{})",
+            "{:?} at {}% of limit ({}/{})",
             limit_type, percentage, current, maximum
         );
         self.warnings.push(LimitWarning {
@@ -686,14 +669,29 @@ impl core::fmt::Display for ResourceSummary {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         writeln!(f, "Resource Usage Summary:")?;
         writeln!(f, "  Instructions: {}", self.insn_count)?;
-        writeln!(f, "  Complexity (insns processed): {}", self.insns_processed)?;
+        writeln!(
+            f,
+            "  Complexity (insns processed): {}",
+            self.insns_processed
+        )?;
         writeln!(f, "  Peak call depth: {}", self.peak_call_depth)?;
         writeln!(f, "  Subprograms: {}", self.subprog_count)?;
         writeln!(f, "  Tail calls: {}", self.tail_calls)?;
-        writeln!(f, "  Loops: {} ({} iterations)", self.loop_count, self.loop_iterations)?;
-        writeln!(f, "  States: {} created, {} pruned, {} peak",
-            self.states_created, self.states_pruned, self.peak_states)?;
-        writeln!(f, "  Max states at instruction: {}", self.max_states_at_insn)?;
+        writeln!(
+            f,
+            "  Loops: {} ({} iterations)",
+            self.loop_count, self.loop_iterations
+        )?;
+        writeln!(
+            f,
+            "  States: {} created, {} pruned, {} peak",
+            self.states_created, self.states_pruned, self.peak_states
+        )?;
+        writeln!(
+            f,
+            "  Max states at instruction: {}",
+            self.max_states_at_insn
+        )?;
         writeln!(f, "  Memory: {} KB", self.memory_bytes / 1024)?;
         writeln!(f, "  Time: {:.3}s", self.elapsed.as_secs_f64())?;
         if self.warning_count > 0 {

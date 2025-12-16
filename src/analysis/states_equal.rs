@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0
+
 //! Comprehensive state equivalence checking for pruning
 //!
 //! This module implements the full `states_equal` logic from the kernel verifier.
@@ -5,16 +7,13 @@
 //! exploration when we reach a state that's "at least as restrictive" as one we've
 //! already verified.
 
-
 use alloc::collections::BTreeMap as HashMap;
 
-use crate::state::reg_state::BpfRegState;
-use crate::state::verifier_state::{BpfVerifierState, BpfFuncState};
-use crate::state::stack_state::BpfStackState;
+use crate::core::types::{BpfRegType, BpfStackSlotType, BpfTypeFlag, BPF_REG_SIZE, MAX_BPF_REG};
 use crate::state::reference::BpfReferenceState;
-use crate::core::types::{
-    BpfRegType, BpfTypeFlag, BpfStackSlotType, BPF_REG_SIZE, MAX_BPF_REG,
-};
+use crate::state::reg_state::BpfRegState;
+use crate::state::stack_state::BpfStackState;
+use crate::state::verifier_state::{BpfFuncState, BpfVerifierState};
 
 /// ID mapping for comparing states with different ID assignments
 #[derive(Debug, Default)]
@@ -115,7 +114,7 @@ impl CompareConfig {
     }
 
     /// Config for range-within checking (iterators, may_goto, callbacks)
-    /// 
+    ///
     /// This mode is used when we want to check if the current state's
     /// scalar ranges are within the old state's ranges, but we don't
     /// require exact matches. This is important for:
@@ -143,10 +142,7 @@ impl CompareConfig {
 }
 
 /// Check if two verifier states are equivalent using default config
-pub fn states_equal(
-    cur: &BpfVerifierState,
-    old: &BpfVerifierState,
-) -> bool {
+pub fn states_equal(cur: &BpfVerifierState, old: &BpfVerifierState) -> bool {
     states_equal_with_config(cur, old, &CompareConfig::default())
 }
 
@@ -189,10 +185,9 @@ pub fn states_equal_with_idmap(
     }
 
     // Check references if configured
-    if config.check_refs
-        && !refs_equal(&cur.refs, &old.refs, idmap) {
-            return false;
-        }
+    if config.check_refs && !refs_equal(&cur.refs, &old.refs, idmap) {
+        return false;
+    }
 
     // Check lock state if configured
     if config.check_locks {
@@ -269,31 +264,17 @@ pub fn regsafe(
 
     // Type-specific checks
     match cur.reg_type {
-        BpfRegType::ScalarValue => {
-            regsafe_scalar(cur, old, config)
-        }
-        BpfRegType::PtrToStack => {
-            regsafe_ptr_to_stack(cur, old, config, idmap)
-        }
-        BpfRegType::PtrToMapValue |
-        BpfRegType::PtrToMapKey |
-        BpfRegType::ConstPtrToMap => {
+        BpfRegType::ScalarValue => regsafe_scalar(cur, old, config),
+        BpfRegType::PtrToStack => regsafe_ptr_to_stack(cur, old, config, idmap),
+        BpfRegType::PtrToMapValue | BpfRegType::PtrToMapKey | BpfRegType::ConstPtrToMap => {
             regsafe_ptr_to_map(cur, old, config, idmap)
         }
-        BpfRegType::PtrToCtx => {
-            regsafe_ptr_to_ctx(cur, old, config)
-        }
-        BpfRegType::PtrToPacket |
-        BpfRegType::PtrToPacketMeta |
-        BpfRegType::PtrToPacketEnd => {
+        BpfRegType::PtrToCtx => regsafe_ptr_to_ctx(cur, old, config),
+        BpfRegType::PtrToPacket | BpfRegType::PtrToPacketMeta | BpfRegType::PtrToPacketEnd => {
             regsafe_ptr_to_pkt(cur, old, config, idmap)
         }
-        BpfRegType::PtrToBtfId => {
-            regsafe_ptr_to_btf_id(cur, old, config, idmap)
-        }
-        BpfRegType::PtrToMem => {
-            regsafe_ptr_to_mem(cur, old, config, idmap)
-        }
+        BpfRegType::PtrToBtfId => regsafe_ptr_to_btf_id(cur, old, config, idmap),
+        BpfRegType::PtrToMem => regsafe_ptr_to_mem(cur, old, config, idmap),
         _ => {
             // For other pointer types, require exact match
             cur.off == old.off && cur.mem_size == old.mem_size
@@ -343,7 +324,7 @@ fn regsafe_scalar(cur: &BpfRegState, old: &BpfRegState, config: &CompareConfig) 
         // The semantics here: old represents a "superstate" that should encompass
         // all possible values that cur could take. If cur is within old's range,
         // we can safely prune because we've already explored the superstate.
-        
+
         // Check 64-bit unsigned bounds: old's range must contain cur's range
         if cur.umin_value < old.umin_value || cur.umax_value > old.umax_value {
             return false;
@@ -430,10 +411,9 @@ fn regsafe_ptr_to_stack(
     }
 
     // Check ID for NULL tracking
-    if old.type_flags.contains(BpfTypeFlag::PTR_MAYBE_NULL)
-        && !idmap.check_ids(cur.id, old.id) {
-            return false;
-        }
+    if old.type_flags.contains(BpfTypeFlag::PTR_MAYBE_NULL) && !idmap.check_ids(cur.id, old.id) {
+        return false;
+    }
 
     true
 }
@@ -473,20 +453,15 @@ fn regsafe_ptr_to_map(
     }
 
     // Check NULL tracking
-    if old.type_flags.contains(BpfTypeFlag::PTR_MAYBE_NULL)
-        && !idmap.check_ids(cur.id, old.id) {
-            return false;
-        }
+    if old.type_flags.contains(BpfTypeFlag::PTR_MAYBE_NULL) && !idmap.check_ids(cur.id, old.id) {
+        return false;
+    }
 
     true
 }
 
 /// Check pointer-to-ctx equivalence
-fn regsafe_ptr_to_ctx(
-    cur: &BpfRegState,
-    old: &BpfRegState,
-    config: &CompareConfig,
-) -> bool {
+fn regsafe_ptr_to_ctx(cur: &BpfRegState, old: &BpfRegState, config: &CompareConfig) -> bool {
     // Context pointer offsets must match exactly
     if cur.off != old.off {
         return false;
@@ -540,15 +515,13 @@ fn regsafe_ptr_to_btf_id(
     }
 
     // Check reference ID for acquired references
-    if old.ref_obj_id != 0
-        && !idmap.check_ids(cur.ref_obj_id, old.ref_obj_id) {
-            return false;
-        }
+    if old.ref_obj_id != 0 && !idmap.check_ids(cur.ref_obj_id, old.ref_obj_id) {
+        return false;
+    }
 
     // Check type flags
-    let trust_flags = BpfTypeFlag::PTR_TRUSTED 
-        | BpfTypeFlag::PTR_UNTRUSTED 
-        | BpfTypeFlag::PTR_MAYBE_NULL;
+    let trust_flags =
+        BpfTypeFlag::PTR_TRUSTED | BpfTypeFlag::PTR_UNTRUSTED | BpfTypeFlag::PTR_MAYBE_NULL;
 
     if config.exact() {
         (cur.type_flags & trust_flags) == (old.type_flags & trust_flags)
@@ -588,10 +561,9 @@ fn regsafe_ptr_to_mem(
     }
 
     // Check ID for NULL tracking
-    if old.type_flags.contains(BpfTypeFlag::PTR_MAYBE_NULL)
-        && !idmap.check_ids(cur.id, old.id) {
-            return false;
-        }
+    if old.type_flags.contains(BpfTypeFlag::PTR_MAYBE_NULL) && !idmap.check_ids(cur.id, old.id) {
+        return false;
+    }
 
     true
 }
@@ -710,11 +682,7 @@ fn refs_equal(
 }
 
 /// Check if two reference states are equivalent
-fn ref_state_equal(
-    cur: &BpfReferenceState,
-    old: &BpfReferenceState,
-    idmap: &mut IdMap,
-) -> bool {
+fn ref_state_equal(cur: &BpfReferenceState, old: &BpfReferenceState, idmap: &mut IdMap) -> bool {
     // Types must match
     if cur.ref_type != old.ref_type {
         return false;
@@ -757,11 +725,13 @@ pub fn states_maybe_looping(cur: &BpfVerifierState, old: &BpfVerifierState) -> b
             let cur_type = cur_slot.slot_type[BPF_REG_SIZE - 1];
             let old_type = old_slot.slot_type[BPF_REG_SIZE - 1];
 
-            if cur_type == BpfStackSlotType::Iter && old_type == BpfStackSlotType::Iter
-                && cur_slot.spilled_ptr.iter.depth != old_slot.spilled_ptr.iter.depth {
-                    // Different depths - making progress
-                    return false;
-                }
+            if cur_type == BpfStackSlotType::Iter
+                && old_type == BpfStackSlotType::Iter
+                && cur_slot.spilled_ptr.iter.depth != old_slot.spilled_ptr.iter.depth
+            {
+                // Different depths - making progress
+                return false;
+            }
         }
     }
 

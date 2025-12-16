@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0
+
 //! BPF Program Loading and Entry Point
 //!
 //! This module implements the main entry point for BPF program verification
@@ -14,21 +16,19 @@
 
 #![allow(missing_docs)]
 
-
 use alloc::{format, string::String, vec::Vec};
-
 
 use alloc::collections::BTreeMap as HashMap;
 
-use crate::core::types::*;
+use crate::analysis::cfg::ControlFlowGraph;
 use crate::core::error::{Result, VerifierError};
 use crate::core::log::LogLevel;
-use crate::state::reg_state::MapInfo;
-use crate::opt::patching::patch_map_pointers;
+use crate::core::types::*;
 use crate::opt::misc_fixups::{do_misc_fixups, FixupContext};
-use crate::analysis::cfg::ControlFlowGraph;
+use crate::opt::patching::patch_map_pointers;
+use crate::state::reg_state::MapInfo;
 
-use super::env::{VerifierEnv, VerifierCaps, BpfAttachType, SubprogInfoEntry};
+use super::env::{BpfAttachType, SubprogInfoEntry, VerifierCaps, VerifierEnv};
 use super::main_loop::MainVerifier;
 
 /// Information about a BPF map for FD resolution.
@@ -162,7 +162,10 @@ impl FdArray {
 
     /// Get all map FD to pointer pairs for patching.
     pub fn get_map_fd_ptrs(&self) -> Vec<(i32, u64)> {
-        self.maps.iter().map(|(fd, info)| (*fd, info.map_ptr)).collect()
+        self.maps
+            .iter()
+            .map(|(fd, info)| (*fd, info.map_ptr))
+            .collect()
     }
 
     /// Number of maps.
@@ -339,7 +342,7 @@ pub fn resolve_pseudo_ldimm64(
                 // BPF_PSEUDO_FUNC - Function reference (for BPF-to-BPF calls)
                 let target_offset = insn.imm;
                 let target = (i as i32 + target_offset + 1) as usize;
-                
+
                 if target >= insns.len() {
                     return Err(VerifierError::InvalidInsnIdx(target));
                 }
@@ -372,9 +375,7 @@ pub fn resolve_pseudo_ldimm64(
 /// and finding their targets.
 ///
 /// Corresponds to the kernel's `check_subprogs()`.
-pub fn detect_subprogs(
-    env: &mut VerifierEnv,
-) -> Result<()> {
+pub fn detect_subprogs(env: &mut VerifierEnv) -> Result<()> {
     let insns = &env.insns;
     let len = insns.len();
 
@@ -387,7 +388,7 @@ pub fn detect_subprogs(
         // Check for BPF_CALL with pseudo call (subprogram call)
         if insn.code == (BPF_JMP | BPF_CALL) && insn.src_reg == BPF_PSEUDO_CALL {
             let target = (i as i32 + insn.imm + 1) as usize;
-            
+
             if target >= len {
                 return Err(VerifierError::InvalidInsnIdx(target));
             }
@@ -400,7 +401,7 @@ pub fn detect_subprogs(
         // Also check LD_IMM64 with BPF_PSEUDO_FUNC
         if insn.code == (BPF_LD | BPF_IMM | BPF_DW) && insn.src_reg == BPF_PSEUDO_FUNC {
             let target = (i as i32 + insn.imm + 1) as usize;
-            
+
             if target >= len {
                 return Err(VerifierError::InvalidInsnIdx(target));
             }
@@ -560,11 +561,7 @@ pub fn bpf_check(
     options: &LoadOptions,
 ) -> Result<LoadResult> {
     // Create verifier environment
-    let mut env = VerifierEnv::new(
-        insns,
-        options.prog_type,
-        options.is_privileged,
-    )?;
+    let mut env = VerifierEnv::new(insns, options.prog_type, options.is_privileged)?;
 
     // Set options
     env.expected_attach_type = options.expected_attach_type;
@@ -573,11 +570,7 @@ pub fn bpf_check(
     env.prog_sleepable = options.prog_sleepable;
 
     // Phase 1: Resolve pseudo LD_IMM64 instructions
-    let used_maps = resolve_pseudo_ldimm64(
-        &mut env.insns,
-        fd_array,
-        &mut env.insn_aux,
-    )?;
+    let used_maps = resolve_pseudo_ldimm64(&mut env.insns, fd_array, &mut env.insn_aux)?;
 
     // Phase 2: Detect subprograms
     detect_subprogs(&mut env)?;
@@ -622,8 +615,8 @@ pub fn bpf_check(
         specialize_kfuncs: true,
     };
     let fixup_result = do_misc_fixups(&mut env.insns, &fixup_ctx)?;
-    let was_modified = fixup_result.insns_added != 0 
-        || fixup_result.map_lookups_inlined > 0 
+    let was_modified = fixup_result.insns_added != 0
+        || fixup_result.map_lookups_inlined > 0
         || fixup_result.loops_inlined > 0;
 
     // Phase 7: Patch map pointers
@@ -647,8 +640,8 @@ pub fn bpf_check(
 /// Simplified verification without FD resolution.
 ///
 /// This is useful for testing or when map FDs are already resolved.
-/// 
-/// Note: This is named `load_and_verify` to avoid conflict with `verify_program` 
+///
+/// Note: This is named `load_and_verify` to avoid conflict with `verify_program`
 /// in main_loop.rs which has a different signature.
 pub fn load_and_verify(
     insns: Vec<BpfInsn>,

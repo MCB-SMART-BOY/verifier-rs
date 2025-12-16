@@ -1,10 +1,10 @@
+// SPDX-License-Identifier: GPL-2.0
+
 //!
 
 //! This module implements verification of jump instruction sequences,
 
 //! including conditional jumps, unconditional jumps, and call instructions.
-
-
 
 use alloc::{format, vec::Vec};
 
@@ -82,7 +82,11 @@ impl JumpInfo {
     /// Create info for call
     pub fn call(src_idx: usize, is_pseudo: bool) -> Self {
         Self {
-            jump_type: if is_pseudo { JumpType::PseudoCall } else { JumpType::Call },
+            jump_type: if is_pseudo {
+                JumpType::PseudoCall
+            } else {
+                JumpType::Call
+            },
             src_idx,
             target_idx: None,
             fallthrough_idx: Some(src_idx + 1),
@@ -105,7 +109,7 @@ impl JumpInfo {
 /// Analyze jump instruction
 pub fn analyze_jump(insn: &BpfInsn, insn_idx: usize, insn_count: usize) -> Result<JumpInfo> {
     let class = insn.class();
-    
+
     if class != BPF_JMP && class != BPF_JMP32 {
         return Err(VerifierError::InvalidInstruction(insn_idx));
     }
@@ -118,9 +122,7 @@ pub fn analyze_jump(insn: &BpfInsn, insn_idx: usize, insn_count: usize) -> Resul
             let target = compute_jump_target(insn_idx, insn.off as i32, insn_count)?;
             Ok(JumpInfo::unconditional(insn_idx, target))
         }
-        BPF_EXIT => {
-            Ok(JumpInfo::exit(insn_idx))
-        }
+        BPF_EXIT => Ok(JumpInfo::exit(insn_idx)),
         BPF_CALL => {
             let is_pseudo = insn.src_reg == BPF_PSEUDO_CALL;
             Ok(JumpInfo::call(insn_idx, is_pseudo))
@@ -129,11 +131,11 @@ pub fn analyze_jump(insn: &BpfInsn, insn_idx: usize, insn_count: usize) -> Resul
             // Conditional jump
             let target = compute_jump_target(insn_idx, insn.off as i32, insn_count)?;
             let fallthrough = insn_idx + 1;
-            
+
             if fallthrough >= insn_count {
                 return Err(VerifierError::InvalidInstruction(insn_idx));
             }
-            
+
             Ok(JumpInfo::conditional(insn_idx, target, fallthrough))
         }
     }
@@ -142,11 +144,11 @@ pub fn analyze_jump(insn: &BpfInsn, insn_idx: usize, insn_count: usize) -> Resul
 /// Compute jump target from offset
 fn compute_jump_target(src: usize, off: i32, insn_count: usize) -> Result<usize> {
     let target = src as i64 + off as i64 + 1;
-    
+
     if target < 0 || target >= insn_count as i64 {
         return Err(VerifierError::InvalidJumpDestination(target as i32));
     }
-    
+
     Ok(target as usize)
 }
 
@@ -228,10 +230,19 @@ pub fn prove_condition_from_bounds(
 
     // Get bounds
     let (dst_umin, dst_umax, dst_smin, dst_smax) = if is_jmp32 {
-        (dst.u32_min_value as u64, dst.u32_max_value as u64,
-         dst.s32_min_value as i64, dst.s32_max_value as i64)
+        (
+            dst.u32_min_value as u64,
+            dst.u32_max_value as u64,
+            dst.s32_min_value as i64,
+            dst.s32_max_value as i64,
+        )
     } else {
-        (dst.umin_value, dst.umax_value, dst.smin_value, dst.smax_value)
+        (
+            dst.umin_value,
+            dst.umax_value,
+            dst.smin_value,
+            dst.smax_value,
+        )
     };
 
     let (src_umin, src_umax, src_smin, src_smax) = if is_reg {
@@ -239,14 +250,31 @@ pub fn prove_condition_from_bounds(
             return None;
         }
         if is_jmp32 {
-            (src.u32_min_value as u64, src.u32_max_value as u64,
-             src.s32_min_value as i64, src.s32_max_value as i64)
+            (
+                src.u32_min_value as u64,
+                src.u32_max_value as u64,
+                src.s32_min_value as i64,
+                src.s32_max_value as i64,
+            )
         } else {
-            (src.umin_value, src.umax_value, src.smin_value, src.smax_value)
+            (
+                src.umin_value,
+                src.umax_value,
+                src.smin_value,
+                src.smax_value,
+            )
         }
     } else {
-        let val = if is_jmp32 { imm as u32 as u64 } else { imm as i64 as u64 };
-        let sval = if is_jmp32 { imm as i32 as i64 } else { imm as i64 };
+        let val = if is_jmp32 {
+            imm as u32 as u64
+        } else {
+            imm as i64 as u64
+        };
+        let sval = if is_jmp32 {
+            imm as i32 as i64
+        } else {
+            imm as i64
+        };
         (val, val, sval, sval)
     };
 
@@ -578,7 +606,7 @@ pub fn collect_jump_targets(insns: &[BpfInsn]) -> Vec<usize> {
 
     for (idx, insn) in insns.iter().enumerate() {
         let class = insn.class();
-        
+
         if class != BPF_JMP && class != BPF_JMP32 {
             continue;
         }
@@ -693,7 +721,7 @@ pub struct MayGotoResult {
 }
 
 /// Check may_goto instruction
-/// 
+///
 /// may_goto provides bounded loop support. It's like a conditional jump that
 /// can be taken up to MAX_MAY_GOTO_DEPTH times, after which it must fall through.
 pub fn check_may_goto(
@@ -732,7 +760,7 @@ pub fn check_may_goto(
 }
 
 /// Process may_goto for state exploration
-/// 
+///
 /// Returns the states for both branches:
 /// - First state: goto taken (with incremented depth)
 /// - Second state: fall through (loop exit)
@@ -760,13 +788,10 @@ pub fn process_may_goto_branches(
 }
 
 /// Widen imprecise scalars when taking may_goto branch
-/// 
+///
 /// When the verifier takes a may_goto branch, it may need to widen
 /// scalar bounds to ensure loop convergence
-pub fn widen_scalars_for_may_goto(
-    regs: &mut [BpfRegState],
-    prev_regs: &[BpfRegState],
-) {
+pub fn widen_scalars_for_may_goto(regs: &mut [BpfRegState], prev_regs: &[BpfRegState]) {
     for (i, reg) in regs.iter_mut().enumerate() {
         if reg.reg_type != BpfRegType::ScalarValue {
             continue;
@@ -824,7 +849,7 @@ impl JumpInfo {
 // ============================================================================
 
 /// Check if instruction is an indirect jump (gotol/JA|X)
-/// 
+///
 /// Indirect jumps use R0 to determine the jump offset dynamically.
 /// The format is: JA|X with src_reg=0, imm=0, off=0, and R0 contains
 /// an index into a jump table.
@@ -834,7 +859,7 @@ pub fn is_indirect_jump(insn: &BpfInsn) -> bool {
 }
 
 /// Check reserved fields for indirect jump
-/// 
+///
 /// For BPF_JA|BPF_X (indirect jump), the following must hold:
 /// - src_reg must be BPF_REG_0
 /// - imm must be 0
@@ -866,11 +891,11 @@ pub struct IndirectJumpResult {
 }
 
 /// Check indirect jump instruction
-/// 
+///
 /// For indirect jumps, R0 must contain a scalar value with known bounds
 /// that maps to valid instruction indices. The verifier must explore
 /// all possible targets.
-/// 
+///
 /// This implements the kernel's `check_indirect_jump()` function.
 pub fn check_indirect_jump(
     r0: &BpfRegState,
@@ -895,9 +920,10 @@ pub fn check_indirect_jump(
     // If range is too large, reject as potentially unbounded
     const MAX_INDIRECT_JUMP_RANGE: u64 = 256;
     if max_off - min_off > MAX_INDIRECT_JUMP_RANGE {
-        return Err(VerifierError::TooComplex(
-            format!("indirect jump range {} too large", max_off - min_off)
-        ));
+        return Err(VerifierError::TooComplex(format!(
+            "indirect jump range {} too large",
+            max_off - min_off
+        )));
     }
 
     // Compute possible targets: insn_idx + 1 + R0
@@ -915,7 +941,7 @@ pub fn check_indirect_jump(
 
     if targets.is_empty() {
         return Err(VerifierError::InvalidJumpDestination(
-            (insn_idx + 1 + min_off as usize) as i32
+            (insn_idx + 1 + min_off as usize) as i32,
         ));
     }
 
@@ -935,10 +961,7 @@ pub fn check_indirect_jump(
 }
 
 /// Validate all indirect jump targets don't land in LD_IMM64 continuation
-pub fn validate_indirect_jump_targets(
-    targets: &[usize],
-    insns: &[BpfInsn],
-) -> Result<()> {
+pub fn validate_indirect_jump_targets(targets: &[usize], insns: &[BpfInsn]) -> Result<()> {
     for &target in targets {
         // Check target is not in the middle of a LD_IMM64
         if target > 0 {
@@ -957,7 +980,7 @@ pub fn validate_indirect_jump_targets(
 // ============================================================================
 
 /// Check if an error can be recovered with nospec barrier
-/// 
+///
 /// Some verification errors in speculative execution paths can be
 /// recovered by inserting a speculation barrier. This is used for
 /// Spectre mitigation.
@@ -965,7 +988,7 @@ pub fn error_recoverable_with_nospec(err: &VerifierError) -> bool {
     match err {
         // Pointer arithmetic errors in speculative path
         VerifierError::InvalidPointerArithmetic(_) => true,
-        // Memory access errors in speculative path  
+        // Memory access errors in speculative path
         VerifierError::InvalidMemoryAccess(_) => true,
         // Pointer comparison errors
         VerifierError::InvalidPointerComparison(_) => true,
@@ -975,7 +998,7 @@ pub fn error_recoverable_with_nospec(err: &VerifierError) -> bool {
 }
 
 /// Mark instruction as needing nospec barrier
-/// 
+///
 /// This is called when an error in speculative execution is recovered
 /// by inserting a speculation barrier.
 #[derive(Debug, Clone, Default)]

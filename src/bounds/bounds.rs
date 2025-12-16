@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0
+
 //! Signed and unsigned bounds tracking
 //!
 //! This module implements comprehensive bounds tracking for scalar values,
@@ -193,43 +195,56 @@ impl ScalarBounds {
         let mut result;
 
         match op {
-            0x00 => { // ADD
+            0x00 => {
+                // ADD
                 result = self.add(other, is_64)?;
             }
-            0x10 => { // SUB
+            0x10 => {
+                // SUB
                 result = self.sub(other, is_64)?;
             }
-            0x20 => { // MUL
+            0x20 => {
+                // MUL
                 result = self.mul(other, is_64)?;
             }
-            0x30 => { // DIV
+            0x30 => {
+                // DIV
                 result = self.div(other, is_64)?;
             }
-            0x40 => { // OR
+            0x40 => {
+                // OR
                 result = self.or(other);
             }
-            0x50 => { // AND
+            0x50 => {
+                // AND
                 result = self.and(other);
             }
-            0x60 => { // LSH
+            0x60 => {
+                // LSH
                 result = self.lsh(other, is_64)?;
             }
-            0x70 => { // RSH
+            0x70 => {
+                // RSH
                 result = self.rsh(other, is_64)?;
             }
-            0x80 => { // NEG
+            0x80 => {
+                // NEG
                 result = self.neg(is_64);
             }
-            0x90 => { // MOD
+            0x90 => {
+                // MOD
                 result = self.mod_op(other, is_64)?;
             }
-            0xa0 => { // XOR
+            0xa0 => {
+                // XOR
                 result = self.xor(other);
             }
-            0xb0 => { // MOV
+            0xb0 => {
+                // MOV
                 result = *other;
             }
-            0xc0 => { // ARSH
+            0xc0 => {
+                // ARSH
                 result = self.arsh(other, is_64)?;
             }
             _ => {
@@ -556,69 +571,79 @@ impl ScalarBounds {
     /// Adjust bounds after conditional jump (value comparison)
     pub fn adjust_for_cmp(&mut self, cmp_val: u64, op: u8, is_jmp_taken: bool) {
         match op {
-            0x10 => { // JEQ - equal
+            0x10 => {
+                // JEQ - equal
                 if is_jmp_taken {
                     *self = ScalarBounds::known(cmp_val);
                 }
                 // If not taken, we know they're not equal (no tight bound change)
             }
-            0x20 => { // JGT - greater than (unsigned)
+            0x20 => {
+                // JGT - greater than (unsigned)
                 if is_jmp_taken {
                     self.umin_value = self.umin_value.max(cmp_val + 1);
                 } else {
                     self.umax_value = self.umax_value.min(cmp_val);
                 }
             }
-            0x30 => { // JGE - greater or equal (unsigned)
+            0x30 => {
+                // JGE - greater or equal (unsigned)
                 if is_jmp_taken {
                     self.umin_value = self.umin_value.max(cmp_val);
                 } else if cmp_val > 0 {
                     self.umax_value = self.umax_value.min(cmp_val - 1);
                 }
             }
-            0x50 => { // JNE - not equal
+            0x50 => {
+                // JNE - not equal
                 if is_jmp_taken {
                     // We know they're not equal
                 } else {
                     *self = ScalarBounds::known(cmp_val);
                 }
             }
-            0x60 => { // JSGT - greater than (signed)
+            0x60 => {
+                // JSGT - greater than (signed)
                 if is_jmp_taken {
                     self.smin_value = self.smin_value.max(cmp_val as i64 + 1);
                 } else {
                     self.smax_value = self.smax_value.min(cmp_val as i64);
                 }
             }
-            0x70 => { // JSGE - greater or equal (signed)
+            0x70 => {
+                // JSGE - greater or equal (signed)
                 if is_jmp_taken {
                     self.smin_value = self.smin_value.max(cmp_val as i64);
                 } else {
                     self.smax_value = self.smax_value.min(cmp_val as i64 - 1);
                 }
             }
-            0xa0 => { // JLT - less than (unsigned)
+            0xa0 => {
+                // JLT - less than (unsigned)
                 if is_jmp_taken && cmp_val > 0 {
                     self.umax_value = self.umax_value.min(cmp_val - 1);
                 } else {
                     self.umin_value = self.umin_value.max(cmp_val);
                 }
             }
-            0xb0 => { // JLE - less or equal (unsigned)
+            0xb0 => {
+                // JLE - less or equal (unsigned)
                 if is_jmp_taken {
                     self.umax_value = self.umax_value.min(cmp_val);
                 } else {
                     self.umin_value = self.umin_value.max(cmp_val + 1);
                 }
             }
-            0xc0 => { // JSLT - less than (signed)
+            0xc0 => {
+                // JSLT - less than (signed)
                 if is_jmp_taken {
                     self.smax_value = self.smax_value.min(cmp_val as i64 - 1);
                 } else {
                     self.smin_value = self.smin_value.max(cmp_val as i64);
                 }
             }
-            0xd0 => { // JSLE - less or equal (signed)
+            0xd0 => {
+                // JSLE - less or equal (signed)
                 if is_jmp_taken {
                     self.smax_value = self.smax_value.min(cmp_val as i64);
                 } else {

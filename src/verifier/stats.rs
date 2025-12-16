@@ -6,8 +6,8 @@
 //! providing insights into program complexity, resource usage,
 //! and verification performance.
 
-use alloc::{format, string::String, vec::Vec};
 use alloc::collections::BTreeMap as HashMap;
+use alloc::{format, string::String, vec::Vec};
 use core::time::Duration;
 
 /// Statistics collected during verification
@@ -146,9 +146,9 @@ impl VerifierStats {
         self.insns_processed += 1;
 
         match class {
-            0x07 => self.insn_class_counts.alu64 += 1,  // BPF_ALU64
-            0x04 => self.insn_class_counts.alu32 += 1,  // BPF_ALU
-            0x01 => self.insn_class_counts.ldx += 1,    // BPF_LDX
+            0x07 => self.insn_class_counts.alu64 += 1, // BPF_ALU64
+            0x04 => self.insn_class_counts.alu32 += 1, // BPF_ALU
+            0x01 => self.insn_class_counts.ldx += 1,   // BPF_LDX
             0x03 => {
                 if is_atomic {
                     self.insn_class_counts.atomic += 1;
@@ -156,9 +156,9 @@ impl VerifierStats {
                     self.insn_class_counts.stx += 1;
                 }
             }
-            0x02 => self.insn_class_counts.st += 1,     // BPF_ST
-            0x05 => self.insn_class_counts.jmp += 1,    // BPF_JMP
-            0x06 => self.insn_class_counts.jmp32 += 1,  // BPF_JMP32
+            0x02 => self.insn_class_counts.st += 1,  // BPF_ST
+            0x05 => self.insn_class_counts.jmp += 1, // BPF_JMP
+            0x06 => self.insn_class_counts.jmp32 += 1, // BPF_JMP32
             0x00 => self.insn_class_counts.ld_imm64 += 1, // BPF_LD
             _ => {}
         }
@@ -279,73 +279,100 @@ impl VerifierStats {
         self.precision_backtrack_ops += 1;
     }
 
-    /// Get pruning efficiency (percentage of states pruned)
-    pub fn pruning_efficiency(&self) -> f64 {
+    /// Get pruning efficiency as percentage (0-100)
+    pub fn pruning_efficiency_percent(&self) -> u32 {
         if self.total_states == 0 {
-            return 0.0;
+            return 0;
         }
-        (self.states_pruned as f64 / self.total_states as f64) * 100.0
+        ((self.states_pruned * 100) / self.total_states) as u32
     }
 
-    /// Get average instructions per state
-    pub fn insns_per_state(&self) -> f64 {
+    /// Get average instructions per state (scaled by 100 for precision)
+    pub fn insns_per_state_scaled(&self) -> u64 {
         if self.total_states == 0 {
-            return 0.0;
+            return 0;
         }
-        self.insns_processed as f64 / self.total_states as f64
+        (self.insns_processed * 100) / self.total_states
     }
 
-    /// Get verification rate (instructions per second)
-    pub fn verification_rate(&self) -> f64 {
-        let secs = self.verification_time.as_secs_f64();
-        if secs == 0.0 {
-            return 0.0;
+    /// Get verification rate (instructions per millisecond)
+    pub fn verification_rate_per_ms(&self) -> u64 {
+        let ms = self.verification_time.as_millis() as u64;
+        if ms == 0 {
+            return self.insns_processed; // Assume 1ms if too fast
         }
-        self.insns_processed as f64 / secs
+        self.insns_processed / ms
     }
 
     /// Generate a summary report
     pub fn summary(&self) -> String {
         let mut s = String::new();
-        
+
         s.push_str("=== Verification Statistics ===\n\n");
-        
+
         s.push_str(&format!("Program Size: {} instructions\n", self.insn_count));
         s.push_str(&format!("Subprograms: {}\n", self.subprog_count));
-        s.push_str(&format!("Instructions Processed: {}\n", self.insns_processed));
-        s.push_str(&format!("Verification Time: {:.3}ms\n", 
-            self.verification_time.as_secs_f64() * 1000.0));
-        s.push_str(&format!("Verification Rate: {:.0} insns/sec\n\n", 
-            self.verification_rate()));
-        
+        s.push_str(&format!(
+            "Instructions Processed: {}\n",
+            self.insns_processed
+        ));
+        s.push_str(&format!(
+            "Verification Time: {}ms\n",
+            self.verification_time.as_millis()
+        ));
+        s.push_str(&format!(
+            "Verification Rate: {} insns/ms\n\n",
+            self.verification_rate_per_ms()
+        ));
+
         s.push_str("--- State Exploration ---\n");
         s.push_str(&format!("Total States: {}\n", self.total_states));
-        s.push_str(&format!("States Pruned: {} ({:.1}%)\n", 
-            self.states_pruned, self.pruning_efficiency()));
+        s.push_str(&format!(
+            "States Pruned: {} ({}%)\n",
+            self.states_pruned,
+            self.pruning_efficiency_percent()
+        ));
         s.push_str(&format!("Peak States: {}\n", self.peak_states));
-        s.push_str(&format!("Branches Explored: {}\n\n", self.branches_explored));
-        
+        s.push_str(&format!(
+            "Branches Explored: {}\n\n",
+            self.branches_explored
+        ));
+
         s.push_str("--- Call Statistics ---\n");
         s.push_str(&format!("Max Call Depth: {}\n", self.max_call_depth));
         s.push_str(&format!("Helper Calls: {}\n", self.helper_calls));
         s.push_str(&format!("Kfunc Calls: {}\n\n", self.kfunc_calls));
-        
+
         s.push_str("--- Memory Access ---\n");
-        s.push_str(&format!("Stack: {} reads, {} writes\n", 
-            self.mem_stats.stack_reads, self.mem_stats.stack_writes));
-        s.push_str(&format!("Map: {} reads, {} writes\n",
-            self.mem_stats.map_reads, self.mem_stats.map_writes));
-        s.push_str(&format!("Packet: {} reads, {} writes\n",
-            self.mem_stats.packet_reads, self.mem_stats.packet_writes));
+        s.push_str(&format!(
+            "Stack: {} reads, {} writes\n",
+            self.mem_stats.stack_reads, self.mem_stats.stack_writes
+        ));
+        s.push_str(&format!(
+            "Map: {} reads, {} writes\n",
+            self.mem_stats.map_reads, self.mem_stats.map_writes
+        ));
+        s.push_str(&format!(
+            "Packet: {} reads, {} writes\n",
+            self.mem_stats.packet_reads, self.mem_stats.packet_writes
+        ));
         s.push_str(&format!("Peak Stack: {} bytes\n\n", self.peak_stack_bytes));
-        
+
         s.push_str("--- Complexity Metrics ---\n");
-        s.push_str(&format!("Cyclomatic Complexity: {}\n", 
-            self.complexity.cyclomatic + 1));
-        s.push_str(&format!("Basic Blocks: {}\n", self.complexity.basic_block_count));
+        s.push_str(&format!(
+            "Cyclomatic Complexity: {}\n",
+            self.complexity.cyclomatic + 1
+        ));
+        s.push_str(&format!(
+            "Basic Blocks: {}\n",
+            self.complexity.basic_block_count
+        ));
         s.push_str(&format!("Bounded Loops: {}\n", self.bounded_loops));
-        s.push_str(&format!("Precision Backtracks: {}\n", self.precision_backtrack_ops));
-        
+        s.push_str(&format!(
+            "Precision Backtracks: {}\n",
+            self.precision_backtrack_ops
+        ));
+
         s
     }
 }
@@ -398,7 +425,7 @@ impl StatsCollector {
     pub fn new(insn_count: usize) -> Self {
         let mut stats = VerifierStats::new();
         stats.insn_count = insn_count;
-        
+
         Self {
             stats,
             insn_stats: HashMap::new(),
@@ -464,12 +491,16 @@ impl StatsCollector {
 
     /// Check if instruction is a force checkpoint
     pub fn is_force_checkpoint(&self, idx: usize) -> bool {
-        self.insn_stats.get(&idx).map_or(false, |s| s.is_force_checkpoint)
+        self.insn_stats
+            .get(&idx)
+            .map_or(false, |s| s.is_force_checkpoint)
     }
 
     /// Get hot instructions (most visited)
     pub fn hot_instructions(&self, top_n: usize) -> Vec<(usize, u32)> {
-        let mut visits: Vec<_> = self.insn_stats.iter()
+        let mut visits: Vec<_> = self
+            .insn_stats
+            .iter()
             .map(|(&idx, stats)| (idx, stats.visit_count))
             .collect();
         visits.sort_by(|a, b| b.1.cmp(&a.1));
@@ -479,7 +510,9 @@ impl StatsCollector {
 
     /// Get instructions with most states
     pub fn state_heavy_instructions(&self, top_n: usize) -> Vec<(usize, u32)> {
-        let mut states: Vec<_> = self.insn_stats.iter()
+        let mut states: Vec<_> = self
+            .insn_stats
+            .iter()
             .map(|(&idx, stats)| (idx, stats.state_count))
             .collect();
         states.sort_by(|a, b| b.1.cmp(&a.1));
@@ -490,17 +523,17 @@ impl StatsCollector {
     /// Generate detailed report
     pub fn detailed_report(&self) -> String {
         let mut s = self.stats.summary();
-        
+
         s.push_str("\n=== Hot Instructions ===\n");
         for (idx, count) in self.hot_instructions(10) {
             s.push_str(&format!("  insn {}: {} visits\n", idx, count));
         }
-        
+
         s.push_str("\n=== State-Heavy Instructions ===\n");
         for (idx, count) in self.state_heavy_instructions(10) {
             s.push_str(&format!("  insn {}: {} states\n", idx, count));
         }
-        
+
         s
     }
 }

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0
+
 //!
 
 //! This module implements safety checks for signed division operations in BPF.
@@ -6,14 +8,12 @@
 
 //! undefined behavior.
 
-
-
 use alloc::vec::Vec;
 
-use crate::core::types::*;
-use crate::state::reg_state::BpfRegState;
 use crate::bounds::bounds::ScalarBounds;
 use crate::core::error::{Result, VerifierError};
+use crate::core::types::*;
+use crate::state::reg_state::BpfRegState;
 
 /// Signed division safety result
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -29,10 +29,7 @@ pub enum SdivSafety {
 }
 
 /// Check signed division safety for 64-bit
-pub fn check_sdiv64_safety(
-    dividend: &BpfRegState,
-    divisor: &BpfRegState,
-) -> SdivSafety {
+pub fn check_sdiv64_safety(dividend: &BpfRegState, divisor: &BpfRegState) -> SdivSafety {
     let mut result = SdivSafety::Safe;
 
     // Check for division by zero
@@ -52,10 +49,7 @@ pub fn check_sdiv64_safety(
 }
 
 /// Check signed division safety for 32-bit
-pub fn check_sdiv32_safety(
-    dividend: &BpfRegState,
-    divisor: &BpfRegState,
-) -> SdivSafety {
+pub fn check_sdiv32_safety(dividend: &BpfRegState, divisor: &BpfRegState) -> SdivSafety {
     let mut result = SdivSafety::Safe;
 
     // Check for division by zero
@@ -117,8 +111,7 @@ fn divisor_might_be_zero_32(divisor: &BpfRegState) -> bool {
 
 /// Check if 64-bit signed division might overflow (INT64_MIN / -1)
 fn might_overflow_sdiv64(dividend: &BpfRegState, divisor: &BpfRegState) -> bool {
-    if dividend.reg_type != BpfRegType::ScalarValue ||
-       divisor.reg_type != BpfRegType::ScalarValue {
+    if dividend.reg_type != BpfRegType::ScalarValue || divisor.reg_type != BpfRegType::ScalarValue {
         return true;
     }
 
@@ -154,8 +147,7 @@ fn might_overflow_sdiv64(dividend: &BpfRegState, divisor: &BpfRegState) -> bool 
 
 /// Check if 32-bit signed division might overflow (INT32_MIN / -1)
 fn might_overflow_sdiv32(dividend: &BpfRegState, divisor: &BpfRegState) -> bool {
-    if dividend.reg_type != BpfRegType::ScalarValue ||
-       divisor.reg_type != BpfRegType::ScalarValue {
+    if dividend.reg_type != BpfRegType::ScalarValue || divisor.reg_type != BpfRegType::ScalarValue {
         return true;
     }
 
@@ -193,7 +185,7 @@ pub fn compute_sdiv_bounds(
         // For signed division, result depends on signs of both operands
         if divisor.is_const() && divisor.const_value().unwrap_or(0) != 0 {
             let d = divisor.smin_value;
-            
+
             if dividend.is_const() {
                 // Both constant - compute directly
                 let n = dividend.smin_value;
@@ -222,7 +214,7 @@ pub fn compute_sdiv_bounds(
         // 32-bit version
         if divisor.u32_min_value == divisor.u32_max_value && divisor.u32_min_value != 0 {
             let d = divisor.s32_min_value;
-            
+
             if dividend.u32_min_value == dividend.u32_max_value {
                 let n = dividend.s32_min_value;
                 if d == -1 && n == i32::MIN {
@@ -256,11 +248,11 @@ pub fn compute_smod_bounds(
 
     // Signed modulo result has same sign as dividend
     // and |result| < |divisor|
-    
+
     if is_64 {
         if divisor.is_const() && divisor.const_value().unwrap_or(0) != 0 {
             let d_abs = divisor.smin_value.abs();
-            
+
             // Result is in range (-(|d|-1), |d|-1)
             result.smin_value = -(d_abs - 1);
             result.smax_value = d_abs - 1;
@@ -269,7 +261,7 @@ pub fn compute_smod_bounds(
             if dividend.smin_value >= 0 {
                 result.smin_value = 0;
             }
-            
+
             // If dividend is non-positive, result is non-positive
             if dividend.smax_value <= 0 {
                 result.smax_value = 0;
@@ -277,14 +269,14 @@ pub fn compute_smod_bounds(
         }
     } else if divisor.s32_min_value == divisor.s32_max_value && divisor.s32_min_value != 0 {
         let d_abs = divisor.s32_min_value.abs();
-        
+
         result.s32_min_value = -(d_abs - 1);
         result.s32_max_value = d_abs - 1;
 
         if dividend.s32_min_value >= 0 {
             result.s32_min_value = 0;
         }
-        
+
         if dividend.s32_max_value <= 0 {
             result.s32_max_value = 0;
         }
@@ -295,11 +287,7 @@ pub fn compute_smod_bounds(
 }
 
 /// Check and fix signed division instruction
-pub fn check_sdiv_insn(
-    dst: &BpfRegState,
-    src: &BpfRegState,
-    is_64: bool,
-) -> Result<SdivSafety> {
+pub fn check_sdiv_insn(dst: &BpfRegState, src: &BpfRegState, is_64: bool) -> Result<SdivSafety> {
     let safety = if is_64 {
         check_sdiv64_safety(dst, src)
     } else {
@@ -317,9 +305,7 @@ pub fn check_sdiv_insn(
             // but we should warn
             Ok(safety)
         }
-        SdivSafety::Unsafe => {
-            Err(VerifierError::DivisionByZero)
-        }
+        SdivSafety::Unsafe => Err(VerifierError::DivisionByZero),
     }
 }
 
@@ -340,13 +326,13 @@ pub fn analyze_divisions(insns: &[BpfInsn]) -> Vec<DivPatch> {
 
     for (idx, insn) in insns.iter().enumerate() {
         let class = insn.class();
-        
+
         if class != BPF_ALU && class != BPF_ALU64 {
             continue;
         }
 
         let op = insn.code & 0xf0;
-        
+
         // Check for DIV or MOD
         if op != BPF_DIV && op != BPF_MOD {
             continue;

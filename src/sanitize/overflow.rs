@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0
+
 //! Pointer overflow check patches
 //!
 //! This module implements overflow detection and patching for pointer arithmetic
@@ -9,7 +11,6 @@
 //! even under speculative execution, preventing Spectre-style attacks.
 
 #![allow(missing_docs)]
-
 
 use alloc::{string::String, vec::Vec};
 
@@ -164,68 +165,71 @@ pub fn analyze_ptr_overflow(
     allow_ptr_leaks: bool,
 ) -> Result<OverflowAnalysis> {
     let mut analysis = OverflowAnalysis::default();
-    
+
     let dst_reg = insn.dst_reg as usize;
     let src_type = insn.code & 0x08;
     let opcode = insn.code & 0xf0;
-    
+
     // Only analyze ADD and SUB
     if opcode != BPF_ADD && opcode != BPF_SUB {
         return Ok(analysis);
     }
-    
-    let dst = state.reg(dst_reg)
+
+    let dst = state
+        .reg(dst_reg)
         .ok_or(VerifierError::InvalidRegister(dst_reg as u8))?;
-    
+
     // Only analyze pointer arithmetic
     if !dst.is_pointer() {
         return Ok(analysis);
     }
-    
+
     let direction = if opcode == BPF_ADD {
         PtrAluDirection::Add
     } else {
         PtrAluDirection::Sub
     };
-    
+
     // Get scalar operand bounds
     let (smin, smax, umin, umax) = if src_type == BPF_X {
         let src_reg = insn.src_reg as usize;
-        let src = state.reg(src_reg)
+        let src = state
+            .reg(src_reg)
             .ok_or(VerifierError::InvalidRegister(src_reg as u8))?;
-        
+
         if src.is_pointer() {
             // ptr - ptr case handled elsewhere
             return Ok(analysis);
         }
-        
-        (src.smin_value, src.smax_value, src.umin_value, src.umax_value)
+
+        (
+            src.smin_value,
+            src.smax_value,
+            src.umin_value,
+            src.umax_value,
+        )
     } else {
         let imm = insn.imm as i64;
         (imm, imm, imm as u64, imm as u64)
     };
-    
+
     // Check for overflow based on operation type
     let overflow_type = match direction {
-        PtrAluDirection::Add => {
-            analyze_add_overflow(dst, smin, smax, umin, umax)
-        }
-        PtrAluDirection::Sub => {
-            analyze_sub_overflow(dst, smin, smax, umin, umax)
-        }
+        PtrAluDirection::Add => analyze_add_overflow(dst, smin, smax, umin, umax),
+        PtrAluDirection::Sub => analyze_sub_overflow(dst, smin, smax, umin, umax),
     };
-    
+
     analysis.overflow_type = overflow_type;
     analysis.can_overflow = overflow_type != OverflowType::None;
-    
+
     // If overflow is possible, we need a patch
     if analysis.can_overflow {
         analysis.needs_patch = !allow_ptr_leaks;
-        
+
         // Compute the limit for bounds checking
         let limit = compute_overflow_limit(dst, direction, umax, smin)?;
         analysis.alu_limit = limit;
-        
+
         // Generate the patch
         if analysis.needs_patch {
             let mut patch = OverflowPatch::new(insn_idx, direction);
@@ -234,23 +238,23 @@ pub fn analyze_ptr_overflow(
             patch.ptr_type = dst.reg_type;
             patch.umax_limit = limit;
             patch.smin_limit = smin;
-            
+
             if src_type == BPF_X {
                 patch.scalar_reg = insn.src_reg;
             } else {
                 patch.imm = insn.imm as i64;
             }
-            
+
             // Generate patch instructions
             patch.patch_insns = generate_overflow_check_insns(&patch);
-            
+
             analysis.patch = Some(patch);
         }
     }
-    
+
     // Check if the bounds are provably safe
     analysis.is_safe = !analysis.can_overflow || is_overflow_safe(dst, direction, umax, smin);
-    
+
     Ok(analysis)
 }
 
@@ -264,12 +268,12 @@ fn analyze_add_overflow(
 ) -> OverflowType {
     let mut has_unsigned = false;
     let mut has_signed = false;
-    
+
     // Check unsigned overflow: ptr + offset might wrap
     if check_add_overflow_u64(ptr.umax_value, umax) {
         has_unsigned = true;
     }
-    
+
     // Check signed overflow
     if check_add_overflow_i64(ptr.smax_value, smax) {
         has_signed = true;
@@ -277,7 +281,7 @@ fn analyze_add_overflow(
     if check_add_overflow_i64(ptr.smin_value, smin) {
         has_signed = true;
     }
-    
+
     match (has_unsigned, has_signed) {
         (false, false) => OverflowType::None,
         (true, false) => OverflowType::Unsigned,
@@ -296,12 +300,12 @@ fn analyze_sub_overflow(
 ) -> OverflowType {
     let mut has_unsigned = false;
     let mut has_signed = false;
-    
+
     // Check unsigned underflow: ptr - offset might go negative
     if check_sub_underflow_u64(ptr.umin_value, umax) {
         has_unsigned = true;
     }
-    
+
     // Check signed overflow
     if check_sub_overflow_i64(ptr.smin_value, smax) {
         has_signed = true;
@@ -309,7 +313,7 @@ fn analyze_sub_overflow(
     if check_sub_overflow_i64(ptr.smax_value, smin) {
         has_signed = true;
     }
-    
+
     match (has_unsigned, has_signed) {
         (false, false) => OverflowType::None,
         (true, false) => OverflowType::Unsigned,
@@ -330,7 +334,7 @@ fn compute_overflow_limit(
             // Stack: limit is distance from current offset to stack bottom
             let cur_off = ptr.off as i64;
             let max_stack = MAX_BPF_STACK as i64;
-            
+
             match direction {
                 PtrAluDirection::Add => {
                     // Adding to stack pointer: can't go above frame (0)
@@ -356,7 +360,7 @@ fn compute_overflow_limit(
             if let Some(ref map) = ptr.map_ptr {
                 let cur_off = ptr.off as u64;
                 let value_size = map.value_size as u64;
-                
+
                 match direction {
                     PtrAluDirection::Add => {
                         if cur_off >= value_size {
@@ -400,7 +404,7 @@ fn is_overflow_safe(
         BpfRegType::PtrToStack => {
             let cur_off = ptr.off as i64;
             let max_stack = MAX_BPF_STACK as i64;
-            
+
             match direction {
                 PtrAluDirection::Add => {
                     // Safe if adding umax stays below 0
@@ -421,14 +425,10 @@ fn is_overflow_safe(
             if let Some(ref map) = ptr.map_ptr {
                 let cur_off = ptr.off as i64;
                 let value_size = map.value_size as i64;
-                
+
                 match direction {
-                    PtrAluDirection::Add => {
-                        cur_off + (umax_offset as i64) <= value_size
-                    }
-                    PtrAluDirection::Sub => {
-                        cur_off - ((-smin_offset) as i64) >= 0
-                    }
+                    PtrAluDirection::Add => cur_off + (umax_offset as i64) <= value_size,
+                    PtrAluDirection::Sub => cur_off - ((-smin_offset) as i64) >= 0,
                 }
             } else {
                 false
@@ -450,7 +450,7 @@ fn is_overflow_safe(
 /// 2. If overflow would occur, mask the result to prevent OOB access
 fn generate_overflow_check_insns(patch: &OverflowPatch) -> Vec<BpfInsn> {
     let mut insns = Vec::new();
-    
+
     match patch.overflow_type {
         OverflowType::None => return insns,
         OverflowType::Unsigned | OverflowType::Both => {
@@ -458,28 +458,28 @@ fn generate_overflow_check_insns(patch: &OverflowPatch) -> Vec<BpfInsn> {
             insns.extend(generate_unsigned_overflow_check(patch));
         }
         OverflowType::Signed => {
-            // Generate signed overflow check  
+            // Generate signed overflow check
             insns.extend(generate_signed_overflow_check(patch));
         }
     }
-    
+
     insns
 }
 
 /// Generate unsigned overflow check instructions
 fn generate_unsigned_overflow_check(patch: &OverflowPatch) -> Vec<BpfInsn> {
     let mut insns = Vec::new();
-    
+
     // Strategy: Use conditional to zero out pointer if overflow detected
     // This prevents speculative execution from accessing invalid memory
-    
+
     // For ptr + offset:
     // 1. tmp = limit - offset
     // 2. tmp >>= 63 (sign bit: 0 if no overflow, -1 if overflow)
     // 3. ptr &= tmp (zeros ptr if overflow)
-    
+
     let scratch_reg: u8 = BPF_REG_AX; // Use AX as scratch
-    
+
     if patch.scalar_reg != 0 {
         // Register operand
         // r_ax = limit
@@ -490,7 +490,7 @@ fn generate_unsigned_overflow_check(patch: &OverflowPatch) -> Vec<BpfInsn> {
             0,
             patch.umax_limit as i32,
         ));
-        
+
         // r_ax -= scalar_reg
         insns.push(BpfInsn::new(
             BPF_ALU64 | BPF_SUB | BPF_X,
@@ -502,7 +502,7 @@ fn generate_unsigned_overflow_check(patch: &OverflowPatch) -> Vec<BpfInsn> {
     } else {
         // Immediate operand
         let diff = patch.umax_limit as i64 - patch.imm;
-        
+
         insns.push(BpfInsn::new(
             BPF_ALU64 | BPF_MOV | BPF_K,
             scratch_reg,
@@ -511,7 +511,7 @@ fn generate_unsigned_overflow_check(patch: &OverflowPatch) -> Vec<BpfInsn> {
             diff as i32,
         ));
     }
-    
+
     // r_ax >>= 63 (arithmetic right shift to get sign)
     insns.push(BpfInsn::new(
         BPF_ALU64 | BPF_ARSH | BPF_K,
@@ -520,7 +520,7 @@ fn generate_unsigned_overflow_check(patch: &OverflowPatch) -> Vec<BpfInsn> {
         0,
         63,
     ));
-    
+
     // ptr &= r_ax (mask pointer if overflow)
     insns.push(BpfInsn::new(
         BPF_ALU64 | BPF_AND | BPF_X,
@@ -529,22 +529,22 @@ fn generate_unsigned_overflow_check(patch: &OverflowPatch) -> Vec<BpfInsn> {
         0,
         0,
     ));
-    
+
     insns
 }
 
 /// Generate signed overflow check instructions
 fn generate_signed_overflow_check(patch: &OverflowPatch) -> Vec<BpfInsn> {
     let mut insns = Vec::new();
-    
+
     // For signed overflow, we need to check both directions
     let scratch_reg: u8 = BPF_REG_AX;
-    
+
     match patch.direction {
         PtrAluDirection::Add => {
             // Check if ptr + offset overflows positively
             // if (offset > 0 && ptr > MAX - offset) overflow
-            
+
             if patch.scalar_reg != 0 {
                 // Compare scalar_reg against limit
                 insns.push(BpfInsn::new(
@@ -554,7 +554,7 @@ fn generate_signed_overflow_check(patch: &OverflowPatch) -> Vec<BpfInsn> {
                     0,
                     patch.umax_limit as i32,
                 ));
-                
+
                 insns.push(BpfInsn::new(
                     BPF_ALU64 | BPF_SUB | BPF_X,
                     scratch_reg,
@@ -562,7 +562,7 @@ fn generate_signed_overflow_check(patch: &OverflowPatch) -> Vec<BpfInsn> {
                     0,
                     0,
                 ));
-                
+
                 insns.push(BpfInsn::new(
                     BPF_ALU64 | BPF_ARSH | BPF_K,
                     scratch_reg,
@@ -570,7 +570,7 @@ fn generate_signed_overflow_check(patch: &OverflowPatch) -> Vec<BpfInsn> {
                     0,
                     63,
                 ));
-                
+
                 insns.push(BpfInsn::new(
                     BPF_ALU64 | BPF_AND | BPF_X,
                     patch.ptr_reg,
@@ -583,7 +583,7 @@ fn generate_signed_overflow_check(patch: &OverflowPatch) -> Vec<BpfInsn> {
         PtrAluDirection::Sub => {
             // Check if ptr - offset underflows
             // if (offset > ptr) underflow
-            
+
             if patch.scalar_reg != 0 {
                 // r_ax = ptr
                 insns.push(BpfInsn::new(
@@ -593,7 +593,7 @@ fn generate_signed_overflow_check(patch: &OverflowPatch) -> Vec<BpfInsn> {
                     0,
                     0,
                 ));
-                
+
                 // r_ax -= scalar_reg
                 insns.push(BpfInsn::new(
                     BPF_ALU64 | BPF_SUB | BPF_X,
@@ -602,7 +602,7 @@ fn generate_signed_overflow_check(patch: &OverflowPatch) -> Vec<BpfInsn> {
                     0,
                     0,
                 ));
-                
+
                 // r_ax >>= 63
                 insns.push(BpfInsn::new(
                     BPF_ALU64 | BPF_ARSH | BPF_K,
@@ -611,7 +611,7 @@ fn generate_signed_overflow_check(patch: &OverflowPatch) -> Vec<BpfInsn> {
                     0,
                     63,
                 ));
-                
+
                 // ptr &= r_ax
                 insns.push(BpfInsn::new(
                     BPF_ALU64 | BPF_AND | BPF_X,
@@ -623,7 +623,7 @@ fn generate_signed_overflow_check(patch: &OverflowPatch) -> Vec<BpfInsn> {
             }
         }
     }
-    
+
     insns
 }
 
@@ -647,30 +647,30 @@ impl OverflowPatchSet {
     pub fn new() -> Self {
         Self::default()
     }
-    
+
     /// Add a patch to the set
     pub fn add_patch(&mut self, patch: OverflowPatch) {
         self.added_insn_count += patch.patch_insns.len();
         self.patches.push(patch);
     }
-    
+
     /// Check if any patches are needed
     pub fn needs_patching(&self) -> bool {
         !self.patches.is_empty()
     }
-    
+
     /// Get total patches count
     pub fn patch_count(&self) -> usize {
         self.patches.len()
     }
-    
+
     /// Compute the instruction index mapping after patching
     pub fn compute_insn_map(&mut self, original_len: usize) {
         self.insn_map = Vec::with_capacity(original_len);
-        
+
         let mut offset = 0usize;
         let mut patch_iter = self.patches.iter().peekable();
-        
+
         for i in 0..original_len {
             // Add any patches before this instruction
             while let Some(patch) = patch_iter.peek() {
@@ -684,16 +684,16 @@ impl OverflowPatchSet {
             self.insn_map.push(i + offset);
         }
     }
-    
+
     /// Apply patches to instruction array
     pub fn apply_patches(&self, insns: &[BpfInsn]) -> Vec<BpfInsn> {
         let mut result = Vec::with_capacity(insns.len() + self.added_insn_count);
-        
+
         let mut patches_by_idx: Vec<_> = self.patches.iter().collect();
         patches_by_idx.sort_by_key(|p| p.insn_idx);
-        
+
         let mut patch_iter = patches_by_idx.into_iter().peekable();
-        
+
         for (i, insn) in insns.iter().enumerate() {
             // Insert any patches before this instruction
             while let Some(patch) = patch_iter.peek() {
@@ -706,7 +706,7 @@ impl OverflowPatchSet {
             }
             result.push(*insn);
         }
-        
+
         result
     }
 }
@@ -718,16 +718,16 @@ pub fn analyze_program_overflow(
     allow_ptr_leaks: bool,
 ) -> Result<OverflowPatchSet> {
     let mut patch_set = OverflowPatchSet::new();
-    
+
     for (idx, insn) in insns.iter().enumerate() {
         let class = insn.class();
-        
+
         if class == BPF_ALU || class == BPF_ALU64 {
             let opcode = insn.code & 0xf0;
-            
+
             if opcode == BPF_ADD || opcode == BPF_SUB {
                 let analysis = analyze_ptr_overflow(state, insn, idx, allow_ptr_leaks)?;
-                
+
                 if analysis.needs_patch {
                     if let Some(patch) = analysis.patch {
                         patch_set.add_patch(patch);
@@ -736,11 +736,11 @@ pub fn analyze_program_overflow(
             }
         }
     }
-    
+
     if patch_set.needs_patching() {
         patch_set.compute_insn_map(insns.len());
     }
-    
+
     Ok(patch_set)
 }
 
@@ -773,7 +773,7 @@ impl Default for PtrAluSanitizeResult {
 }
 
 /// Full pointer ALU sanitization check
-/// 
+///
 /// Combines overflow checking with Spectre mitigation for complete safety.
 pub fn sanitize_ptr_alu_full(
     state: &BpfVerifierState,
@@ -782,23 +782,23 @@ pub fn sanitize_ptr_alu_full(
     allow_ptr_leaks: bool,
 ) -> Result<PtrAluSanitizeResult> {
     let mut result = PtrAluSanitizeResult::default();
-    
+
     // First, analyze for overflow
     let overflow = analyze_ptr_overflow(state, insn, insn_idx, allow_ptr_leaks)?;
-    
+
     // If overflow is certain and bounds prove it's invalid, reject
     if overflow.can_overflow && !overflow.is_safe && overflow.error.is_some() {
         result.reject = true;
         result.reject_reason = overflow.error.clone();
     }
-    
+
     // Collect patches from overflow analysis
     if let Some(ref patch) = overflow.patch {
         result.patches.extend(patch.patch_insns.iter().cloned());
     }
-    
+
     result.overflow = overflow;
-    
+
     Ok(result)
 }
 
@@ -828,7 +828,11 @@ impl OverflowAuxData {
             needs_overflow_check: analysis.needs_patch,
             overflow_type: analysis.overflow_type,
             alu_limit: analysis.alu_limit,
-            patch_count: analysis.patch.as_ref().map(|p| p.patch_insns.len()).unwrap_or(0),
+            patch_count: analysis
+                .patch
+                .as_ref()
+                .map(|p| p.patch_insns.len())
+                .unwrap_or(0),
             speculative_only: false,
         }
     }

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0
+
 //! Kernel function (kfunc) support
 //!
 //! This module implements verification for kernel functions that can be
@@ -6,19 +8,16 @@
 
 #![allow(missing_docs)] // Kfunc internals
 
-
 use alloc::{format, string::String, vec, vec::Vec};
 
+use alloc::collections::BTreeMap as HashMap;
 
-use alloc::collections::{BTreeMap as HashMap};
-
-use crate::core::types::*;
 use crate::btf::btf::BtfFuncProto;
-use crate::state::verifier_state::BpfVerifierState;
-use crate::state::reference::ReferenceManager;
-use crate::core::error::{Result, VerifierError};
 use crate::check::sleepable::check_kfunc_sleepable_compat;
-
+use crate::core::error::{Result, VerifierError};
+use crate::core::types::*;
+use crate::state::reference::ReferenceManager;
+use crate::state::verifier_state::BpfVerifierState;
 
 /// Maximum number of kfunc descriptors
 pub const MAX_KFUNC_DESCS: usize = 256;
@@ -78,8 +77,7 @@ impl Default for KfuncParamDesc {
 }
 
 /// Kfunc descriptor
-#[derive(Debug, Clone)]
-#[derive(Default)]
+#[derive(Debug, Clone, Default)]
 pub struct KfuncDesc {
     /// BTF ID of the function
     pub btf_id: u32,
@@ -130,7 +128,6 @@ pub enum KfuncRetType {
     AcquiredPtr,
 }
 
-
 /// Kfunc registry
 #[derive(Debug, Default)]
 pub struct KfuncRegistry {
@@ -149,16 +146,16 @@ impl KfuncRegistry {
     pub fn register(&mut self, desc: KfuncDesc) -> Result<()> {
         if self.descs.len() >= MAX_KFUNC_DESCS {
             return Err(VerifierError::ResourceLimitExceeded(
-                "too many kfuncs".into()
+                "too many kfuncs".into(),
             ));
         }
 
         let btf_id = desc.btf_id;
         let name = desc.name.clone();
-        
+
         self.names.insert(name, btf_id);
         self.descs.insert(btf_id, desc);
-        
+
         Ok(())
     }
 
@@ -169,8 +166,7 @@ impl KfuncRegistry {
 
     /// Find kfunc by name
     pub fn find_by_name(&self, name: &str) -> Option<&KfuncDesc> {
-        self.names.get(name)
-            .and_then(|id| self.descs.get(id))
+        self.names.get(name).and_then(|id| self.descs.get(id))
     }
 
     /// Check if kfunc exists
@@ -180,19 +176,23 @@ impl KfuncRegistry {
 
     /// Find kfunc by BTF ID, checking program type compatibility
     pub fn find_by_id_for_prog(&self, btf_id: u32, prog_type: BpfProgType) -> Option<&KfuncDesc> {
-        self.descs.get(&btf_id).filter(|desc| desc.is_allowed_for_prog_type(prog_type))
+        self.descs
+            .get(&btf_id)
+            .filter(|desc| desc.is_allowed_for_prog_type(prog_type))
     }
 
     /// Find kfunc by name, checking program type compatibility
     pub fn find_by_name_for_prog(&self, name: &str, prog_type: BpfProgType) -> Option<&KfuncDesc> {
-        self.names.get(name)
+        self.names
+            .get(name)
             .and_then(|id| self.descs.get(id))
             .filter(|desc| desc.is_allowed_for_prog_type(prog_type))
     }
 
     /// Get all kfuncs allowed for a program type
     pub fn get_allowed_for_prog(&self, prog_type: BpfProgType) -> Vec<&KfuncDesc> {
-        self.descs.values()
+        self.descs
+            .values()
             .filter(|desc| desc.is_allowed_for_prog_type(prog_type))
             .collect()
     }
@@ -206,7 +206,8 @@ impl KfuncRegistry {
             flags: KfuncFlags::default(),
             ret_type: KfuncRetType::Void,
             ..Default::default()
-        }).ok();
+        })
+        .ok();
 
         // bpf_rcu_read_unlock - no params, no return
         self.register(KfuncDesc {
@@ -215,7 +216,8 @@ impl KfuncRegistry {
             flags: KfuncFlags::default(),
             ret_type: KfuncRetType::Void,
             ..Default::default()
-        }).ok();
+        })
+        .ok();
 
         // bpf_obj_new_impl(u64 local_type_id, u64 meta) -> void*
         self.register(KfuncDesc {
@@ -240,7 +242,8 @@ impl KfuncRegistry {
             ],
             ret_type: KfuncRetType::AcquiredPtr,
             ..Default::default()
-        }).ok();
+        })
+        .ok();
 
         // bpf_obj_drop_impl(void *p, void *meta) -> void
         self.register(KfuncDesc {
@@ -265,7 +268,8 @@ impl KfuncRegistry {
             ],
             ret_type: KfuncRetType::Void,
             ..Default::default()
-        }).ok();
+        })
+        .ok();
 
         // bpf_list_push_front
         self.register(KfuncDesc {
@@ -276,7 +280,8 @@ impl KfuncRegistry {
                 ..Default::default()
             },
             ..Default::default()
-        }).ok();
+        })
+        .ok();
 
         // bpf_list_push_back
         self.register(KfuncDesc {
@@ -287,7 +292,8 @@ impl KfuncRegistry {
                 ..Default::default()
             },
             ..Default::default()
-        }).ok();
+        })
+        .ok();
 
         // bpf_list_pop_front
         self.register(KfuncDesc {
@@ -299,7 +305,8 @@ impl KfuncRegistry {
                 ..Default::default()
             },
             ..Default::default()
-        }).ok();
+        })
+        .ok();
 
         // bpf_list_pop_back
         self.register(KfuncDesc {
@@ -311,7 +318,8 @@ impl KfuncRegistry {
                 ..Default::default()
             },
             ..Default::default()
-        }).ok();
+        })
+        .ok();
 
         // bpf_spin_lock
         self.register(KfuncDesc {
@@ -322,7 +330,8 @@ impl KfuncRegistry {
                 ..Default::default()
             },
             ..Default::default()
-        }).ok();
+        })
+        .ok();
 
         // bpf_spin_unlock
         self.register(KfuncDesc {
@@ -333,7 +342,8 @@ impl KfuncRegistry {
                 ..Default::default()
             },
             ..Default::default()
-        }).ok();
+        })
+        .ok();
 
         // bpf_refcount_acquire
         self.register(KfuncDesc {
@@ -344,7 +354,8 @@ impl KfuncRegistry {
                 ..Default::default()
             },
             ..Default::default()
-        }).ok();
+        })
+        .ok();
 
         // bpf_task_acquire
         self.register(KfuncDesc {
@@ -357,7 +368,8 @@ impl KfuncRegistry {
                 ..Default::default()
             },
             ..Default::default()
-        }).ok();
+        })
+        .ok();
 
         // bpf_task_release
         self.register(KfuncDesc {
@@ -368,7 +380,8 @@ impl KfuncRegistry {
                 ..Default::default()
             },
             ..Default::default()
-        }).ok();
+        })
+        .ok();
 
         // bpf_cgroup_acquire
         self.register(KfuncDesc {
@@ -381,7 +394,8 @@ impl KfuncRegistry {
                 ..Default::default()
             },
             ..Default::default()
-        }).ok();
+        })
+        .ok();
 
         // bpf_cgroup_release
         self.register(KfuncDesc {
@@ -392,18 +406,20 @@ impl KfuncRegistry {
                 ..Default::default()
             },
             ..Default::default()
-        }).ok();
+        })
+        .ok();
 
         // bpf_rbtree_add
         self.register(KfuncDesc {
             btf_id: 16,
             name: "bpf_rbtree_add_impl".into(),
             flags: KfuncFlags {
-                is_release: true,  // node is released to tree
+                is_release: true, // node is released to tree
                 ..Default::default()
             },
             ..Default::default()
-        }).ok();
+        })
+        .ok();
 
         // bpf_rbtree_remove
         self.register(KfuncDesc {
@@ -415,7 +431,8 @@ impl KfuncRegistry {
                 ..Default::default()
             },
             ..Default::default()
-        }).ok();
+        })
+        .ok();
 
         // bpf_rbtree_first
         self.register(KfuncDesc {
@@ -427,7 +444,8 @@ impl KfuncRegistry {
                 ..Default::default()
             },
             ..Default::default()
-        }).ok();
+        })
+        .ok();
 
         // bpf_cpumask_create
         self.register(KfuncDesc {
@@ -439,7 +457,8 @@ impl KfuncRegistry {
                 ..Default::default()
             },
             ..Default::default()
-        }).ok();
+        })
+        .ok();
 
         // bpf_cpumask_release
         self.register(KfuncDesc {
@@ -450,7 +469,8 @@ impl KfuncRegistry {
                 ..Default::default()
             },
             ..Default::default()
-        }).ok();
+        })
+        .ok();
 
         // bpf_cpumask_set_cpu
         self.register(KfuncDesc {
@@ -458,7 +478,8 @@ impl KfuncRegistry {
             name: "bpf_cpumask_set_cpu".into(),
             flags: KfuncFlags::default(),
             ..Default::default()
-        }).ok();
+        })
+        .ok();
 
         // bpf_cpumask_clear_cpu
         self.register(KfuncDesc {
@@ -466,7 +487,8 @@ impl KfuncRegistry {
             name: "bpf_cpumask_clear_cpu".into(),
             flags: KfuncFlags::default(),
             ..Default::default()
-        }).ok();
+        })
+        .ok();
 
         // bpf_cpumask_test_cpu
         self.register(KfuncDesc {
@@ -474,7 +496,8 @@ impl KfuncRegistry {
             name: "bpf_cpumask_test_cpu".into(),
             flags: KfuncFlags::default(),
             ..Default::default()
-        }).ok();
+        })
+        .ok();
 
         // bpf_kptr_xchg
         self.register(KfuncDesc {
@@ -487,7 +510,8 @@ impl KfuncRegistry {
                 ..Default::default()
             },
             ..Default::default()
-        }).ok();
+        })
+        .ok();
 
         // bpf_dynptr_from_skb
         self.register(KfuncDesc {
@@ -495,7 +519,8 @@ impl KfuncRegistry {
             name: "bpf_dynptr_from_skb".into(),
             flags: KfuncFlags::default(),
             ..Default::default()
-        }).ok();
+        })
+        .ok();
 
         // bpf_dynptr_from_xdp
         self.register(KfuncDesc {
@@ -503,7 +528,8 @@ impl KfuncRegistry {
             name: "bpf_dynptr_from_xdp".into(),
             flags: KfuncFlags::default(),
             ..Default::default()
-        }).ok();
+        })
+        .ok();
 
         // bpf_dynptr_slice
         self.register(KfuncDesc {
@@ -514,7 +540,8 @@ impl KfuncRegistry {
                 ..Default::default()
             },
             ..Default::default()
-        }).ok();
+        })
+        .ok();
 
         // bpf_dynptr_slice_rdwr
         self.register(KfuncDesc {
@@ -525,7 +552,8 @@ impl KfuncRegistry {
                 ..Default::default()
             },
             ..Default::default()
-        }).ok();
+        })
+        .ok();
 
         // bpf_iter_num_new
         self.register(KfuncDesc {
@@ -533,7 +561,8 @@ impl KfuncRegistry {
             name: "bpf_iter_num_new".into(),
             flags: KfuncFlags::default(),
             ..Default::default()
-        }).ok();
+        })
+        .ok();
 
         // bpf_iter_num_next
         self.register(KfuncDesc {
@@ -544,7 +573,8 @@ impl KfuncRegistry {
                 ..Default::default()
             },
             ..Default::default()
-        }).ok();
+        })
+        .ok();
 
         // bpf_iter_num_destroy
         self.register(KfuncDesc {
@@ -552,7 +582,8 @@ impl KfuncRegistry {
             name: "bpf_iter_num_destroy".into(),
             flags: KfuncFlags::default(),
             ..Default::default()
-        }).ok();
+        })
+        .ok();
 
         // bpf_throw
         self.register(KfuncDesc {
@@ -563,7 +594,8 @@ impl KfuncRegistry {
                 ..Default::default()
             },
             ..Default::default()
-        }).ok();
+        })
+        .ok();
 
         // bpf_wq_init
         self.register(KfuncDesc {
@@ -571,7 +603,8 @@ impl KfuncRegistry {
             name: "bpf_wq_init".into(),
             flags: KfuncFlags::default(),
             ..Default::default()
-        }).ok();
+        })
+        .ok();
 
         // bpf_wq_set_callback_impl
         self.register(KfuncDesc {
@@ -579,7 +612,8 @@ impl KfuncRegistry {
             name: "bpf_wq_set_callback_impl".into(),
             flags: KfuncFlags::default(),
             ..Default::default()
-        }).ok();
+        })
+        .ok();
 
         // bpf_wq_start
         self.register(KfuncDesc {
@@ -587,7 +621,8 @@ impl KfuncRegistry {
             name: "bpf_wq_start".into(),
             flags: KfuncFlags::default(),
             ..Default::default()
-        }).ok();
+        })
+        .ok();
 
         // bpf_preempt_disable
         self.register(KfuncDesc {
@@ -595,7 +630,8 @@ impl KfuncRegistry {
             name: "bpf_preempt_disable".into(),
             flags: KfuncFlags::default(),
             ..Default::default()
-        }).ok();
+        })
+        .ok();
 
         // bpf_preempt_enable
         self.register(KfuncDesc {
@@ -603,7 +639,8 @@ impl KfuncRegistry {
             name: "bpf_preempt_enable".into(),
             flags: KfuncFlags::default(),
             ..Default::default()
-        }).ok();
+        })
+        .ok();
 
         // bpf_task_from_pid
         self.register(KfuncDesc {
@@ -615,7 +652,8 @@ impl KfuncRegistry {
                 ..Default::default()
             },
             ..Default::default()
-        }).ok();
+        })
+        .ok();
 
         // bpf_sock_from_file
         self.register(KfuncDesc {
@@ -626,7 +664,8 @@ impl KfuncRegistry {
                 ..Default::default()
             },
             ..Default::default()
-        }).ok();
+        })
+        .ok();
 
         // bpf_get_file_xattr
         self.register(KfuncDesc {
@@ -634,7 +673,8 @@ impl KfuncRegistry {
             name: "bpf_get_file_xattr".into(),
             flags: KfuncFlags::default(),
             ..Default::default()
-        }).ok();
+        })
+        .ok();
 
         // bpf_percpu_obj_new_impl(u64 local_type_id, u64 meta) -> void*
         // Similar to bpf_obj_new but allocates per-CPU memory
@@ -662,7 +702,8 @@ impl KfuncRegistry {
             ],
             ret_type: KfuncRetType::AcquiredPtr,
             ..Default::default()
-        }).ok();
+        })
+        .ok();
 
         // bpf_percpu_obj_drop_impl(void *p, void *meta) -> void
         // Releases per-CPU allocated memory
@@ -688,7 +729,8 @@ impl KfuncRegistry {
             ],
             ret_type: KfuncRetType::Void,
             ..Default::default()
-        }).ok();
+        })
+        .ok();
     }
 }
 
@@ -718,10 +760,9 @@ pub fn check_kfunc_call(
 ) -> Result<KfuncCallMeta> {
     // Get kfunc descriptor
     let btf_id = insn.imm as u32;
-    let desc = registry.find_by_id(btf_id)
-        .ok_or_else(|| VerifierError::InvalidKfunc(
-            format!("unknown kfunc btf_id {}", btf_id)
-        ))?;
+    let desc = registry
+        .find_by_id(btf_id)
+        .ok_or_else(|| VerifierError::InvalidKfunc(format!("unknown kfunc btf_id {}", btf_id)))?;
 
     let mut meta = KfuncCallMeta {
         btf_id,
@@ -762,7 +803,7 @@ pub fn check_kfunc_call(
 }
 
 /// Expected kfunc argument type
-/// 
+///
 /// Maps to kernel's enum kfunc_ptr_arg_type (KF_ARG_PTR_TO_*)
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum KfuncArgType {
@@ -853,14 +894,15 @@ fn check_kfunc_args(
     if !desc.params.is_empty() {
         return check_kfunc_args_with_params(state, desc, meta);
     }
-    
+
     // Fall back to BTF prototype if available
     let proto = match &desc.proto {
         Some(p) => p,
         None => {
             // No prototype - just check registers are initialized
             for i in 1..=5 {
-                let _reg = state.reg(i)
+                let _reg = state
+                    .reg(i)
                     .ok_or(VerifierError::InvalidRegister(i as u8))?;
                 // R1-R5 should be initialized or explicitly unused
             }
@@ -875,7 +917,8 @@ fn check_kfunc_args(
             break;
         }
 
-        let reg = state.reg(regno)
+        let reg = state
+            .reg(regno)
             .ok_or(VerifierError::InvalidRegister(regno as u8))?;
 
         if reg.reg_type == BpfRegType::NotInit {
@@ -908,7 +951,8 @@ fn check_kfunc_args_with_params(
             break;
         }
 
-        let reg = state.reg(regno)
+        let reg = state
+            .reg(regno)
             .ok_or(VerifierError::InvalidRegister(regno as u8))?;
 
         // Check register is initialized
@@ -941,13 +985,15 @@ fn validate_kfunc_arg_type(
     arg_idx: usize,
 ) -> Result<()> {
     let param_name = param.name.as_deref().unwrap_or("?");
-    
+
     match param.arg_type {
         KfuncArgType::Scalar => {
             if reg.reg_type != BpfRegType::ScalarValue {
                 return Err(VerifierError::TypeMismatch {
-                    expected: format!("scalar for kfunc '{}' arg {} ({})", 
-                        func_name, arg_idx, param_name),
+                    expected: format!(
+                        "scalar for kfunc '{}' arg {} ({})",
+                        func_name, arg_idx, param_name
+                    ),
                     got: format!("{:?}", reg.reg_type),
                 });
             }
@@ -955,8 +1001,10 @@ fn validate_kfunc_arg_type(
         KfuncArgType::AnyPtr => {
             if !reg.is_ptr() {
                 return Err(VerifierError::TypeMismatch {
-                    expected: format!("pointer for kfunc '{}' arg {} ({})",
-                        func_name, arg_idx, param_name),
+                    expected: format!(
+                        "pointer for kfunc '{}' arg {} ({})",
+                        func_name, arg_idx, param_name
+                    ),
                     got: format!("{:?}", reg.reg_type),
                 });
             }
@@ -964,8 +1012,10 @@ fn validate_kfunc_arg_type(
         KfuncArgType::PtrToBtfId => {
             if !reg.is_ptr() {
                 return Err(VerifierError::TypeMismatch {
-                    expected: format!("BTF pointer for kfunc '{}' arg {} ({})",
-                        func_name, arg_idx, param_name),
+                    expected: format!(
+                        "BTF pointer for kfunc '{}' arg {} ({})",
+                        func_name, arg_idx, param_name
+                    ),
                     got: format!("{:?}", reg.reg_type),
                 });
             }
@@ -973,8 +1023,10 @@ fn validate_kfunc_arg_type(
             if let Some(expected_btf_id) = param.btf_id {
                 if reg.btf_id() != expected_btf_id && reg.btf_id() != 0 {
                     return Err(VerifierError::TypeMismatch {
-                        expected: format!("BTF type {} for kfunc '{}' arg {} ({})",
-                            expected_btf_id, func_name, arg_idx, param_name),
+                        expected: format!(
+                            "BTF type {} for kfunc '{}' arg {} ({})",
+                            expected_btf_id, func_name, arg_idx, param_name
+                        ),
                         got: format!("BTF type {}", reg.btf_id()),
                     });
                 }
@@ -984,8 +1036,10 @@ fn validate_kfunc_arg_type(
             // Must be a pointer to allocated memory (acquired reference)
             if !reg.is_ptr() {
                 return Err(VerifierError::TypeMismatch {
-                    expected: format!("allocated pointer for kfunc '{}' arg {} ({})",
-                        func_name, arg_idx, param_name),
+                    expected: format!(
+                        "allocated pointer for kfunc '{}' arg {} ({})",
+                        func_name, arg_idx, param_name
+                    ),
                     got: format!("{:?}", reg.reg_type),
                 });
             }
@@ -1001,8 +1055,10 @@ fn validate_kfunc_arg_type(
             // Must be pointer to stack (dynptrs live on stack)
             if reg.reg_type != BpfRegType::PtrToStack {
                 return Err(VerifierError::TypeMismatch {
-                    expected: format!("stack pointer (dynptr) for kfunc '{}' arg {} ({})",
-                        func_name, arg_idx, param_name),
+                    expected: format!(
+                        "stack pointer (dynptr) for kfunc '{}' arg {} ({})",
+                        func_name, arg_idx, param_name
+                    ),
                     got: format!("{:?}", reg.reg_type),
                 });
             }
@@ -1011,8 +1067,10 @@ fn validate_kfunc_arg_type(
             // Pointer to refcounted local kptr
             if !reg.is_ptr() {
                 return Err(VerifierError::TypeMismatch {
-                    expected: format!("refcounted kptr for kfunc '{}' arg {} ({})",
-                        func_name, arg_idx, param_name),
+                    expected: format!(
+                        "refcounted kptr for kfunc '{}' arg {} ({})",
+                        func_name, arg_idx, param_name
+                    ),
                     got: format!("{:?}", reg.reg_type),
                 });
             }
@@ -1028,8 +1086,10 @@ fn validate_kfunc_arg_type(
             // Pointer to iterator on stack
             if reg.reg_type != BpfRegType::PtrToStack {
                 return Err(VerifierError::TypeMismatch {
-                    expected: format!("iterator pointer for kfunc '{}' arg {} ({})",
-                        func_name, arg_idx, param_name),
+                    expected: format!(
+                        "iterator pointer for kfunc '{}' arg {} ({})",
+                        func_name, arg_idx, param_name
+                    ),
                     got: format!("{:?}", reg.reg_type),
                 });
             }
@@ -1038,8 +1098,10 @@ fn validate_kfunc_arg_type(
         KfuncArgType::PtrToListHead | KfuncArgType::PtrToListNode => {
             if !reg.is_ptr() {
                 return Err(VerifierError::TypeMismatch {
-                    expected: format!("list pointer for kfunc '{}' arg {} ({})",
-                        func_name, arg_idx, param_name),
+                    expected: format!(
+                        "list pointer for kfunc '{}' arg {} ({})",
+                        func_name, arg_idx, param_name
+                    ),
                     got: format!("{:?}", reg.reg_type),
                 });
             }
@@ -1048,8 +1110,10 @@ fn validate_kfunc_arg_type(
         KfuncArgType::PtrToRbRoot | KfuncArgType::PtrToRbNode => {
             if !reg.is_ptr() {
                 return Err(VerifierError::TypeMismatch {
-                    expected: format!("rbtree pointer for kfunc '{}' arg {} ({})",
-                        func_name, arg_idx, param_name),
+                    expected: format!(
+                        "rbtree pointer for kfunc '{}' arg {} ({})",
+                        func_name, arg_idx, param_name
+                    ),
                     got: format!("{:?}", reg.reg_type),
                 });
             }
@@ -1059,8 +1123,10 @@ fn validate_kfunc_arg_type(
             // Must be context pointer
             if reg.reg_type != BpfRegType::PtrToCtx {
                 return Err(VerifierError::TypeMismatch {
-                    expected: format!("context pointer for kfunc '{}' arg {} ({})",
-                        func_name, arg_idx, param_name),
+                    expected: format!(
+                        "context pointer for kfunc '{}' arg {} ({})",
+                        func_name, arg_idx, param_name
+                    ),
                     got: format!("{:?}", reg.reg_type),
                 });
             }
@@ -1069,8 +1135,10 @@ fn validate_kfunc_arg_type(
             // Pointer to readable/writable memory
             if !reg.is_ptr() {
                 return Err(VerifierError::TypeMismatch {
-                    expected: format!("memory pointer for kfunc '{}' arg {} ({})",
-                        func_name, arg_idx, param_name),
+                    expected: format!(
+                        "memory pointer for kfunc '{}' arg {} ({})",
+                        func_name, arg_idx, param_name
+                    ),
                     got: format!("{:?}", reg.reg_type),
                 });
             }
@@ -1085,8 +1153,10 @@ fn validate_kfunc_arg_type(
                 }
                 _ => {
                     return Err(VerifierError::TypeMismatch {
-                        expected: format!("callback for kfunc '{}' arg {} ({})",
-                            func_name, arg_idx, param_name),
+                        expected: format!(
+                            "callback for kfunc '{}' arg {} ({})",
+                            func_name, arg_idx, param_name
+                        ),
                         got: format!("{:?}", reg.reg_type),
                     });
                 }
@@ -1096,8 +1166,10 @@ fn validate_kfunc_arg_type(
             // Pointer to map
             if reg.reg_type != BpfRegType::ConstPtrToMap {
                 return Err(VerifierError::TypeMismatch {
-                    expected: format!("map pointer for kfunc '{}' arg {} ({})",
-                        func_name, arg_idx, param_name),
+                    expected: format!(
+                        "map pointer for kfunc '{}' arg {} ({})",
+                        func_name, arg_idx, param_name
+                    ),
                     got: format!("{:?}", reg.reg_type),
                 });
             }
@@ -1107,8 +1179,10 @@ fn validate_kfunc_arg_type(
             // Kernel: process_wq_func() validates this
             if reg.reg_type != BpfRegType::PtrToMapValue {
                 return Err(VerifierError::TypeMismatch {
-                    expected: format!("map value pointer for workqueue kfunc '{}' arg {} ({})",
-                        func_name, arg_idx, param_name),
+                    expected: format!(
+                        "map value pointer for workqueue kfunc '{}' arg {} ({})",
+                        func_name, arg_idx, param_name
+                    ),
                     got: format!("{:?}", reg.reg_type),
                 });
             }
@@ -1131,8 +1205,10 @@ fn validate_kfunc_arg_type(
             // Pointer to constant string (map value or rodata)
             if !reg.is_ptr() {
                 return Err(VerifierError::TypeMismatch {
-                    expected: format!("const string pointer for kfunc '{}' arg {} ({})",
-                        func_name, arg_idx, param_name),
+                    expected: format!(
+                        "const string pointer for kfunc '{}' arg {} ({})",
+                        func_name, arg_idx, param_name
+                    ),
                     got: format!("{:?}", reg.reg_type),
                 });
             }
@@ -1142,8 +1218,10 @@ fn validate_kfunc_arg_type(
             // Pointer to IRQ flag on stack
             if reg.reg_type != BpfRegType::PtrToStack {
                 return Err(VerifierError::TypeMismatch {
-                    expected: format!("IRQ flag pointer for kfunc '{}' arg {} ({})",
-                        func_name, arg_idx, param_name),
+                    expected: format!(
+                        "IRQ flag pointer for kfunc '{}' arg {} ({})",
+                        func_name, arg_idx, param_name
+                    ),
                     got: format!("{:?}", reg.reg_type),
                 });
             }
@@ -1152,8 +1230,10 @@ fn validate_kfunc_arg_type(
             // Pointer to resilient spin lock
             if !reg.is_ptr() {
                 return Err(VerifierError::TypeMismatch {
-                    expected: format!("res_spin_lock pointer for kfunc '{}' arg {} ({})",
-                        func_name, arg_idx, param_name),
+                    expected: format!(
+                        "res_spin_lock pointer for kfunc '{}' arg {} ({})",
+                        func_name, arg_idx, param_name
+                    ),
                     got: format!("{:?}", reg.reg_type),
                 });
             }
@@ -1164,8 +1244,10 @@ fn validate_kfunc_arg_type(
             // Kernel: process_task_work_func() validates this
             if reg.reg_type != BpfRegType::PtrToMapValue {
                 return Err(VerifierError::TypeMismatch {
-                    expected: format!("map value pointer for task_work kfunc '{}' arg {} ({})",
-                        func_name, arg_idx, param_name),
+                    expected: format!(
+                        "map value pointer for task_work kfunc '{}' arg {} ({})",
+                        func_name, arg_idx, param_name
+                    ),
                     got: format!("{:?}", reg.reg_type),
                 });
             }
@@ -1185,11 +1267,14 @@ fn validate_kfunc_arg_type(
         }
         KfuncArgType::PtrToNull => {
             // Null pointer for nullable arguments
-            if !reg.type_flags.contains(BpfTypeFlag::PTR_MAYBE_NULL) 
-                && reg.reg_type != BpfRegType::ScalarValue {
+            if !reg.type_flags.contains(BpfTypeFlag::PTR_MAYBE_NULL)
+                && reg.reg_type != BpfRegType::ScalarValue
+            {
                 return Err(VerifierError::TypeMismatch {
-                    expected: format!("null pointer for kfunc '{}' arg {} ({})",
-                        func_name, arg_idx, param_name),
+                    expected: format!(
+                        "null pointer for kfunc '{}' arg {} ({})",
+                        func_name, arg_idx, param_name
+                    ),
                     got: format!("{:?}", reg.reg_type),
                 });
             }
@@ -1198,8 +1283,10 @@ fn validate_kfunc_arg_type(
             // Output parameter - must be writable pointer
             if !reg.is_ptr() {
                 return Err(VerifierError::TypeMismatch {
-                    expected: format!("pointer (out param) for kfunc '{}' arg {} ({})",
-                        func_name, arg_idx, param_name),
+                    expected: format!(
+                        "pointer (out param) for kfunc '{}' arg {} ({})",
+                        func_name, arg_idx, param_name
+                    ),
                     got: format!("{:?}", reg.reg_type),
                 });
             }
@@ -1259,14 +1346,14 @@ fn check_release_arg(
     // Must have a reference ID
     if reg.ref_obj_id == 0 {
         return Err(VerifierError::InvalidPointer(
-            "release arg must have reference".into()
+            "release arg must have reference".into(),
         ));
     }
 
     // Check reference exists
     if !refs.has_ref(reg.ref_obj_id) {
         return Err(VerifierError::InvalidPointer(
-            "release arg references non-existent object".into()
+            "release arg references non-existent object".into(),
         ));
     }
 
@@ -1354,8 +1441,10 @@ pub fn check_kfunc_arg_btf_type(
                 });
             }
         }
-        KfuncArgType::PtrToListHead | KfuncArgType::PtrToListNode |
-        KfuncArgType::PtrToRbRoot | KfuncArgType::PtrToRbNode => {
+        KfuncArgType::PtrToListHead
+        | KfuncArgType::PtrToListNode
+        | KfuncArgType::PtrToRbRoot
+        | KfuncArgType::PtrToRbNode => {
             // Would need specific type checking
             if !reg.is_ptr() {
                 return Err(VerifierError::TypeMismatch {
@@ -1401,8 +1490,9 @@ pub fn check_kfunc_arg_btf_type(
                 });
             }
         }
-        KfuncArgType::PtrToWorkqueue | KfuncArgType::PtrToTaskWork | 
-        KfuncArgType::PtrToResSpinLock => {
+        KfuncArgType::PtrToWorkqueue
+        | KfuncArgType::PtrToTaskWork
+        | KfuncArgType::PtrToResSpinLock => {
             if !reg.is_ptr() {
                 return Err(VerifierError::TypeMismatch {
                     expected: "pointer to kernel object".into(),
@@ -1446,7 +1536,7 @@ pub fn check_kfunc_arg_btf_type(
     // Check nullable
     if !expected.nullable && reg.type_flags.contains(BpfTypeFlag::PTR_MAYBE_NULL) {
         return Err(VerifierError::InvalidPointer(
-            "argument cannot be nullable".into()
+            "argument cannot be nullable".into(),
         ));
     }
 
@@ -1478,7 +1568,8 @@ fn set_kfunc_return(
     desc: &KfuncDesc,
     meta: &KfuncCallMeta,
 ) -> Result<()> {
-    let r0 = state.reg_mut(BPF_REG_0)
+    let r0 = state
+        .reg_mut(BPF_REG_0)
         .ok_or(VerifierError::Internal("no R0".into()))?;
 
     // Use explicit return type if available
@@ -1538,8 +1629,7 @@ fn set_kfunc_return(
 
 /// Check if instruction is a kfunc call
 pub fn is_kfunc_call(insn: &BpfInsn) -> bool {
-    insn.code == (BPF_JMP | BPF_CALL) && 
-    insn.src_reg == BPF_PSEUDO_KFUNC_CALL
+    insn.code == (BPF_JMP | BPF_CALL) && insn.src_reg == BPF_PSEUDO_KFUNC_CALL
 }
 
 /// Special kfunc IDs for well-known functions
@@ -1610,42 +1700,46 @@ pub fn is_task_work_add_kfunc(btf_id: u32) -> bool {
 
 /// Check if kfunc is graph API (list/rbtree)
 pub fn is_bpf_graph_api_kfunc(btf_id: u32) -> bool {
-    matches!(btf_id, 
-        special_kfuncs::BPF_LIST_PUSH_FRONT |
-        special_kfuncs::BPF_LIST_PUSH_BACK |
-        special_kfuncs::BPF_LIST_POP_FRONT |
-        special_kfuncs::BPF_LIST_POP_BACK |
-        special_kfuncs::BPF_RBTREE_ADD |
-        special_kfuncs::BPF_RBTREE_REMOVE |
-        special_kfuncs::BPF_RBTREE_FIRST
+    matches!(
+        btf_id,
+        special_kfuncs::BPF_LIST_PUSH_FRONT
+            | special_kfuncs::BPF_LIST_PUSH_BACK
+            | special_kfuncs::BPF_LIST_POP_FRONT
+            | special_kfuncs::BPF_LIST_POP_BACK
+            | special_kfuncs::BPF_RBTREE_ADD
+            | special_kfuncs::BPF_RBTREE_REMOVE
+            | special_kfuncs::BPF_RBTREE_FIRST
     )
 }
 
 /// Check if kfunc is list API
 pub fn is_bpf_list_api_kfunc(btf_id: u32) -> bool {
-    matches!(btf_id,
-        special_kfuncs::BPF_LIST_PUSH_FRONT |
-        special_kfuncs::BPF_LIST_PUSH_BACK |
-        special_kfuncs::BPF_LIST_POP_FRONT |
-        special_kfuncs::BPF_LIST_POP_BACK
+    matches!(
+        btf_id,
+        special_kfuncs::BPF_LIST_PUSH_FRONT
+            | special_kfuncs::BPF_LIST_PUSH_BACK
+            | special_kfuncs::BPF_LIST_POP_FRONT
+            | special_kfuncs::BPF_LIST_POP_BACK
     )
 }
 
 /// Check if kfunc is rbtree API
 pub fn is_bpf_rbtree_api_kfunc(btf_id: u32) -> bool {
-    matches!(btf_id,
-        special_kfuncs::BPF_RBTREE_ADD |
-        special_kfuncs::BPF_RBTREE_REMOVE |
-        special_kfuncs::BPF_RBTREE_FIRST
+    matches!(
+        btf_id,
+        special_kfuncs::BPF_RBTREE_ADD
+            | special_kfuncs::BPF_RBTREE_REMOVE
+            | special_kfuncs::BPF_RBTREE_FIRST
     )
 }
 
 /// Check if kfunc is bpf_iter_num API
 pub fn is_bpf_iter_num_api_kfunc(btf_id: u32) -> bool {
-    matches!(btf_id,
-        special_kfuncs::BPF_ITER_NUM_NEW |
-        special_kfuncs::BPF_ITER_NUM_NEXT |
-        special_kfuncs::BPF_ITER_NUM_DESTROY
+    matches!(
+        btf_id,
+        special_kfuncs::BPF_ITER_NUM_NEW
+            | special_kfuncs::BPF_ITER_NUM_NEXT
+            | special_kfuncs::BPF_ITER_NUM_DESTROY
     )
 }
 
@@ -1662,9 +1756,9 @@ pub fn is_sync_callback_calling_kfunc(btf_id: u32) -> bool {
 
 /// Check if kfunc is async callback calling (runs later)
 pub fn is_async_callback_calling_kfunc(btf_id: u32) -> bool {
-    matches!(btf_id,
-        special_kfuncs::BPF_WQ_SET_CALLBACK |
-        special_kfuncs::BPF_TASK_WORK_ADD
+    matches!(
+        btf_id,
+        special_kfuncs::BPF_WQ_SET_CALLBACK | special_kfuncs::BPF_TASK_WORK_ADD
     )
 }
 
@@ -1680,25 +1774,25 @@ pub fn is_rbtree_lock_required_kfunc(btf_id: u32) -> bool {
 
 /// Check if kfunc is res_spin_lock API
 pub fn is_bpf_res_spin_lock_kfunc(btf_id: u32) -> bool {
-    matches!(btf_id,
-        special_kfuncs::BPF_RES_SPIN_LOCK |
-        special_kfuncs::BPF_RES_SPIN_UNLOCK
+    matches!(
+        btf_id,
+        special_kfuncs::BPF_RES_SPIN_LOCK | special_kfuncs::BPF_RES_SPIN_UNLOCK
     )
 }
 
 /// Check if kfunc is IRQ save operation
 pub fn is_irq_save_kfunc(btf_id: u32) -> bool {
-    matches!(btf_id,
-        special_kfuncs::BPF_LOCAL_IRQ_SAVE |
-        special_kfuncs::BPF_SPIN_LOCK_IRQSAVE
+    matches!(
+        btf_id,
+        special_kfuncs::BPF_LOCAL_IRQ_SAVE | special_kfuncs::BPF_SPIN_LOCK_IRQSAVE
     )
 }
 
 /// Check if kfunc is IRQ restore operation
 pub fn is_irq_restore_kfunc(btf_id: u32) -> bool {
-    matches!(btf_id,
-        special_kfuncs::BPF_LOCAL_IRQ_RESTORE |
-        special_kfuncs::BPF_SPIN_UNLOCK_IRQRESTORE
+    matches!(
+        btf_id,
+        special_kfuncs::BPF_LOCAL_IRQ_RESTORE | special_kfuncs::BPF_SPIN_UNLOCK_IRQRESTORE
     )
 }
 
@@ -1731,16 +1825,18 @@ pub enum IrqKfuncType {
 /// Get IRQ kfunc type (native vs lock)
 pub fn get_irq_kfunc_type(btf_id: u32) -> Option<IrqKfuncType> {
     match btf_id {
-        special_kfuncs::BPF_LOCAL_IRQ_SAVE |
-        special_kfuncs::BPF_LOCAL_IRQ_RESTORE => Some(IrqKfuncType::Native),
-        special_kfuncs::BPF_SPIN_LOCK_IRQSAVE |
-        special_kfuncs::BPF_SPIN_UNLOCK_IRQRESTORE => Some(IrqKfuncType::Lock),
+        special_kfuncs::BPF_LOCAL_IRQ_SAVE | special_kfuncs::BPF_LOCAL_IRQ_RESTORE => {
+            Some(IrqKfuncType::Native)
+        }
+        special_kfuncs::BPF_SPIN_LOCK_IRQSAVE | special_kfuncs::BPF_SPIN_UNLOCK_IRQRESTORE => {
+            Some(IrqKfuncType::Lock)
+        }
         _ => None,
     }
 }
 
 /// Process IRQ flag argument for kfunc calls
-/// 
+///
 /// This handles:
 /// - bpf_local_irq_save: marks stack slot as IRQ flag, disables interrupts
 /// - bpf_local_irq_restore: validates and clears IRQ flag, restores interrupts
@@ -1753,11 +1849,14 @@ pub fn process_irq_flag(
     btf_id: u32,
     insn_idx: usize,
 ) -> Result<()> {
-    use crate::state::lock_state::{IrqKfuncClass, mark_stack_slot_irq_flag, unmark_stack_slot_irq_flag};
-    
-    let reg = state.reg(regno)
+    use crate::state::lock_state::{
+        mark_stack_slot_irq_flag, unmark_stack_slot_irq_flag, IrqKfuncClass,
+    };
+
+    let reg = state
+        .reg(regno)
         .ok_or(VerifierError::InvalidRegister(regno as u8))?;
-    
+
     // IRQ flag must be on stack
     if reg.reg_type != BpfRegType::PtrToStack {
         return Err(VerifierError::InvalidPointer(format!(
@@ -1765,30 +1864,29 @@ pub fn process_irq_flag(
             reg.reg_type
         )));
     }
-    
+
     // Calculate stack slot index
     let off = reg.off;
     if off >= 0 {
         return Err(VerifierError::InvalidMemoryAccess(
-            "IRQ flag must be at negative stack offset".into()
+            "IRQ flag must be at negative stack offset".into(),
         ));
     }
     let spi = ((-off) as usize - 1) / 8;
-    
+
     // Determine kfunc class
-    let kfunc_class = get_irq_kfunc_class(btf_id)
-        .ok_or(VerifierError::InvalidKfunc(format!(
-            "not an IRQ kfunc: btf_id={}",
-            btf_id
-        )))?;
-    
+    let kfunc_class = get_irq_kfunc_class(btf_id).ok_or(VerifierError::InvalidKfunc(format!(
+        "not an IRQ kfunc: btf_id={}",
+        btf_id
+    )))?;
+
     let kfunc_type = get_irq_kfunc_type(btf_id)
         .ok_or(VerifierError::InvalidKfunc("unknown IRQ kfunc type".into()))?;
-    
+
     match kfunc_class {
         IrqKfuncClass::LocalIrqSave | IrqKfuncClass::SpinLockIrqSave => {
             // Saving IRQ state - mark stack slot
-            
+
             // Validate stack slot is available (not already an IRQ flag)
             if let Some(existing) = irq_state.get_irq_flag(reg.ref_obj_id) {
                 return Err(VerifierError::InvalidLock(format!(
@@ -1796,91 +1894,103 @@ pub fn process_irq_flag(
                     existing.acquired_at
                 )));
             }
-            
+
             // Mark stack slot as IRQ flag
             let ref_id = mark_stack_slot_irq_flag(irq_state, insn_idx, spi, kfunc_class)?;
-            
+
             // Update register to track the IRQ flag reference
             if let Some(reg_mut) = state.reg_mut(regno) {
                 reg_mut.ref_obj_id = ref_id;
             }
         }
-        
+
         IrqKfuncClass::LocalIrqRestore | IrqKfuncClass::SpinUnlockIrqRestore => {
             // Restoring IRQ state - validate and clear
-            
+
             let ref_obj_id = reg.ref_obj_id;
             if ref_obj_id == 0 {
                 return Err(VerifierError::InvalidLock(
-                    "IRQ restore without matching save".into()
+                    "IRQ restore without matching save".into(),
                 ));
             }
-            
+
             // Verify the IRQ flag exists and matches
-            let flag = irq_state.get_irq_flag(ref_obj_id)
+            let flag = irq_state
+                .get_irq_flag(ref_obj_id)
                 .ok_or(VerifierError::InvalidLock(
-                    "IRQ flag reference not found".into()
+                    "IRQ flag reference not found".into(),
                 ))?;
-            
+
             // Verify kfunc class matches (native with native, lock with lock)
             let saved_type = match flag.kfunc_class {
-                IrqKfuncClass::LocalIrqSave | IrqKfuncClass::LocalIrqRestore => IrqKfuncType::Native,
-                IrqKfuncClass::SpinLockIrqSave | IrqKfuncClass::SpinUnlockIrqRestore => IrqKfuncType::Lock,
+                IrqKfuncClass::LocalIrqSave | IrqKfuncClass::LocalIrqRestore => {
+                    IrqKfuncType::Native
+                }
+                IrqKfuncClass::SpinLockIrqSave | IrqKfuncClass::SpinUnlockIrqRestore => {
+                    IrqKfuncType::Lock
+                }
             };
-            
+
             if saved_type != kfunc_type {
-                let saved_name = if saved_type == IrqKfuncType::Native { "native" } else { "lock" };
-                let restore_name = if kfunc_type == IrqKfuncType::Native { "native" } else { "lock" };
+                let saved_name = if saved_type == IrqKfuncType::Native {
+                    "native"
+                } else {
+                    "lock"
+                };
+                let restore_name = if kfunc_type == IrqKfuncType::Native {
+                    "native"
+                } else {
+                    "lock"
+                };
                 return Err(VerifierError::InvalidLock(format!(
                     "mismatched IRQ save/restore: saved with {} kfunc, restoring with {} kfunc",
                     saved_name, restore_name
                 )));
             }
-            
+
             // Unmark the stack slot
             unmark_stack_slot_irq_flag(irq_state, ref_obj_id)?;
         }
     }
-    
+
     Ok(())
 }
 
 /// Validate IRQ flag register is valid for initialization (uninit check)
-pub fn is_irq_flag_reg_valid_uninit(
-    state: &BpfVerifierState,
-    regno: usize,
-) -> Result<bool> {
-    let reg = state.reg(regno)
+pub fn is_irq_flag_reg_valid_uninit(state: &BpfVerifierState, regno: usize) -> Result<bool> {
+    let reg = state
+        .reg(regno)
         .ok_or(VerifierError::InvalidRegister(regno as u8))?;
-    
+
     if reg.reg_type != BpfRegType::PtrToStack {
         return Ok(false);
     }
-    
+
     let off = reg.off;
     if off >= 0 {
         return Ok(false);
     }
-    
+
     // Check stack slot is within bounds and not already used for special types
     let spi = ((-off) as usize - 1) / 8;
-    let func_state = state.cur_func()
+    let func_state = state
+        .cur_func()
         .ok_or(VerifierError::Internal("no current frame".into()))?;
-    
+
     if spi >= func_state.stack.allocated_stack / 8 {
         return Ok(false);
     }
-    
+
     // Verify slot is not already a special type (dynptr, iter, or existing IRQ flag)
     let slot = &func_state.stack.stack[spi];
     use crate::core::types::BpfStackSlotType;
-    
+
     for i in 0..8 {
         if slot.slot_type[i] == BpfStackSlotType::IrqFlag {
             return Ok(false); // Already an IRQ flag
         }
     }
-    
+
     Ok(true)
 }
 
@@ -1891,47 +2001,46 @@ pub fn mark_irq_flag_stack_slot(
     ref_obj_id: u32,
 ) -> Result<()> {
     use crate::core::types::BpfStackSlotType;
-    
-    let func_state = state.cur_func_mut()
+
+    let func_state = state
+        .cur_func_mut()
         .ok_or(VerifierError::Internal("no current frame".into()))?;
-    
+
     if spi >= func_state.stack.stack.len() {
         return Err(VerifierError::StackOutOfBounds(spi as i32));
     }
-    
+
     // Mark all bytes in the slot as IRQ flag
     for i in 0..8 {
         func_state.stack.stack[spi].slot_type[i] = BpfStackSlotType::IrqFlag;
     }
-    
+
     // Store the reference ID in the spilled register
     func_state.stack.stack[spi].spilled_ptr.ref_obj_id = ref_obj_id;
-    
+
     Ok(())
 }
 
 /// Clear IRQ flag from stack slot after successful restore
-pub fn clear_irq_flag_stack_slot(
-    state: &mut BpfVerifierState,
-    spi: usize,
-) -> Result<()> {
+pub fn clear_irq_flag_stack_slot(state: &mut BpfVerifierState, spi: usize) -> Result<()> {
     use crate::core::types::BpfStackSlotType;
-    
-    let func_state = state.cur_func_mut()
+
+    let func_state = state
+        .cur_func_mut()
         .ok_or(VerifierError::Internal("no current frame".into()))?;
-    
+
     if spi >= func_state.stack.stack.len() {
         return Err(VerifierError::StackOutOfBounds(spi as i32));
     }
-    
+
     // Clear all bytes in the slot
     for i in 0..8 {
         func_state.stack.stack[spi].slot_type[i] = BpfStackSlotType::Invalid;
     }
-    
+
     // Clear the reference ID
     func_state.stack.stack[spi].spilled_ptr.ref_obj_id = 0;
-    
+
     Ok(())
 }
 
@@ -1981,17 +2090,19 @@ pub fn check_kfunc_conditional_constraints(
     constraints: &[KfuncArgConstraint],
 ) -> Result<()> {
     for constraint in constraints {
-        let cond_reg = state.reg(constraint.condition_arg + 1)
-            .ok_or(VerifierError::InvalidRegister((constraint.condition_arg + 1) as u8))?;
-        
+        let cond_reg =
+            state
+                .reg(constraint.condition_arg + 1)
+                .ok_or(VerifierError::InvalidRegister(
+                    (constraint.condition_arg + 1) as u8,
+                ))?;
+
         // Check if condition is met
         let condition_met = match &constraint.condition {
-            ConstraintCondition::IsNull => {
-                cond_reg.is_const() && cond_reg.const_value() == 0
-            }
+            ConstraintCondition::IsNull => cond_reg.is_const() && cond_reg.const_value() == 0,
             ConstraintCondition::IsNonNull => {
-                !cond_reg.type_flags.contains(BpfTypeFlag::PTR_MAYBE_NULL) ||
-                (cond_reg.is_const() && cond_reg.const_value() != 0)
+                !cond_reg.type_flags.contains(BpfTypeFlag::PTR_MAYBE_NULL)
+                    || (cond_reg.is_const() && cond_reg.const_value() != 0)
             }
             ConstraintCondition::Equals(val) => {
                 cond_reg.is_const() && cond_reg.const_value() == *val
@@ -2000,15 +2111,19 @@ pub fn check_kfunc_conditional_constraints(
                 cond_reg.umin_value >= *min && cond_reg.umax_value <= *max
             }
         };
-        
+
         if !condition_met {
             continue; // Condition not met, skip this constraint
         }
-        
+
         // Check requirement on target argument
-        let target_reg = state.reg(constraint.target_arg + 1)
-            .ok_or(VerifierError::InvalidRegister((constraint.target_arg + 1) as u8))?;
-        
+        let target_reg =
+            state
+                .reg(constraint.target_arg + 1)
+                .ok_or(VerifierError::InvalidRegister(
+                    (constraint.target_arg + 1) as u8,
+                ))?;
+
         match &constraint.requirement {
             ConstraintRequirement::MustBeNull => {
                 if !target_reg.is_const() || target_reg.const_value() != 0 {
@@ -2029,8 +2144,10 @@ pub fn check_kfunc_conditional_constraints(
             ConstraintRequirement::MustHaveBtfId(expected_id) => {
                 if target_reg.btf_id() != *expected_id {
                     return Err(VerifierError::TypeMismatch {
-                        expected: format!("BTF type {} for kfunc '{}' arg{}",
-                            expected_id, desc.name, constraint.target_arg),
+                        expected: format!(
+                            "BTF type {} for kfunc '{}' arg{}",
+                            expected_id, desc.name, constraint.target_arg
+                        ),
                         got: format!("BTF type {}", target_reg.btf_id()),
                     });
                 }
@@ -2049,22 +2166,23 @@ pub fn check_kfunc_conditional_constraints(
                 if target_reg.smin_value < *min || target_reg.smax_value > *max {
                     return Err(VerifierError::InvalidKfunc(format!(
                         "kfunc '{}': arg{} must be in range [{}, {}], got [{}, {}]",
-                        desc.name, constraint.target_arg, min, max,
-                        target_reg.smin_value, target_reg.smax_value
+                        desc.name,
+                        constraint.target_arg,
+                        min,
+                        max,
+                        target_reg.smin_value,
+                        target_reg.smax_value
                     )));
                 }
             }
         }
     }
-    
+
     Ok(())
 }
 
 /// Check RCU protection for kfunc arguments
-pub fn check_kfunc_rcu_protection(
-    state: &BpfVerifierState,
-    desc: &KfuncDesc,
-) -> Result<()> {
+pub fn check_kfunc_rcu_protection(state: &BpfVerifierState, desc: &KfuncDesc) -> Result<()> {
     // If kfunc requires RCU protection
     if desc.flags.rcu_protected {
         if state.refs.active_rcu_locks == 0 {
@@ -2074,18 +2192,20 @@ pub fn check_kfunc_rcu_protection(
             )));
         }
     }
-    
+
     // Check arguments that require RCU protection
     for (i, param) in desc.params.iter().enumerate() {
         if let Some(ref name) = param.name {
             // Parameters with __rcu annotation
             if name.contains("__rcu") || name.ends_with("_rcu") {
-                let reg = state.reg(i + 1)
+                let reg = state
+                    .reg(i + 1)
                     .ok_or(VerifierError::InvalidRegister((i + 1) as u8))?;
-                
+
                 // Must have MEM_RCU flag or be under RCU lock
-                if !reg.type_flags.contains(BpfTypeFlag::MEM_RCU) && 
-                   state.refs.active_rcu_locks == 0 {
+                if !reg.type_flags.contains(BpfTypeFlag::MEM_RCU)
+                    && state.refs.active_rcu_locks == 0
+                {
                     return Err(VerifierError::InvalidKfunc(format!(
                         "kfunc '{}' arg{} ({}) requires RCU protection",
                         desc.name, i, name
@@ -2094,7 +2214,7 @@ pub fn check_kfunc_rcu_protection(
             }
         }
     }
-    
+
     Ok(())
 }
 
@@ -2112,7 +2232,7 @@ pub fn check_kfunc_sleepable_context(
                 desc.name
             )));
         }
-        
+
         // Cannot hold spin locks when calling sleepable kfunc
         if state.lock_state.has_locks() {
             return Err(VerifierError::InvalidKfunc(format!(
@@ -2120,7 +2240,7 @@ pub fn check_kfunc_sleepable_context(
                 desc.name
             )));
         }
-        
+
         // Cannot have preemption disabled
         if state.refs.active_preempt_locks > 0 {
             return Err(VerifierError::InvalidKfunc(format!(
@@ -2129,15 +2249,12 @@ pub fn check_kfunc_sleepable_context(
             )));
         }
     }
-    
+
     Ok(())
 }
 
 /// Check destructive kfunc requirements
-pub fn check_kfunc_destructive(
-    desc: &KfuncDesc,
-    allow_destructive: bool,
-) -> Result<()> {
+pub fn check_kfunc_destructive(desc: &KfuncDesc, allow_destructive: bool) -> Result<()> {
     if desc.flags.destructive && !allow_destructive {
         return Err(VerifierError::InvalidKfunc(format!(
             "destructive kfunc '{}' not allowed in this context",
@@ -2148,7 +2265,7 @@ pub fn check_kfunc_destructive(
 }
 
 /// Check constraints specific to bpf_percpu_obj_new_impl
-/// 
+///
 /// Per-CPU object allocation has stricter requirements than regular bpf_obj_new:
 /// 1. Size must not exceed BPF_GLOBAL_PERCPU_MA_MAX_SIZE (512 bytes)
 /// 2. The type must be a struct of scalars only (no special fields like timers, locks)
@@ -2163,11 +2280,11 @@ pub fn check_percpu_obj_new_constraints(
     // R1 contains the type size (passed as local_type_id which encodes size)
     // In actual verification, we would look up the BTF type and check its size
     // For now, we check if size info is available in the state's BTF context
-    
+
     // The size validation happens during BTF type resolution in the kernel.
     // Here we verify the constraint is respected:
     // - Type must be <= BPF_GLOBAL_PERCPU_MA_MAX_SIZE bytes
-    
+
     // Get the type size from R1 if it's a known constant
     if let Some(reg) = state.reg(1) {
         // If R1 is a known constant (the BTF type ID), we can't directly
@@ -2178,26 +2295,26 @@ pub fn check_percpu_obj_new_constraints(
             // Here we just ensure the argument is properly typed
         }
     }
-    
+
     // R2 (struct_meta) must be NULL (0) for percpu objects
     // Per-CPU objects cannot have kptr fields, so struct_meta must be NULL
     if let Some(reg) = state.reg(2) {
         if reg.is_const() && reg.const_value() != 0 {
             return Err(VerifierError::InvalidKfunc(
-                "bpf_percpu_obj_new: struct_meta must be NULL (no kptr fields allowed)".into()
+                "bpf_percpu_obj_new: struct_meta must be NULL (no kptr fields allowed)".into(),
             ));
         }
     }
-    
+
     // Note: Full size validation is performed in do_misc_fixups when
     // we have access to the BTF type information and can compute actual size.
     // At that point, we verify: type_size <= BPF_GLOBAL_PERCPU_MA_MAX_SIZE
-    
+
     Ok(())
 }
 
 /// Validate per-CPU object type size during fixups
-/// 
+///
 /// This is called from misc_fixups when we have access to the actual type size.
 /// Returns an error if the type exceeds BPF_GLOBAL_PERCPU_MA_MAX_SIZE.
 pub fn validate_percpu_obj_size(type_size: usize, type_name: &str) -> Result<()> {
@@ -2229,39 +2346,39 @@ pub fn check_special_kfunc(
         special_kfuncs::BPF_RES_SPIN_LOCK => {
             // Get lock location from R1 argument (pointer to bpf_spin_lock)
             let reg = state.reg(1).ok_or(VerifierError::InvalidRegister(1))?;
-            
+
             if reg.reg_type != BpfRegType::PtrToMapValue {
                 return Err(VerifierError::TypeMismatch {
                     expected: "ptr_to_map_value".into(),
                     got: format!("{:?}", reg.reg_type),
                 });
             }
-            
+
             let map_uid = reg.map_uid;
             let lock_off = reg.off as u32;
-            
+
             // Acquire the lock
             state.lock_state.acquire(map_uid, lock_off, insn_idx)?;
-            
+
             Ok(true)
         }
         special_kfuncs::BPF_RES_SPIN_UNLOCK => {
             // Get lock location from R1 argument
             let reg = state.reg(1).ok_or(VerifierError::InvalidRegister(1))?;
-            
+
             if reg.reg_type != BpfRegType::PtrToMapValue {
                 return Err(VerifierError::TypeMismatch {
                     expected: "ptr_to_map_value".into(),
                     got: format!("{:?}", reg.reg_type),
                 });
             }
-            
+
             let map_uid = reg.map_uid;
             let lock_off = reg.off as u32;
-            
+
             // Release the lock
             state.lock_state.release(map_uid, lock_off)?;
-            
+
             Ok(true)
         }
         _ => Ok(false),

@@ -1,18 +1,18 @@
+// SPDX-License-Identifier: GPL-2.0
+
 //! BTF function and line info verification
 //!
 //! This module implements verification of BTF function info, line info,
 //! and CO-RE relocations. These correspond to the kernel's check_btf_func(),
 //! check_btf_line(), and check_core_relo() functions.
 
-
 use alloc::{format, string::String, vec::Vec};
-
 
 use alloc::collections::BTreeMap as HashMap;
 
+use super::btf::{Btf, BtfKind};
 use crate::core::error::{Result, VerifierError};
 use crate::core::types::*;
-use super::btf::{Btf, BtfKind};
 
 /// Minimum size of bpf_func_info structure
 pub const MIN_BPF_FUNCINFO_SIZE: usize = 8;
@@ -181,11 +181,7 @@ pub struct SubprogInfo {
 
 impl<'a> BtfInfoVerifier<'a> {
     /// Create a new BTF info verifier
-    pub fn new(
-        btf: Option<&'a Btf>,
-        insns: &'a [BpfInsn],
-        subprogs: &'a [SubprogInfo],
-    ) -> Self {
+    pub fn new(btf: Option<&'a Btf>, insns: &'a [BpfInsn], subprogs: &'a [SubprogInfo]) -> Self {
         Self {
             btf,
             insns,
@@ -223,14 +219,14 @@ impl<'a> BtfInfoVerifier<'a> {
             )));
         }
 
-        let btf = self.btf.ok_or_else(|| {
-            VerifierError::InvalidBtf("func_info requires BTF".into())
-        })?;
+        let btf = self
+            .btf
+            .ok_or_else(|| VerifierError::InvalidBtf("func_info requires BTF".into()))?;
 
         // First entry must be at instruction 0
         if func_info[0].insn_off != 0 {
             return Err(VerifierError::InvalidBtf(
-                "first func_info must be at insn 0".into()
+                "first func_info must be at insn 0".into(),
             ));
         }
 
@@ -285,31 +281,31 @@ impl<'a> BtfInfoVerifier<'a> {
     ///
     /// This corresponds to kernel's check_btf_func().
     /// Validates function signatures match actual subprogram usage.
-    pub fn check_btf_func(
-        &mut self,
-        func_info: &[BpfFuncInfo],
-    ) -> Result<()> {
+    pub fn check_btf_func(&mut self, func_info: &[BpfFuncInfo]) -> Result<()> {
         if func_info.is_empty() {
             return Ok(());
         }
 
-        let btf = self.btf.ok_or_else(|| {
-            VerifierError::InvalidBtf("func_info requires BTF".into())
-        })?;
+        let btf = self
+            .btf
+            .ok_or_else(|| VerifierError::InvalidBtf("func_info requires BTF".into()))?;
 
         // Number of func_info entries should match subprogram count
         if func_info.len() != self.subprogs.len() {
             return Err(VerifierError::InvalidBtf(format!(
                 "func_info count {} != subprog count {}",
-                func_info.len(), self.subprogs.len()
+                func_info.len(),
+                self.subprogs.len()
             )));
         }
 
         for (i, info) in func_info.iter().enumerate() {
             let insn_idx = (info.insn_off / 8) as usize;
-            
+
             // Find corresponding subprog
-            let subprog_idx = self.subprogs.iter()
+            let subprog_idx = self
+                .subprogs
+                .iter()
                 .position(|sp| sp.start == insn_idx)
                 .ok_or_else(|| {
                     VerifierError::InvalidBtf(format!(
@@ -342,10 +338,7 @@ impl<'a> BtfInfoVerifier<'a> {
             }
 
             // Extract parameter types
-            let param_btf_ids: Vec<u32> = proto_type.params
-                .iter()
-                .map(|p| p.type_id)
-                .collect();
+            let param_btf_ids: Vec<u32> = proto_type.params.iter().map(|p| p.type_id).collect();
 
             // Store verified info
             self.func_info.push(VerifiedFuncInfo {
@@ -388,9 +381,7 @@ impl<'a> BtfInfoVerifier<'a> {
         }
 
         if self.btf.is_none() {
-            return Err(VerifierError::InvalidBtf(
-                "line_info requires BTF".into()
-            ));
+            return Err(VerifierError::InvalidBtf("line_info requires BTF".into()));
         }
 
         let mut prev_off = 0u32;
@@ -414,7 +405,9 @@ impl<'a> BtfInfoVerifier<'a> {
             }
 
             // Find which subprog this belongs to
-            let subprog = self.subprogs.iter()
+            let subprog = self
+                .subprogs
+                .iter()
                 .enumerate()
                 .find(|(_, sp)| insn_idx >= sp.start && insn_idx < sp.end)
                 .map(|(idx, _)| idx)
@@ -443,11 +436,7 @@ impl<'a> BtfInfoVerifier<'a> {
     /// Check CO-RE relocations
     ///
     /// This corresponds to kernel's check_core_relo().
-    pub fn check_core_relo(
-        &self,
-        relos: &[BpfCoreRelo],
-        relo_rec_size: usize,
-    ) -> Result<()> {
+    pub fn check_core_relo(&self, relos: &[BpfCoreRelo], relo_rec_size: usize) -> Result<()> {
         if relos.is_empty() {
             return Ok(());
         }
@@ -466,9 +455,9 @@ impl<'a> BtfInfoVerifier<'a> {
             )));
         }
 
-        let btf = self.btf.ok_or_else(|| {
-            VerifierError::InvalidBtf("core_relo requires BTF".into())
-        })?;
+        let btf = self
+            .btf
+            .ok_or_else(|| VerifierError::InvalidBtf("core_relo requires BTF".into()))?;
 
         for (i, relo) in relos.iter().enumerate() {
             // Validate instruction offset
@@ -504,10 +493,7 @@ impl<'a> BtfInfoVerifier<'a> {
 
             // Validate relocation kind
             BpfCoreReloKind::try_from(relo.kind).map_err(|_| {
-                VerifierError::InvalidBtf(format!(
-                    "core_relo[{}].kind {} invalid",
-                    i, relo.kind
-                ))
+                VerifierError::InvalidBtf(format!("core_relo[{}].kind {} invalid", i, relo.kind))
             })?;
         }
 
@@ -533,13 +519,9 @@ impl<'a> BtfInfoVerifier<'a> {
 /// Adjust BTF function info after instruction patching
 ///
 /// This corresponds to kernel's adjust_btf_func().
-pub fn adjust_btf_func(
-    func_info: &mut [BpfFuncInfo],
-    off: usize,
-    delta: i32,
-) {
+pub fn adjust_btf_func(func_info: &mut [BpfFuncInfo], off: usize, delta: i32) {
     let off_bytes = (off * 8) as u32;
-    
+
     for info in func_info.iter_mut() {
         if info.insn_off > off_bytes {
             if delta > 0 {

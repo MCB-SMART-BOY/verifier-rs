@@ -1,30 +1,27 @@
+// SPDX-License-Identifier: GPL-2.0
+
 //! Special types verification integration
 //!
 //! This module integrates dynptr, iterator, and arena verification
 //! into the main verification loop.
 
-
 use alloc::{format, string::String};
 
-use crate::core::types::*;
 use crate::core::error::{Result, VerifierError};
-use crate::state::verifier_state::BpfVerifierState;
-use crate::state::reg_state::{BpfRegState, BtfInfo};
+use crate::core::types::*;
 use crate::state::reference::ReferenceManager;
+use crate::state::reg_state::{BpfRegState, BtfInfo};
+use crate::state::verifier_state::BpfVerifierState;
 
+use crate::mem::arena::{check_arena_access, ArenaState};
 use crate::special::dynptr::{
-    is_dynptr_reg_valid_init,
-    dynptr_id, dynptr_ref_obj_id,
-    mark_stack_slots_dynptr,
-    DynptrTracker, DynptrInfo,
+    dynptr_id, dynptr_ref_obj_id, is_dynptr_reg_valid_init, mark_stack_slots_dynptr, DynptrInfo,
+    DynptrTracker,
 };
 use crate::special::iter::{
-    is_iter_reg_valid_init, is_iter_reg_valid_uninit,
-    mark_stack_slots_iter, unmark_stack_slots_iter,
-    iter_get_state,
-    IteratorStateMachine, IteratorConvergenceTracker, IteratorKind,
+    is_iter_reg_valid_init, is_iter_reg_valid_uninit, iter_get_state, mark_stack_slots_iter,
+    unmark_stack_slots_iter, IteratorConvergenceTracker, IteratorKind, IteratorStateMachine,
 };
-use crate::mem::arena::{ArenaState, check_arena_access};
 
 /// Special types context for verification
 #[derive(Debug, Default)]
@@ -61,22 +58,22 @@ impl SpecialTypesContext {
     pub fn validate_exit(&self) -> Result<()> {
         // Check dynptrs are released
         self.dynptr_tracker.validate_cleanup()?;
-        
+
         // Check iterators are destroyed
         self.iter_tracker.validate_cleanup()?;
-        
+
         // Check locks are released
         if self.spin_lock_depth > 0 {
             return Err(VerifierError::InvalidFunctionCall(
-                "spinlock held at exit".into()
+                "spinlock held at exit".into(),
             ));
         }
         if self.rcu_lock_depth > 0 {
             return Err(VerifierError::InvalidFunctionCall(
-                "RCU read lock held at exit".into()
+                "RCU read lock held at exit".into(),
             ));
         }
-        
+
         Ok(())
     }
 }
@@ -144,7 +141,7 @@ fn check_dynptr_arg(
     nullable: bool,
 ) -> SpecialArgCheck {
     let mut result = SpecialArgCheck::default();
-    
+
     let func = match state.cur_func() {
         Some(f) => f,
         None => {
@@ -156,7 +153,11 @@ fn check_dynptr_arg(
 
     // Check if it's a valid dynptr register
     if !is_dynptr_reg_valid_init(reg, &func.stack) {
-        if nullable && reg.reg_type == BpfRegType::ScalarValue && reg.is_const() && reg.const_value() == 0 {
+        if nullable
+            && reg.reg_type == BpfRegType::ScalarValue
+            && reg.is_const()
+            && reg.const_value() == 0
+        {
             // NULL is OK for nullable
             return result;
         }
@@ -186,12 +187,9 @@ fn check_dynptr_arg(
 }
 
 /// Check iterator argument for open-coded iterator support
-fn check_iter_arg(
-    state: &BpfVerifierState,
-    reg: &BpfRegState,
-) -> SpecialArgCheck {
+fn check_iter_arg(state: &BpfVerifierState, reg: &BpfRegState) -> SpecialArgCheck {
     let mut result = SpecialArgCheck::default();
-    
+
     let func = match state.cur_func() {
         Some(f) => f,
         None => {
@@ -213,7 +211,7 @@ fn check_iter_arg(
     // Check for initialized use (iter_next, iter_destroy)
     // Would need BTF ID from kfunc info
     let expected_btf_id = 0; // Placeholder
-    
+
     match is_iter_reg_valid_init(reg, &func.stack, expected_btf_id, nr_slots) {
         Ok(()) => {
             // Get ref_obj_id
@@ -264,56 +262,54 @@ pub fn process_dynptr_helper(
     arg_reg: usize,
     insn_idx: usize,
 ) -> Result<Option<BpfRegState>> {
-    let func = state.cur_func_mut().ok_or(VerifierError::Internal(
-        "no current function".into()
-    ))?;
-    
-    let reg = func.regs.get(arg_reg).ok_or(VerifierError::InvalidRegister(arg_reg as u8))?.clone();
+    let func = state
+        .cur_func_mut()
+        .ok_or(VerifierError::Internal("no current function".into()))?;
+
+    let reg = func
+        .regs
+        .get(arg_reg)
+        .ok_or(VerifierError::InvalidRegister(arg_reg as u8))?
+        .clone();
 
     match helper_id {
         // bpf_dynptr_from_mem
         1 => {
             let dynptr_type = BpfDynptrType::Local;
-            let id = mark_stack_slots_dynptr(
-                &mut func.stack,
-                refs,
-                &reg,
-                dynptr_type,
-                insn_idx,
-                None,
-            )?;
+            let id =
+                mark_stack_slots_dynptr(&mut func.stack, refs, &reg, dynptr_type, insn_idx, None)?;
 
-            ctx.dynptr_tracker.register(id, DynptrInfo {
-                dynptr_type,
-                spi: 0, // Would be computed
-                ref_obj_id: 0,
-                created_at: insn_idx,
-                is_clone: false,
-                parent_id: None,
-            });
+            ctx.dynptr_tracker.register(
+                id,
+                DynptrInfo {
+                    dynptr_type,
+                    spi: 0, // Would be computed
+                    ref_obj_id: 0,
+                    created_at: insn_idx,
+                    is_clone: false,
+                    parent_id: None,
+                },
+            );
 
             Ok(None)
         }
         // bpf_ringbuf_reserve_dynptr
         2 => {
             let dynptr_type = BpfDynptrType::Ringbuf;
-            let id = mark_stack_slots_dynptr(
-                &mut func.stack,
-                refs,
-                &reg,
-                dynptr_type,
-                insn_idx,
-                None,
-            )?;
+            let id =
+                mark_stack_slots_dynptr(&mut func.stack, refs, &reg, dynptr_type, insn_idx, None)?;
 
-            ctx.dynptr_tracker.register(id, DynptrInfo {
-                dynptr_type,
-                spi: 0,
-                ref_obj_id: id, // Ringbuf is refcounted
-                created_at: insn_idx,
-                is_clone: false,
-                parent_id: None,
-            });
+            ctx.dynptr_tracker.register(
+                id,
+                DynptrInfo {
+                    dynptr_type,
+                    spi: 0,
+                    ref_obj_id: id, // Ringbuf is refcounted
+                    created_at: insn_idx,
+                    is_clone: false,
+                    parent_id: None,
+                },
+            );
 
             // Return value is error code
             let mut ret = BpfRegState::new_scalar_unknown(false);
@@ -325,9 +321,11 @@ pub fn process_dynptr_helper(
         3 | 4 => {
             // Just validate the dynptr
             if !is_dynptr_reg_valid_init(&reg, &func.stack) {
-                return Err(VerifierError::InvalidDynptr("dynptr not initialized".into()));
+                return Err(VerifierError::InvalidDynptr(
+                    "dynptr not initialized".into(),
+                ));
             }
-            
+
             let mut ret = BpfRegState::new_scalar_unknown(false);
             ret.smin_value = i32::MIN as i64;
             ret.smax_value = 0;
@@ -347,11 +345,15 @@ pub fn process_iter_kfunc(
     insn_idx: usize,
     btf_id: u32,
 ) -> Result<Option<BpfRegState>> {
-    let func = state.cur_func_mut().ok_or(VerifierError::Internal(
-        "no current function".into()
-    ))?;
-    
-    let reg = func.regs.get(arg_reg).ok_or(VerifierError::InvalidRegister(arg_reg as u8))?.clone();
+    let func = state
+        .cur_func_mut()
+        .ok_or(VerifierError::Internal("no current function".into()))?;
+
+    let reg = func
+        .regs
+        .get(arg_reg)
+        .ok_or(VerifierError::InvalidRegister(arg_reg as u8))?
+        .clone();
 
     if kfunc_name.contains("_new") {
         // Iterator initialization
@@ -382,16 +384,18 @@ pub fn process_iter_kfunc(
 
         // Get iterator state
         let iter_state = iter_get_state(&reg, &func.stack, nr_slots)?;
-        
+
         if iter_state == BpfIterState::Invalid {
-            return Err(VerifierError::InvalidIterator("iterator not initialized".into()));
+            return Err(VerifierError::InvalidIterator(
+                "iterator not initialized".into(),
+            ));
         }
 
         // Update iterator state in tracker
         if let Ok(ref_id) = crate::special::iter::iter_ref_obj_id(&reg, &func.stack, nr_slots) {
             if let Some(iter) = ctx.iter_tracker.get_mut(ref_id) {
                 let (_, may_be_null) = iter.process_next()?;
-                
+
                 // Return pointer or NULL
                 let mut ret = BpfRegState::new_scalar_unknown(false);
                 ret.reg_type = BpfRegType::PtrToBtfId;
@@ -428,10 +432,7 @@ pub fn process_iter_kfunc(
 }
 
 /// Check if iterator has converged for state pruning
-pub fn check_iter_convergence(
-    state: &BpfVerifierState,
-    cached_state: &BpfVerifierState,
-) -> bool {
+pub fn check_iter_convergence(state: &BpfVerifierState, cached_state: &BpfVerifierState) -> bool {
     let func = match state.cur_func() {
         Some(f) => f,
         None => return false,
@@ -449,11 +450,15 @@ pub fn check_iter_convergence(
 
         match (cur_slot, cached_slot) {
             (Some(cur), Some(cached)) => {
-                if cur.get_type() == BpfStackSlotType::Iter 
-                    && cached.get_type() == BpfStackSlotType::Iter {
+                if cur.get_type() == BpfStackSlotType::Iter
+                    && cached.get_type() == BpfStackSlotType::Iter
+                {
                     // Check for convergence
                     if !crate::special::iter::check_iter_state_convergence(
-                        &func.stack, &cached_func.stack, spi, 1
+                        &func.stack,
+                        &cached_func.stack,
+                        spi,
+                        1,
                     ) {
                         return false;
                     }
@@ -487,12 +492,14 @@ pub fn validate_special_mem_access(
         }
         BpfRegType::ConstPtrToDynptr => {
             // Dynptr access - verify through dynptr API
-            let func = state.cur_func().ok_or(VerifierError::Internal(
-                "no current function".into()
-            ))?;
-            
+            let func = state
+                .cur_func()
+                .ok_or(VerifierError::Internal("no current function".into()))?;
+
             if !is_dynptr_reg_valid_init(reg, &func.stack) {
-                return Err(VerifierError::InvalidDynptr("invalid dynptr for access".into()));
+                return Err(VerifierError::InvalidDynptr(
+                    "invalid dynptr for access".into(),
+                ));
             }
         }
         _ => {}
@@ -502,15 +509,12 @@ pub fn validate_special_mem_access(
 }
 
 /// Handle lock acquire for special types
-pub fn handle_lock_acquire(
-    ctx: &mut SpecialTypesContext,
-    lock_type: LockType,
-) -> Result<()> {
+pub fn handle_lock_acquire(ctx: &mut SpecialTypesContext, lock_type: LockType) -> Result<()> {
     match lock_type {
         LockType::SpinLock => {
             if ctx.sleepable {
                 return Err(VerifierError::InvalidFunctionCall(
-                    "spin_lock in sleepable context".into()
+                    "spin_lock in sleepable context".into(),
                 ));
             }
             ctx.spin_lock_depth += 1;
@@ -523,15 +527,12 @@ pub fn handle_lock_acquire(
 }
 
 /// Handle lock release for special types
-pub fn handle_lock_release(
-    ctx: &mut SpecialTypesContext,
-    lock_type: LockType,
-) -> Result<()> {
+pub fn handle_lock_release(ctx: &mut SpecialTypesContext, lock_type: LockType) -> Result<()> {
     match lock_type {
         LockType::SpinLock => {
             if ctx.spin_lock_depth == 0 {
                 return Err(VerifierError::InvalidFunctionCall(
-                    "spin_unlock without lock".into()
+                    "spin_unlock without lock".into(),
                 ));
             }
             ctx.spin_lock_depth -= 1;
@@ -539,7 +540,7 @@ pub fn handle_lock_release(
         LockType::RcuRead => {
             if ctx.rcu_lock_depth == 0 {
                 return Err(VerifierError::InvalidFunctionCall(
-                    "rcu_read_unlock without lock".into()
+                    "rcu_read_unlock without lock".into(),
                 ));
             }
             ctx.rcu_lock_depth -= 1;

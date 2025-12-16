@@ -1,21 +1,21 @@
+// SPDX-License-Identifier: GPL-2.0
+
 //! Helper function verification
 //!
 //! This module implements argument type checking and return value
 //! handling for BPF helper functions.
 
-
 use alloc::format;
 
+use crate::check::sleepable::check_helper_sleepable_compat;
+use crate::core::error::{Result, VerifierError};
+use crate::core::types::*;
+use crate::mem::user::{
+    check_user_mem_helper_access, get_helper_user_access_type, is_user_mem_helper,
+    validate_probe_read_user_dst, validate_probe_read_user_src, UserMemContext,
+};
 use crate::state::reg_state::BpfRegState;
 use crate::state::verifier_state::BpfVerifierState;
-use crate::core::types::*;
-use crate::core::error::{Result, VerifierError};
-use crate::mem::user::{
-    UserMemContext, is_user_mem_helper, get_helper_user_access_type,
-    check_user_mem_helper_access, validate_probe_read_user_dst, 
-    validate_probe_read_user_src,
-};
-use crate::check::sleepable::check_helper_sleepable_compat;
 
 /// Metadata about a helper function call
 #[derive(Debug, Clone, Default)]
@@ -108,29 +108,14 @@ pub fn get_helper_proto(func_id: BpfFuncId) -> Option<HelperProto> {
                 BpfArgType::Anything,
             ],
         )),
-        BpfFuncId::KtimeGetNs => Some(HelperProto::new(
-            func_id,
-            BpfRetType::Integer,
-            &[],
-        )),
+        BpfFuncId::KtimeGetNs => Some(HelperProto::new(func_id, BpfRetType::Integer, &[])),
         BpfFuncId::TracePrintk => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[
-                BpfArgType::PtrToMem,
-                BpfArgType::ConstSize,
-            ],
+            &[BpfArgType::PtrToMem, BpfArgType::ConstSize],
         )),
-        BpfFuncId::GetPrandomU32 => Some(HelperProto::new(
-            func_id,
-            BpfRetType::Integer,
-            &[],
-        )),
-        BpfFuncId::GetSmpProcessorId => Some(HelperProto::new(
-            func_id,
-            BpfRetType::Integer,
-            &[],
-        )),
+        BpfFuncId::GetPrandomU32 => Some(HelperProto::new(func_id, BpfRetType::Integer, &[])),
+        BpfFuncId::GetSmpProcessorId => Some(HelperProto::new(func_id, BpfRetType::Integer, &[])),
         BpfFuncId::TailCall => Some(HelperProto::new(
             func_id,
             BpfRetType::Void,
@@ -140,16 +125,8 @@ pub fn get_helper_proto(func_id: BpfFuncId) -> Option<HelperProto> {
                 BpfArgType::Anything,
             ],
         )),
-        BpfFuncId::GetCurrentPidTgid => Some(HelperProto::new(
-            func_id,
-            BpfRetType::Integer,
-            &[],
-        )),
-        BpfFuncId::GetCurrentUidGid => Some(HelperProto::new(
-            func_id,
-            BpfRetType::Integer,
-            &[],
-        )),
+        BpfFuncId::GetCurrentPidTgid => Some(HelperProto::new(func_id, BpfRetType::Integer, &[])),
+        BpfFuncId::GetCurrentUidGid => Some(HelperProto::new(func_id, BpfRetType::Integer, &[])),
         BpfFuncId::GetCurrentComm => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
@@ -185,7 +162,11 @@ pub fn get_helper_proto(func_id: BpfFuncId) -> Option<HelperProto> {
         BpfFuncId::RingbufReserve => Some(HelperProto::new(
             func_id,
             BpfRetType::PtrToAllocMemOrNull,
-            &[BpfArgType::ConstMapPtr, BpfArgType::Anything, BpfArgType::Anything],
+            &[
+                BpfArgType::ConstMapPtr,
+                BpfArgType::Anything,
+                BpfArgType::Anything,
+            ],
         )),
         BpfFuncId::RingbufSubmit => Some(HelperProto::new(
             func_id,
@@ -211,27 +192,47 @@ pub fn get_helper_proto(func_id: BpfFuncId) -> Option<HelperProto> {
         BpfFuncId::ProbeReadKernel => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::PtrToUninitMem, BpfArgType::ConstSize, BpfArgType::Anything],
+            &[
+                BpfArgType::PtrToUninitMem,
+                BpfArgType::ConstSize,
+                BpfArgType::Anything,
+            ],
         )),
         BpfFuncId::ProbeReadUser => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::PtrToUninitMem, BpfArgType::ConstSize, BpfArgType::Anything],
+            &[
+                BpfArgType::PtrToUninitMem,
+                BpfArgType::ConstSize,
+                BpfArgType::Anything,
+            ],
         )),
         BpfFuncId::ProbeReadStr => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::PtrToUninitMem, BpfArgType::ConstSize, BpfArgType::Anything],
+            &[
+                BpfArgType::PtrToUninitMem,
+                BpfArgType::ConstSize,
+                BpfArgType::Anything,
+            ],
         )),
         BpfFuncId::ProbeReadKernelStr => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::PtrToUninitMem, BpfArgType::ConstSize, BpfArgType::Anything],
+            &[
+                BpfArgType::PtrToUninitMem,
+                BpfArgType::ConstSize,
+                BpfArgType::Anything,
+            ],
         )),
         BpfFuncId::ProbeReadUserStr => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::PtrToUninitMem, BpfArgType::ConstSize, BpfArgType::Anything],
+            &[
+                BpfArgType::PtrToUninitMem,
+                BpfArgType::ConstSize,
+                BpfArgType::Anything,
+            ],
         )),
         // Cgroup/socket helpers
         BpfFuncId::GetSocketCookie => Some(HelperProto::new(
@@ -239,11 +240,7 @@ pub fn get_helper_proto(func_id: BpfFuncId) -> Option<HelperProto> {
             BpfRetType::Integer,
             &[BpfArgType::PtrToCtx],
         )),
-        BpfFuncId::GetCurrentCgroupId => Some(HelperProto::new(
-            func_id,
-            BpfRetType::Integer,
-            &[],
-        )),
+        BpfFuncId::GetCurrentCgroupId => Some(HelperProto::new(func_id, BpfRetType::Integer, &[])),
         BpfFuncId::GetCgroupClassid => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
@@ -301,12 +298,20 @@ pub fn get_helper_proto(func_id: BpfFuncId) -> Option<HelperProto> {
         BpfFuncId::SkbChangeTail => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::PtrToCtx, BpfArgType::Anything, BpfArgType::Anything],
+            &[
+                BpfArgType::PtrToCtx,
+                BpfArgType::Anything,
+                BpfArgType::Anything,
+            ],
         )),
         BpfFuncId::SkbChangeHead => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::PtrToCtx, BpfArgType::Anything, BpfArgType::Anything],
+            &[
+                BpfArgType::PtrToCtx,
+                BpfArgType::Anything,
+                BpfArgType::Anything,
+            ],
         )),
         BpfFuncId::SkbGetTunnelKey => Some(HelperProto::new(
             func_id,
@@ -331,7 +336,11 @@ pub fn get_helper_proto(func_id: BpfFuncId) -> Option<HelperProto> {
         BpfFuncId::SkbVlanPush => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::PtrToCtx, BpfArgType::Anything, BpfArgType::Anything],
+            &[
+                BpfArgType::PtrToCtx,
+                BpfArgType::Anything,
+                BpfArgType::Anything,
+            ],
         )),
         BpfFuncId::SkbVlanPop => Some(HelperProto::new(
             func_id,
@@ -354,7 +363,7 @@ pub fn get_helper_proto(func_id: BpfFuncId) -> Option<HelperProto> {
             BpfRetType::Integer,
             &[BpfArgType::PtrToCtx, BpfArgType::Anything],
         )),
-        // Redirect helpers  
+        // Redirect helpers
         BpfFuncId::Redirect => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
@@ -363,7 +372,11 @@ pub fn get_helper_proto(func_id: BpfFuncId) -> Option<HelperProto> {
         BpfFuncId::RedirectMap => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::ConstMapPtr, BpfArgType::Anything, BpfArgType::Anything],
+            &[
+                BpfArgType::ConstMapPtr,
+                BpfArgType::Anything,
+                BpfArgType::Anything,
+            ],
         )),
         // Csum helpers
         BpfFuncId::CsumDiff => Some(HelperProto::new(
@@ -403,13 +416,21 @@ pub fn get_helper_proto(func_id: BpfFuncId) -> Option<HelperProto> {
         BpfFuncId::MapLookupPercpuElem => Some(HelperProto::new(
             func_id,
             BpfRetType::PtrToMapValueOrNull,
-            &[BpfArgType::ConstMapPtr, BpfArgType::PtrToMapKey, BpfArgType::Anything],
+            &[
+                BpfArgType::ConstMapPtr,
+                BpfArgType::PtrToMapKey,
+                BpfArgType::Anything,
+            ],
         )),
         // Timer helpers
         BpfFuncId::TimerInit => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::PtrToMapValue, BpfArgType::ConstMapPtr, BpfArgType::Anything],
+            &[
+                BpfArgType::PtrToMapValue,
+                BpfArgType::ConstMapPtr,
+                BpfArgType::Anything,
+            ],
         )),
         BpfFuncId::TimerSetCallback => Some(HelperProto::new(
             func_id,
@@ -419,7 +440,11 @@ pub fn get_helper_proto(func_id: BpfFuncId) -> Option<HelperProto> {
         BpfFuncId::TimerStart => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::PtrToMapValue, BpfArgType::Anything, BpfArgType::Anything],
+            &[
+                BpfArgType::PtrToMapValue,
+                BpfArgType::Anything,
+                BpfArgType::Anything,
+            ],
         )),
         BpfFuncId::TimerCancel => Some(HelperProto::new(
             func_id,
@@ -430,35 +455,57 @@ pub fn get_helper_proto(func_id: BpfFuncId) -> Option<HelperProto> {
         BpfFuncId::DynptrFromMem => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::PtrToMem, BpfArgType::ConstSize, BpfArgType::Anything, BpfArgType::PtrToDynptr],
+            &[
+                BpfArgType::PtrToMem,
+                BpfArgType::ConstSize,
+                BpfArgType::Anything,
+                BpfArgType::PtrToDynptr,
+            ],
         )),
         BpfFuncId::DynptrRead => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::PtrToUninitMem, BpfArgType::ConstSize, BpfArgType::PtrToDynptr, BpfArgType::Anything, BpfArgType::Anything],
+            &[
+                BpfArgType::PtrToUninitMem,
+                BpfArgType::ConstSize,
+                BpfArgType::PtrToDynptr,
+                BpfArgType::Anything,
+                BpfArgType::Anything,
+            ],
         )),
         BpfFuncId::DynptrWrite => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::PtrToDynptr, BpfArgType::Anything, BpfArgType::PtrToMem, BpfArgType::ConstSize, BpfArgType::Anything],
+            &[
+                BpfArgType::PtrToDynptr,
+                BpfArgType::Anything,
+                BpfArgType::PtrToMem,
+                BpfArgType::ConstSize,
+                BpfArgType::Anything,
+            ],
         )),
         BpfFuncId::DynptrData => Some(HelperProto::new(
             func_id,
             BpfRetType::PtrToMemOrNull,
-            &[BpfArgType::PtrToDynptr, BpfArgType::Anything, BpfArgType::Anything],
+            &[
+                BpfArgType::PtrToDynptr,
+                BpfArgType::Anything,
+                BpfArgType::Anything,
+            ],
         )),
         // Ringbuf output
         BpfFuncId::RingbufOutput => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::ConstMapPtr, BpfArgType::PtrToMem, BpfArgType::ConstSize, BpfArgType::Anything],
+            &[
+                BpfArgType::ConstMapPtr,
+                BpfArgType::PtrToMem,
+                BpfArgType::ConstSize,
+                BpfArgType::Anything,
+            ],
         )),
         // Task helpers
-        BpfFuncId::GetCurrentTask => Some(HelperProto::new(
-            func_id,
-            BpfRetType::Integer,
-            &[],
-        )),
+        BpfFuncId::GetCurrentTask => Some(HelperProto::new(func_id, BpfRetType::Integer, &[])),
         BpfFuncId::GetCurrentTaskBtf => Some(HelperProto::new(
             func_id,
             BpfRetType::PtrToMemOrNull, // PTR_TO_BTF_ID
@@ -468,18 +515,35 @@ pub fn get_helper_proto(func_id: BpfFuncId) -> Option<HelperProto> {
         BpfFuncId::Snprintf => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::PtrToMem, BpfArgType::ConstSize, BpfArgType::PtrToMemRdonly, BpfArgType::PtrToMemRdonly, BpfArgType::ConstSizeOrZero],
+            &[
+                BpfArgType::PtrToMem,
+                BpfArgType::ConstSize,
+                BpfArgType::PtrToMemRdonly,
+                BpfArgType::PtrToMemRdonly,
+                BpfArgType::ConstSizeOrZero,
+            ],
         )),
         BpfFuncId::SnprintfBtf => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::PtrToMem, BpfArgType::ConstSize, BpfArgType::Anything, BpfArgType::ConstSize, BpfArgType::Anything],
+            &[
+                BpfArgType::PtrToMem,
+                BpfArgType::ConstSize,
+                BpfArgType::Anything,
+                BpfArgType::ConstSize,
+                BpfArgType::Anything,
+            ],
         )),
         // Iterator helpers (bpf_loop)
         BpfFuncId::Loop => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::Anything, BpfArgType::Anything, BpfArgType::PtrToStack, BpfArgType::Anything],
+            &[
+                BpfArgType::Anything,
+                BpfArgType::Anything,
+                BpfArgType::PtrToStack,
+                BpfArgType::Anything,
+            ],
         )),
         // Kptr helpers
         BpfFuncId::KptrXchg => Some(HelperProto::new(
@@ -491,19 +555,35 @@ pub fn get_helper_proto(func_id: BpfFuncId) -> Option<HelperProto> {
         BpfFuncId::UserRingbufDrain => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::ConstMapPtr, BpfArgType::Anything, BpfArgType::PtrToStack, BpfArgType::Anything],
+            &[
+                BpfArgType::ConstMapPtr,
+                BpfArgType::Anything,
+                BpfArgType::PtrToStack,
+                BpfArgType::Anything,
+            ],
         )),
         // Find VMA helper (sleepable)
         BpfFuncId::FindVma => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::Anything, BpfArgType::Anything, BpfArgType::Anything, BpfArgType::PtrToStack, BpfArgType::Anything],
+            &[
+                BpfArgType::Anything,
+                BpfArgType::Anything,
+                BpfArgType::Anything,
+                BpfArgType::PtrToStack,
+                BpfArgType::Anything,
+            ],
         )),
         // Trace vprintk
         BpfFuncId::TraceVprintk => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::PtrToMem, BpfArgType::ConstSize, BpfArgType::PtrToMem, BpfArgType::ConstSize],
+            &[
+                BpfArgType::PtrToMem,
+                BpfArgType::ConstSize,
+                BpfArgType::PtrToMem,
+                BpfArgType::ConstSize,
+            ],
         )),
         // Get function IP (for profiling)
         BpfFuncId::GetFuncIp => Some(HelperProto::new(
@@ -518,22 +598,28 @@ pub fn get_helper_proto(func_id: BpfFuncId) -> Option<HelperProto> {
             &[BpfArgType::Anything],
         )),
         // Get return value
-        BpfFuncId::GetRetval => Some(HelperProto::new(
-            func_id,
-            BpfRetType::Integer,
-            &[],
-        )),
+        BpfFuncId::GetRetval => Some(HelperProto::new(func_id, BpfRetType::Integer, &[])),
         // Copy from user
         BpfFuncId::CopyFromUser => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::PtrToUninitMem, BpfArgType::ConstSize, BpfArgType::Anything],
+            &[
+                BpfArgType::PtrToUninitMem,
+                BpfArgType::ConstSize,
+                BpfArgType::Anything,
+            ],
         )),
         // Copy from user task
         BpfFuncId::CopyFromUserTask => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::PtrToUninitMem, BpfArgType::ConstSize, BpfArgType::Anything, BpfArgType::Anything, BpfArgType::Anything],
+            &[
+                BpfArgType::PtrToUninitMem,
+                BpfArgType::ConstSize,
+                BpfArgType::Anything,
+                BpfArgType::Anything,
+                BpfArgType::Anything,
+            ],
         )),
         // Per-CPU helpers
         BpfFuncId::PerCpuPtr => Some(HelperProto::new(
@@ -547,21 +633,9 @@ pub fn get_helper_proto(func_id: BpfFuncId) -> Option<HelperProto> {
             &[BpfArgType::PtrToMem],
         )),
         // Ktime helpers
-        BpfFuncId::KtimeGetBootNs => Some(HelperProto::new(
-            func_id,
-            BpfRetType::Integer,
-            &[],
-        )),
-        BpfFuncId::KtimeGetCoarseNs => Some(HelperProto::new(
-            func_id,
-            BpfRetType::Integer,
-            &[],
-        )),
-        BpfFuncId::KtimeGetTaiNs => Some(HelperProto::new(
-            func_id,
-            BpfRetType::Integer,
-            &[],
-        )),
+        BpfFuncId::KtimeGetBootNs => Some(HelperProto::new(func_id, BpfRetType::Integer, &[])),
+        BpfFuncId::KtimeGetCoarseNs => Some(HelperProto::new(func_id, BpfRetType::Integer, &[])),
+        BpfFuncId::KtimeGetTaiNs => Some(HelperProto::new(func_id, BpfRetType::Integer, &[])),
         // Cgroup helpers
         BpfFuncId::GetCurrentAncestorCgroupId => Some(HelperProto::new(
             func_id,
@@ -587,13 +661,22 @@ pub fn get_helper_proto(func_id: BpfFuncId) -> Option<HelperProto> {
         BpfFuncId::SkbLoadBytesRelative => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::PtrToCtx, BpfArgType::Anything, BpfArgType::PtrToUninitMem, BpfArgType::ConstSize],
+            &[
+                BpfArgType::PtrToCtx,
+                BpfArgType::Anything,
+                BpfArgType::PtrToUninitMem,
+                BpfArgType::ConstSize,
+            ],
         )),
         // Map push/pop/peek
         BpfFuncId::MapPushElem => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::ConstMapPtr, BpfArgType::PtrToMapValue, BpfArgType::Anything],
+            &[
+                BpfArgType::ConstMapPtr,
+                BpfArgType::PtrToMapValue,
+                BpfArgType::Anything,
+            ],
         )),
         BpfFuncId::MapPopElem => Some(HelperProto::new(
             func_id,
@@ -609,13 +692,22 @@ pub fn get_helper_proto(func_id: BpfFuncId) -> Option<HelperProto> {
         BpfFuncId::SkbAdjustRoom => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::PtrToCtx, BpfArgType::Anything, BpfArgType::Anything, BpfArgType::Anything],
+            &[
+                BpfArgType::PtrToCtx,
+                BpfArgType::Anything,
+                BpfArgType::Anything,
+                BpfArgType::Anything,
+            ],
         )),
         // Clone redirect
         BpfFuncId::CloneRedirect => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::PtrToCtx, BpfArgType::Anything, BpfArgType::Anything],
+            &[
+                BpfArgType::PtrToCtx,
+                BpfArgType::Anything,
+                BpfArgType::Anything,
+            ],
         )),
         // Get hash recalc
         BpfFuncId::GetHashRecalc => Some(HelperProto::new(
@@ -643,18 +735,35 @@ pub fn get_helper_proto(func_id: BpfFuncId) -> Option<HelperProto> {
         BpfFuncId::FibLookup => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::PtrToCtx, BpfArgType::PtrToMem, BpfArgType::ConstSize, BpfArgType::Anything],
+            &[
+                BpfArgType::PtrToCtx,
+                BpfArgType::PtrToMem,
+                BpfArgType::ConstSize,
+                BpfArgType::Anything,
+            ],
         )),
         // Setsockopt/getsockopt
         BpfFuncId::Setsockopt => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::PtrToCtx, BpfArgType::Anything, BpfArgType::Anything, BpfArgType::PtrToMem, BpfArgType::ConstSize],
+            &[
+                BpfArgType::PtrToCtx,
+                BpfArgType::Anything,
+                BpfArgType::Anything,
+                BpfArgType::PtrToMem,
+                BpfArgType::ConstSize,
+            ],
         )),
         BpfFuncId::Getsockopt => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::PtrToCtx, BpfArgType::Anything, BpfArgType::Anything, BpfArgType::PtrToUninitMem, BpfArgType::ConstSize],
+            &[
+                BpfArgType::PtrToCtx,
+                BpfArgType::Anything,
+                BpfArgType::Anything,
+                BpfArgType::PtrToUninitMem,
+                BpfArgType::ConstSize,
+            ],
         )),
         // Get listener socket
         BpfFuncId::GetListenerSock => Some(HelperProto::new(
@@ -666,7 +775,13 @@ pub fn get_helper_proto(func_id: BpfFuncId) -> Option<HelperProto> {
         BpfFuncId::CheckMtu => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::PtrToCtx, BpfArgType::Anything, BpfArgType::PtrToMem, BpfArgType::Anything, BpfArgType::Anything],
+            &[
+                BpfArgType::PtrToCtx,
+                BpfArgType::Anything,
+                BpfArgType::PtrToMem,
+                BpfArgType::Anything,
+                BpfArgType::Anything,
+            ],
         )),
         // Send signal
         BpfFuncId::SendSignal => Some(HelperProto::new(
@@ -689,131 +804,231 @@ pub fn get_helper_proto(func_id: BpfFuncId) -> Option<HelperProto> {
         BpfFuncId::ReadBranchRecords => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::PtrToCtx, BpfArgType::PtrToMem, BpfArgType::ConstSize, BpfArgType::Anything],
+            &[
+                BpfArgType::PtrToCtx,
+                BpfArgType::PtrToMem,
+                BpfArgType::ConstSize,
+                BpfArgType::Anything,
+            ],
         )),
         // Get stack
         BpfFuncId::GetStack => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::PtrToCtx, BpfArgType::PtrToUninitMem, BpfArgType::ConstSize, BpfArgType::Anything],
+            &[
+                BpfArgType::PtrToCtx,
+                BpfArgType::PtrToUninitMem,
+                BpfArgType::ConstSize,
+                BpfArgType::Anything,
+            ],
         )),
         BpfFuncId::GetStackid => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::PtrToCtx, BpfArgType::ConstMapPtr, BpfArgType::Anything],
+            &[
+                BpfArgType::PtrToCtx,
+                BpfArgType::ConstMapPtr,
+                BpfArgType::Anything,
+            ],
         )),
         // Jiffies64
-        BpfFuncId::Jiffies64 => Some(HelperProto::new(
-            func_id,
-            BpfRetType::Integer,
-            &[],
-        )),
+        BpfFuncId::Jiffies64 => Some(HelperProto::new(func_id, BpfRetType::Integer, &[])),
         // Skc lookup
         BpfFuncId::SkcLookupTcp => Some(HelperProto::new(
             func_id,
             BpfRetType::PtrToSocketOrNull,
-            &[BpfArgType::PtrToCtx, BpfArgType::PtrToMem, BpfArgType::Anything, BpfArgType::Anything, BpfArgType::Anything],
+            &[
+                BpfArgType::PtrToCtx,
+                BpfArgType::PtrToMem,
+                BpfArgType::Anything,
+                BpfArgType::Anything,
+                BpfArgType::Anything,
+            ],
         )),
         BpfFuncId::SkAssign => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::PtrToCtx, BpfArgType::PtrToSocket, BpfArgType::Anything],
+            &[
+                BpfArgType::PtrToCtx,
+                BpfArgType::PtrToSocket,
+                BpfArgType::Anything,
+            ],
         )),
         // Bind
         BpfFuncId::Bind => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::PtrToCtx, BpfArgType::PtrToMem, BpfArgType::Anything],
+            &[
+                BpfArgType::PtrToCtx,
+                BpfArgType::PtrToMem,
+                BpfArgType::Anything,
+            ],
         )),
         // Seq helpers
         BpfFuncId::SeqWrite => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::PtrToCtx, BpfArgType::PtrToMem, BpfArgType::ConstSize],
+            &[
+                BpfArgType::PtrToCtx,
+                BpfArgType::PtrToMem,
+                BpfArgType::ConstSize,
+            ],
         )),
         BpfFuncId::SeqPrintf => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::PtrToCtx, BpfArgType::PtrToMem, BpfArgType::ConstSize, BpfArgType::PtrToMem, BpfArgType::ConstSizeOrZero],
+            &[
+                BpfArgType::PtrToCtx,
+                BpfArgType::PtrToMem,
+                BpfArgType::ConstSize,
+                BpfArgType::PtrToMem,
+                BpfArgType::ConstSizeOrZero,
+            ],
         )),
         BpfFuncId::SeqPrintfBtf => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::PtrToCtx, BpfArgType::Anything, BpfArgType::ConstSize, BpfArgType::Anything],
+            &[
+                BpfArgType::PtrToCtx,
+                BpfArgType::Anything,
+                BpfArgType::ConstSize,
+                BpfArgType::Anything,
+            ],
         )),
         // D-path
         BpfFuncId::DPath => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::Anything, BpfArgType::PtrToMem, BpfArgType::ConstSize],
+            &[
+                BpfArgType::Anything,
+                BpfArgType::PtrToMem,
+                BpfArgType::ConstSize,
+            ],
         )),
         // Sock hash/map update
         BpfFuncId::SockMapUpdate => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::PtrToCtx, BpfArgType::ConstMapPtr, BpfArgType::PtrToMapKey, BpfArgType::Anything],
+            &[
+                BpfArgType::PtrToCtx,
+                BpfArgType::ConstMapPtr,
+                BpfArgType::PtrToMapKey,
+                BpfArgType::Anything,
+            ],
         )),
         BpfFuncId::SockHashUpdate => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::PtrToCtx, BpfArgType::ConstMapPtr, BpfArgType::PtrToMapKey, BpfArgType::Anything],
+            &[
+                BpfArgType::PtrToCtx,
+                BpfArgType::ConstMapPtr,
+                BpfArgType::PtrToMapKey,
+                BpfArgType::Anything,
+            ],
         )),
         // Msg redirect
         BpfFuncId::MsgRedirectMap => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::PtrToCtx, BpfArgType::ConstMapPtr, BpfArgType::Anything, BpfArgType::Anything],
+            &[
+                BpfArgType::PtrToCtx,
+                BpfArgType::ConstMapPtr,
+                BpfArgType::Anything,
+                BpfArgType::Anything,
+            ],
         )),
         BpfFuncId::MsgRedirectHash => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::PtrToCtx, BpfArgType::ConstMapPtr, BpfArgType::PtrToMapKey, BpfArgType::Anything],
+            &[
+                BpfArgType::PtrToCtx,
+                BpfArgType::ConstMapPtr,
+                BpfArgType::PtrToMapKey,
+                BpfArgType::Anything,
+            ],
         )),
         // Sk redirect
         BpfFuncId::SkRedirectMap => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::PtrToCtx, BpfArgType::ConstMapPtr, BpfArgType::Anything, BpfArgType::Anything],
+            &[
+                BpfArgType::PtrToCtx,
+                BpfArgType::ConstMapPtr,
+                BpfArgType::Anything,
+                BpfArgType::Anything,
+            ],
         )),
         BpfFuncId::SkRedirectHash => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::PtrToCtx, BpfArgType::ConstMapPtr, BpfArgType::PtrToMapKey, BpfArgType::Anything],
+            &[
+                BpfArgType::PtrToCtx,
+                BpfArgType::ConstMapPtr,
+                BpfArgType::PtrToMapKey,
+                BpfArgType::Anything,
+            ],
         )),
         // For each map elem
         BpfFuncId::ForEachMapElem => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::ConstMapPtr, BpfArgType::Anything, BpfArgType::PtrToStack, BpfArgType::Anything],
+            &[
+                BpfArgType::ConstMapPtr,
+                BpfArgType::Anything,
+                BpfArgType::PtrToStack,
+                BpfArgType::Anything,
+            ],
         )),
         // Sys BPF
         BpfFuncId::SysBpf => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::Anything, BpfArgType::PtrToMem, BpfArgType::ConstSize],
+            &[
+                BpfArgType::Anything,
+                BpfArgType::PtrToMem,
+                BpfArgType::ConstSize,
+            ],
         )),
         // Kallsyms lookup
         BpfFuncId::KallsymsLookupName => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::PtrToMem, BpfArgType::ConstSize, BpfArgType::Anything, BpfArgType::PtrToMem],
+            &[
+                BpfArgType::PtrToMem,
+                BpfArgType::ConstSize,
+                BpfArgType::Anything,
+                BpfArgType::PtrToMem,
+            ],
         )),
         // Ima helpers
         BpfFuncId::ImaInodeHash => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::Anything, BpfArgType::PtrToUninitMem, BpfArgType::ConstSize],
+            &[
+                BpfArgType::Anything,
+                BpfArgType::PtrToUninitMem,
+                BpfArgType::ConstSize,
+            ],
         )),
         BpfFuncId::ImaFileHash => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::Anything, BpfArgType::PtrToUninitMem, BpfArgType::ConstSize],
+            &[
+                BpfArgType::Anything,
+                BpfArgType::PtrToUninitMem,
+                BpfArgType::ConstSize,
+            ],
         )),
         // Cgroup storage helpers
         BpfFuncId::CgrpStorageGet => Some(HelperProto::new(
             func_id,
             BpfRetType::PtrToMapValueOrNull,
-            &[BpfArgType::ConstMapPtr, BpfArgType::Anything, BpfArgType::PtrToMapValue, BpfArgType::Anything],
+            &[
+                BpfArgType::ConstMapPtr,
+                BpfArgType::Anything,
+                BpfArgType::PtrToMapValue,
+                BpfArgType::Anything,
+            ],
         )),
         BpfFuncId::CgrpStorageDelete => Some(HelperProto::new(
             func_id,
@@ -824,7 +1039,12 @@ pub fn get_helper_proto(func_id: BpfFuncId) -> Option<HelperProto> {
         BpfFuncId::SkStorageGet => Some(HelperProto::new(
             func_id,
             BpfRetType::PtrToMapValueOrNull,
-            &[BpfArgType::ConstMapPtr, BpfArgType::PtrToSocket, BpfArgType::PtrToMapValue, BpfArgType::Anything],
+            &[
+                BpfArgType::ConstMapPtr,
+                BpfArgType::PtrToSocket,
+                BpfArgType::PtrToMapValue,
+                BpfArgType::Anything,
+            ],
         )),
         BpfFuncId::SkStorageDelete => Some(HelperProto::new(
             func_id,
@@ -834,7 +1054,12 @@ pub fn get_helper_proto(func_id: BpfFuncId) -> Option<HelperProto> {
         BpfFuncId::TaskStorageGet => Some(HelperProto::new(
             func_id,
             BpfRetType::PtrToMapValueOrNull,
-            &[BpfArgType::ConstMapPtr, BpfArgType::Anything, BpfArgType::PtrToMapValue, BpfArgType::Anything],
+            &[
+                BpfArgType::ConstMapPtr,
+                BpfArgType::Anything,
+                BpfArgType::PtrToMapValue,
+                BpfArgType::Anything,
+            ],
         )),
         BpfFuncId::TaskStorageDelete => Some(HelperProto::new(
             func_id,
@@ -844,7 +1069,12 @@ pub fn get_helper_proto(func_id: BpfFuncId) -> Option<HelperProto> {
         BpfFuncId::InodeStorageGet => Some(HelperProto::new(
             func_id,
             BpfRetType::PtrToMapValueOrNull,
-            &[BpfArgType::ConstMapPtr, BpfArgType::Anything, BpfArgType::PtrToMapValue, BpfArgType::Anything],
+            &[
+                BpfArgType::ConstMapPtr,
+                BpfArgType::Anything,
+                BpfArgType::PtrToMapValue,
+                BpfArgType::Anything,
+            ],
         )),
         BpfFuncId::InodeStorageDelete => Some(HelperProto::new(
             func_id,
@@ -855,13 +1085,21 @@ pub fn get_helper_proto(func_id: BpfFuncId) -> Option<HelperProto> {
         BpfFuncId::Strncmp => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::PtrToMemRdonly, BpfArgType::ConstSize, BpfArgType::PtrToMemRdonly],
+            &[
+                BpfArgType::PtrToMemRdonly,
+                BpfArgType::ConstSize,
+                BpfArgType::PtrToMemRdonly,
+            ],
         )),
         // Get function arguments (tracing)
         BpfFuncId::GetFuncArg => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::PtrToCtx, BpfArgType::Anything, BpfArgType::PtrToMem],
+            &[
+                BpfArgType::PtrToCtx,
+                BpfArgType::Anything,
+                BpfArgType::PtrToMem,
+            ],
         )),
         BpfFuncId::GetFuncRet => Some(HelperProto::new(
             func_id,
@@ -877,7 +1115,12 @@ pub fn get_helper_proto(func_id: BpfFuncId) -> Option<HelperProto> {
         BpfFuncId::RingbufReserveDynptr => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::ConstMapPtr, BpfArgType::Anything, BpfArgType::Anything, BpfArgType::PtrToDynptr],
+            &[
+                BpfArgType::ConstMapPtr,
+                BpfArgType::Anything,
+                BpfArgType::Anything,
+                BpfArgType::PtrToDynptr,
+            ],
         )),
         BpfFuncId::RingbufSubmitDynptr => Some(HelperProto::new(
             func_id,
@@ -898,33 +1141,59 @@ pub fn get_helper_proto(func_id: BpfFuncId) -> Option<HelperProto> {
         BpfFuncId::XdpLoadBytes => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::PtrToCtx, BpfArgType::Anything, BpfArgType::PtrToUninitMem, BpfArgType::ConstSize],
+            &[
+                BpfArgType::PtrToCtx,
+                BpfArgType::Anything,
+                BpfArgType::PtrToUninitMem,
+                BpfArgType::ConstSize,
+            ],
         )),
         BpfFuncId::XdpStoreBytes => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::PtrToCtx, BpfArgType::Anything, BpfArgType::PtrToMem, BpfArgType::ConstSize],
+            &[
+                BpfArgType::PtrToCtx,
+                BpfArgType::Anything,
+                BpfArgType::PtrToMem,
+                BpfArgType::ConstSize,
+            ],
         )),
         // TCP syncookie helpers
         BpfFuncId::TcpRawGenSyncookieIpv4 => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::PtrToMem, BpfArgType::PtrToMem, BpfArgType::ConstSize],
+            &[
+                BpfArgType::PtrToMem,
+                BpfArgType::PtrToMem,
+                BpfArgType::ConstSize,
+            ],
         )),
         BpfFuncId::TcpRawGenSyncookieIpv6 => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::PtrToMem, BpfArgType::PtrToMem, BpfArgType::ConstSize],
+            &[
+                BpfArgType::PtrToMem,
+                BpfArgType::PtrToMem,
+                BpfArgType::ConstSize,
+            ],
         )),
         BpfFuncId::TcpRawCheckSyncookieIpv4 => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::PtrToMem, BpfArgType::PtrToMem, BpfArgType::ConstSize],
+            &[
+                BpfArgType::PtrToMem,
+                BpfArgType::PtrToMem,
+                BpfArgType::ConstSize,
+            ],
         )),
         BpfFuncId::TcpRawCheckSyncookieIpv6 => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::PtrToMem, BpfArgType::PtrToMem, BpfArgType::ConstSize],
+            &[
+                BpfArgType::PtrToMem,
+                BpfArgType::PtrToMem,
+                BpfArgType::ConstSize,
+            ],
         )),
         // Get attach cookie
         BpfFuncId::GetAttachCookie => Some(HelperProto::new(
@@ -942,13 +1211,21 @@ pub fn get_helper_proto(func_id: BpfFuncId) -> Option<HelperProto> {
         BpfFuncId::GetBranchSnapshot => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::PtrToUninitMem, BpfArgType::ConstSize, BpfArgType::Anything],
+            &[
+                BpfArgType::PtrToUninitMem,
+                BpfArgType::ConstSize,
+                BpfArgType::Anything,
+            ],
         )),
         // SKB timestamp
         BpfFuncId::SkbSetTstamp => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::PtrToCtx, BpfArgType::Anything, BpfArgType::Anything],
+            &[
+                BpfArgType::PtrToCtx,
+                BpfArgType::Anything,
+                BpfArgType::Anything,
+            ],
         )),
         // =========== Additional SKB helpers ===========
         BpfFuncId::SkbCgroupId => Some(HelperProto::new(
@@ -969,32 +1246,60 @@ pub fn get_helper_proto(func_id: BpfFuncId) -> Option<HelperProto> {
         BpfFuncId::SkbChangeProto => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::PtrToCtx, BpfArgType::Anything, BpfArgType::Anything],
+            &[
+                BpfArgType::PtrToCtx,
+                BpfArgType::Anything,
+                BpfArgType::Anything,
+            ],
         )),
         BpfFuncId::SkbUnderCgroup => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::PtrToCtx, BpfArgType::ConstMapPtr, BpfArgType::Anything],
+            &[
+                BpfArgType::PtrToCtx,
+                BpfArgType::ConstMapPtr,
+                BpfArgType::Anything,
+            ],
         )),
         BpfFuncId::SkbGetTunnelOpt => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::PtrToCtx, BpfArgType::PtrToUninitMem, BpfArgType::ConstSize],
+            &[
+                BpfArgType::PtrToCtx,
+                BpfArgType::PtrToUninitMem,
+                BpfArgType::ConstSize,
+            ],
         )),
         BpfFuncId::SkbSetTunnelOpt => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::PtrToCtx, BpfArgType::PtrToMem, BpfArgType::ConstSize],
+            &[
+                BpfArgType::PtrToCtx,
+                BpfArgType::PtrToMem,
+                BpfArgType::ConstSize,
+            ],
         )),
         BpfFuncId::SkbGetXfrmState => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::PtrToCtx, BpfArgType::Anything, BpfArgType::PtrToUninitMem, BpfArgType::ConstSize, BpfArgType::Anything],
+            &[
+                BpfArgType::PtrToCtx,
+                BpfArgType::Anything,
+                BpfArgType::PtrToUninitMem,
+                BpfArgType::ConstSize,
+                BpfArgType::Anything,
+            ],
         )),
         BpfFuncId::SkbOutput => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::PtrToCtx, BpfArgType::ConstMapPtr, BpfArgType::Anything, BpfArgType::PtrToMem, BpfArgType::ConstSize],
+            &[
+                BpfArgType::PtrToCtx,
+                BpfArgType::ConstMapPtr,
+                BpfArgType::Anything,
+                BpfArgType::PtrToMem,
+                BpfArgType::ConstSize,
+            ],
         )),
         BpfFuncId::SkbEcnSetCe => Some(HelperProto::new(
             func_id,
@@ -1004,7 +1309,13 @@ pub fn get_helper_proto(func_id: BpfFuncId) -> Option<HelperProto> {
         BpfFuncId::XdpOutput => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::PtrToCtx, BpfArgType::ConstMapPtr, BpfArgType::Anything, BpfArgType::PtrToMem, BpfArgType::ConstSize],
+            &[
+                BpfArgType::PtrToCtx,
+                BpfArgType::ConstMapPtr,
+                BpfArgType::Anything,
+                BpfArgType::PtrToMem,
+                BpfArgType::ConstSize,
+            ],
         )),
         // =========== Socket conversion helpers ===========
         BpfFuncId::SkFullsock => Some(HelperProto::new(
@@ -1061,12 +1372,24 @@ pub fn get_helper_proto(func_id: BpfFuncId) -> Option<HelperProto> {
         BpfFuncId::TcpCheckSyncookie => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::PtrToSocket, BpfArgType::PtrToMem, BpfArgType::Anything, BpfArgType::PtrToMem, BpfArgType::Anything],
+            &[
+                BpfArgType::PtrToSocket,
+                BpfArgType::PtrToMem,
+                BpfArgType::Anything,
+                BpfArgType::PtrToMem,
+                BpfArgType::Anything,
+            ],
         )),
         BpfFuncId::TcpGenSyncookie => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::PtrToSocket, BpfArgType::PtrToMem, BpfArgType::Anything, BpfArgType::PtrToMem, BpfArgType::Anything],
+            &[
+                BpfArgType::PtrToSocket,
+                BpfArgType::PtrToMem,
+                BpfArgType::Anything,
+                BpfArgType::PtrToMem,
+                BpfArgType::Anything,
+            ],
         )),
         BpfFuncId::TcpSendAck => Some(HelperProto::new(
             func_id,
@@ -1087,92 +1410,172 @@ pub fn get_helper_proto(func_id: BpfFuncId) -> Option<HelperProto> {
         BpfFuncId::MsgPullData => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::PtrToCtx, BpfArgType::Anything, BpfArgType::Anything, BpfArgType::Anything],
+            &[
+                BpfArgType::PtrToCtx,
+                BpfArgType::Anything,
+                BpfArgType::Anything,
+                BpfArgType::Anything,
+            ],
         )),
         BpfFuncId::MsgPushData => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::PtrToCtx, BpfArgType::Anything, BpfArgType::Anything, BpfArgType::Anything],
+            &[
+                BpfArgType::PtrToCtx,
+                BpfArgType::Anything,
+                BpfArgType::Anything,
+                BpfArgType::Anything,
+            ],
         )),
         BpfFuncId::MsgPopData => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::PtrToCtx, BpfArgType::Anything, BpfArgType::Anything, BpfArgType::Anything],
+            &[
+                BpfArgType::PtrToCtx,
+                BpfArgType::Anything,
+                BpfArgType::Anything,
+                BpfArgType::Anything,
+            ],
         )),
         // =========== LWT helpers ===========
         BpfFuncId::LwtPushEncap => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::PtrToCtx, BpfArgType::Anything, BpfArgType::PtrToMem, BpfArgType::ConstSize],
+            &[
+                BpfArgType::PtrToCtx,
+                BpfArgType::Anything,
+                BpfArgType::PtrToMem,
+                BpfArgType::ConstSize,
+            ],
         )),
         BpfFuncId::LwtSeg6StoreBytes => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::PtrToCtx, BpfArgType::Anything, BpfArgType::PtrToMem, BpfArgType::ConstSize],
+            &[
+                BpfArgType::PtrToCtx,
+                BpfArgType::Anything,
+                BpfArgType::PtrToMem,
+                BpfArgType::ConstSize,
+            ],
         )),
         BpfFuncId::LwtSeg6AdjustSrh => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::PtrToCtx, BpfArgType::Anything, BpfArgType::Anything],
+            &[
+                BpfArgType::PtrToCtx,
+                BpfArgType::Anything,
+                BpfArgType::Anything,
+            ],
         )),
         BpfFuncId::LwtSeg6Action => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::PtrToCtx, BpfArgType::Anything, BpfArgType::PtrToMem, BpfArgType::ConstSize],
+            &[
+                BpfArgType::PtrToCtx,
+                BpfArgType::Anything,
+                BpfArgType::PtrToMem,
+                BpfArgType::ConstSize,
+            ],
         )),
         // =========== Sysctl helpers ===========
         BpfFuncId::SysctlGetName => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::PtrToCtx, BpfArgType::PtrToUninitMem, BpfArgType::ConstSizeOrZero, BpfArgType::Anything],
+            &[
+                BpfArgType::PtrToCtx,
+                BpfArgType::PtrToUninitMem,
+                BpfArgType::ConstSizeOrZero,
+                BpfArgType::Anything,
+            ],
         )),
         BpfFuncId::SysctlGetCurrentValue => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::PtrToCtx, BpfArgType::PtrToUninitMem, BpfArgType::ConstSize],
+            &[
+                BpfArgType::PtrToCtx,
+                BpfArgType::PtrToUninitMem,
+                BpfArgType::ConstSize,
+            ],
         )),
         BpfFuncId::SysctlGetNewValue => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::PtrToCtx, BpfArgType::PtrToUninitMem, BpfArgType::ConstSize],
+            &[
+                BpfArgType::PtrToCtx,
+                BpfArgType::PtrToUninitMem,
+                BpfArgType::ConstSize,
+            ],
         )),
         BpfFuncId::SysctlSetNewValue => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::PtrToCtx, BpfArgType::PtrToMemRdonly, BpfArgType::ConstSize],
+            &[
+                BpfArgType::PtrToCtx,
+                BpfArgType::PtrToMemRdonly,
+                BpfArgType::ConstSize,
+            ],
         )),
         // =========== String helpers ===========
         BpfFuncId::Strtol => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::PtrToMemRdonly, BpfArgType::ConstSize, BpfArgType::Anything, BpfArgType::PtrToStack],
+            &[
+                BpfArgType::PtrToMemRdonly,
+                BpfArgType::ConstSize,
+                BpfArgType::Anything,
+                BpfArgType::PtrToStack,
+            ],
         )),
         BpfFuncId::Strtoul => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::PtrToMemRdonly, BpfArgType::ConstSize, BpfArgType::Anything, BpfArgType::PtrToStack],
+            &[
+                BpfArgType::PtrToMemRdonly,
+                BpfArgType::ConstSize,
+                BpfArgType::Anything,
+                BpfArgType::PtrToStack,
+            ],
         )),
         // =========== Socket header option helpers ===========
         BpfFuncId::LoadHdrOpt => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::PtrToCtx, BpfArgType::PtrToUninitMem, BpfArgType::ConstSize, BpfArgType::Anything],
+            &[
+                BpfArgType::PtrToCtx,
+                BpfArgType::PtrToUninitMem,
+                BpfArgType::ConstSize,
+                BpfArgType::Anything,
+            ],
         )),
         BpfFuncId::StoreHdrOpt => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::PtrToCtx, BpfArgType::PtrToMem, BpfArgType::ConstSize, BpfArgType::Anything],
+            &[
+                BpfArgType::PtrToCtx,
+                BpfArgType::PtrToMem,
+                BpfArgType::ConstSize,
+                BpfArgType::Anything,
+            ],
         )),
         BpfFuncId::ReserveHdrOpt => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::PtrToCtx, BpfArgType::ConstSize, BpfArgType::Anything],
+            &[
+                BpfArgType::PtrToCtx,
+                BpfArgType::ConstSize,
+                BpfArgType::Anything,
+            ],
         )),
         // =========== Redirect helpers ===========
         BpfFuncId::RedirectNeigh => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::Anything, BpfArgType::PtrToMem, BpfArgType::ConstSize, BpfArgType::Anything],
+            &[
+                BpfArgType::Anything,
+                BpfArgType::PtrToMem,
+                BpfArgType::ConstSize,
+                BpfArgType::Anything,
+            ],
         )),
         BpfFuncId::RedirectPeer => Some(HelperProto::new(
             func_id,
@@ -1182,7 +1585,12 @@ pub fn get_helper_proto(func_id: BpfFuncId) -> Option<HelperProto> {
         BpfFuncId::SkSelectReuseport => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::PtrToCtx, BpfArgType::ConstMapPtr, BpfArgType::PtrToMapKey, BpfArgType::Anything],
+            &[
+                BpfArgType::PtrToCtx,
+                BpfArgType::ConstMapPtr,
+                BpfArgType::PtrToMapKey,
+                BpfArgType::Anything,
+            ],
         )),
         // =========== Cgroup helpers ===========
         BpfFuncId::CurrentTaskUnderCgroup => Some(HelperProto::new(
@@ -1199,19 +1607,24 @@ pub fn get_helper_proto(func_id: BpfFuncId) -> Option<HelperProto> {
         BpfFuncId::PerfEventReadValue => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::ConstMapPtr, BpfArgType::Anything, BpfArgType::PtrToUninitMem, BpfArgType::ConstSize],
+            &[
+                BpfArgType::ConstMapPtr,
+                BpfArgType::Anything,
+                BpfArgType::PtrToUninitMem,
+                BpfArgType::ConstSize,
+            ],
         )),
         BpfFuncId::PerfProgReadValue => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::PtrToCtx, BpfArgType::PtrToUninitMem, BpfArgType::ConstSize],
+            &[
+                BpfArgType::PtrToCtx,
+                BpfArgType::PtrToUninitMem,
+                BpfArgType::ConstSize,
+            ],
         )),
         // =========== Misc helpers ===========
-        BpfFuncId::GetNumaNodeId => Some(HelperProto::new(
-            func_id,
-            BpfRetType::Integer,
-            &[],
-        )),
+        BpfFuncId::GetNumaNodeId => Some(HelperProto::new(func_id, BpfRetType::Integer, &[])),
         BpfFuncId::GetSocketUid => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
@@ -1225,17 +1638,31 @@ pub fn get_helper_proto(func_id: BpfFuncId) -> Option<HelperProto> {
         BpfFuncId::GetNsCurrentPidTgid => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::Anything, BpfArgType::Anything, BpfArgType::PtrToUninitMem, BpfArgType::ConstSize],
+            &[
+                BpfArgType::Anything,
+                BpfArgType::Anything,
+                BpfArgType::PtrToUninitMem,
+                BpfArgType::ConstSize,
+            ],
         )),
         BpfFuncId::GetTaskStack => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::Anything, BpfArgType::PtrToUninitMem, BpfArgType::ConstSize, BpfArgType::Anything],
+            &[
+                BpfArgType::Anything,
+                BpfArgType::PtrToUninitMem,
+                BpfArgType::ConstSize,
+                BpfArgType::Anything,
+            ],
         )),
         BpfFuncId::ProbeWriteUser => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::Anything, BpfArgType::PtrToMemRdonly, BpfArgType::ConstSize],
+            &[
+                BpfArgType::Anything,
+                BpfArgType::PtrToMemRdonly,
+                BpfArgType::ConstSize,
+            ],
         )),
         BpfFuncId::CsumUpdate => Some(HelperProto::new(
             func_id,
@@ -1261,18 +1688,32 @@ pub fn get_helper_proto(func_id: BpfFuncId) -> Option<HelperProto> {
         BpfFuncId::RcKeydown => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::PtrToCtx, BpfArgType::Anything, BpfArgType::Anything, BpfArgType::Anything],
+            &[
+                BpfArgType::PtrToCtx,
+                BpfArgType::Anything,
+                BpfArgType::Anything,
+                BpfArgType::Anything,
+            ],
         )),
         BpfFuncId::RcPointerRel => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::PtrToCtx, BpfArgType::Anything, BpfArgType::Anything],
+            &[
+                BpfArgType::PtrToCtx,
+                BpfArgType::Anything,
+                BpfArgType::Anything,
+            ],
         )),
         // =========== BTF/Sys helpers ===========
         BpfFuncId::BtfFindByNameKind => Some(HelperProto::new(
             func_id,
             BpfRetType::Integer,
-            &[BpfArgType::PtrToMemRdonly, BpfArgType::ConstSize, BpfArgType::Anything, BpfArgType::Anything],
+            &[
+                BpfArgType::PtrToMemRdonly,
+                BpfArgType::ConstSize,
+                BpfArgType::Anything,
+                BpfArgType::Anything,
+            ],
         )),
         BpfFuncId::SysClose => Some(HelperProto::new(
             func_id,
@@ -1312,9 +1753,8 @@ pub fn check_helper_call_with_ctx(
     allow_ptr_leaks: bool,
     user_ctx: &UserMemContext,
 ) -> Result<()> {
-    let proto = get_helper_proto(func_id).ok_or_else(|| {
-        VerifierError::InvalidHelperCall(format!("unknown helper {:?}", func_id))
-    })?;
+    let proto = get_helper_proto(func_id)
+        .ok_or_else(|| VerifierError::InvalidHelperCall(format!("unknown helper {:?}", func_id)))?;
 
     let mut meta = HelperCallMeta::default();
     meta.func_id = func_id;
@@ -1323,7 +1763,13 @@ pub fn check_helper_call_with_ctx(
     // This validates that sleepable helpers are only called from sleepable programs
     // and that we're not in an atomic context (holding locks, RCU, preempt disabled)
     let helper_name = format!("{:?}", func_id);
-    check_helper_sleepable_compat(state, &state.refs, func_id as u32, &helper_name, proto.may_sleep)?;
+    check_helper_sleepable_compat(
+        state,
+        &state.refs,
+        func_id as u32,
+        &helper_name,
+        proto.may_sleep,
+    )?;
 
     // Check each argument
     for (i, &arg_type) in proto.arg_types.iter().enumerate() {
@@ -1373,17 +1819,17 @@ fn handle_spin_lock_helper(
 ) -> Result<()> {
     // R1 contains pointer to bpf_spin_lock field in map value
     let reg = state.reg(1).ok_or(VerifierError::InvalidRegister(1))?;
-    
+
     if reg.reg_type != BpfRegType::PtrToMapValue {
         return Err(VerifierError::TypeMismatch {
             expected: "ptr_to_map_value".into(),
             got: format!("{:?}", reg.reg_type),
         });
     }
-    
+
     let map_uid = reg.map_uid;
     let lock_off = reg.off as u32;
-    
+
     match func_id {
         BpfFuncId::SpinLock => {
             state.lock_state.acquire(map_uid, lock_off, insn_idx)?;
@@ -1393,12 +1839,12 @@ fn handle_spin_lock_helper(
         }
         _ => {}
     }
-    
+
     Ok(())
 }
 
 /// Check user memory helper function calls
-/// 
+///
 /// This validates helpers that access user-space memory:
 /// - bpf_probe_read_user / bpf_probe_read_user_str
 /// - bpf_probe_write_user
@@ -1410,10 +1856,12 @@ fn check_user_mem_helper(
     user_ctx: &UserMemContext,
 ) -> Result<()> {
     // Get the access type for this helper
-    let access_type = get_helper_user_access_type(func_id)
-        .ok_or_else(|| VerifierError::Internal(
-            format!("is_user_mem_helper returned true but no access type for {:?}", func_id)
-        ))?;
+    let access_type = get_helper_user_access_type(func_id).ok_or_else(|| {
+        VerifierError::Internal(format!(
+            "is_user_mem_helper returned true but no access type for {:?}",
+            func_id
+        ))
+    })?;
 
     // Get the size argument (R2 for probe_read_user, etc.)
     let size = meta.access_size as u32;
@@ -1440,7 +1888,10 @@ fn validate_user_mem_helper_args(
     access_type: crate::mem::user::UserMemAccessType,
 ) -> Result<()> {
     match func_id {
-        BpfFuncId::ProbeReadUser | BpfFuncId::ProbeReadUserStr | BpfFuncId::ProbeReadKernel | BpfFuncId::ProbeReadKernelStr => {
+        BpfFuncId::ProbeReadUser
+        | BpfFuncId::ProbeReadUserStr
+        | BpfFuncId::ProbeReadKernel
+        | BpfFuncId::ProbeReadKernelStr => {
             // R1 = dst (kernel buffer), R2 = size, R3 = src (user address)
             let dst_reg = state.reg(1).ok_or(VerifierError::InvalidRegister(1))?;
             let src_reg = state.reg(3).ok_or(VerifierError::InvalidRegister(3))?;
@@ -1514,7 +1965,9 @@ fn check_func_arg(
     meta: &mut HelperCallMeta,
     _allow_ptr_leaks: bool,
 ) -> Result<()> {
-    let reg = state.reg(regno).ok_or(VerifierError::InvalidRegister(regno as u8))?;
+    let reg = state
+        .reg(regno)
+        .ok_or(VerifierError::InvalidRegister(regno as u8))?;
 
     // Check register is initialized
     if reg.reg_type == BpfRegType::NotInit {
@@ -1597,16 +2050,17 @@ fn check_func_arg(
                     got: format!("{:?}", reg.reg_type),
                 });
             }
-            
+
             // Check size bounds
             let zero_allowed = arg_type == BpfArgType::ConstSizeOrZero;
             check_mem_size_bounds(reg, meta, zero_allowed)?;
-            
+
             Ok(())
         }
         BpfArgType::PtrToAllocMem => {
-            if reg.reg_type != BpfRegType::PtrToMem || 
-               !reg.type_flags.contains(BpfTypeFlag::MEM_ALLOC) {
+            if reg.reg_type != BpfRegType::PtrToMem
+                || !reg.type_flags.contains(BpfTypeFlag::MEM_ALLOC)
+            {
                 return Err(VerifierError::TypeMismatch {
                     expected: "ptr_to_alloc_mem".into(),
                     got: format!("{:?}", reg.reg_type),
@@ -1626,14 +2080,16 @@ fn check_func_arg(
             // Check offset is valid and aligned
             let stack_off = reg.off;
             if stack_off > 0 || stack_off < -(MAX_BPF_STACK as i32) + 16 {
-                return Err(VerifierError::InvalidHelperCall(
-                    format!("R{} dynptr at invalid stack offset {}", regno, stack_off)
-                ));
+                return Err(VerifierError::InvalidHelperCall(format!(
+                    "R{} dynptr at invalid stack offset {}",
+                    regno, stack_off
+                )));
             }
             if (stack_off % 8) != 0 {
-                return Err(VerifierError::InvalidHelperCall(
-                    format!("R{} dynptr at unaligned stack offset {}", regno, stack_off)
-                ));
+                return Err(VerifierError::InvalidHelperCall(format!(
+                    "R{} dynptr at unaligned stack offset {}",
+                    regno, stack_off
+                )));
             }
             Ok(())
         }
@@ -1693,9 +2149,10 @@ fn check_func_arg(
             // Iterator typically takes 24 bytes (3 stack slots)
             let stack_off = reg.off;
             if stack_off > 0 || stack_off < -(MAX_BPF_STACK as i32) + 24 {
-                return Err(VerifierError::InvalidHelperCall(
-                    format!("R{} iterator at invalid stack offset {}", regno, stack_off)
-                ));
+                return Err(VerifierError::InvalidHelperCall(format!(
+                    "R{} iterator at invalid stack offset {}",
+                    regno, stack_off
+                )));
             }
             Ok(())
         }
@@ -1736,7 +2193,11 @@ fn get_ptr_size(reg: &BpfRegState) -> i32 {
             // Get size from map metadata if available
             if let Some(ref map_info) = reg.map_ptr {
                 let remaining = (map_info.value_size as i32) - reg.off;
-                if remaining > 0 { remaining } else { 0 }
+                if remaining > 0 {
+                    remaining
+                } else {
+                    0
+                }
             } else {
                 // No map info available - use variable offset tracking
                 // If we have bounds on the offset, use them
@@ -1752,7 +2213,11 @@ fn get_ptr_size(reg: &BpfRegState) -> i32 {
             // Get key size from map metadata if available
             if let Some(ref map_info) = reg.map_ptr {
                 let remaining = (map_info.key_size as i32) - reg.off;
-                if remaining > 0 { remaining } else { 0 }
+                if remaining > 0 {
+                    remaining
+                } else {
+                    0
+                }
             } else {
                 i32::MAX
             }
@@ -1789,7 +2254,11 @@ fn get_ptr_size(reg: &BpfRegState) -> i32 {
             // Generic memory pointer - check mem_size field
             if reg.mem_size > 0 {
                 let remaining = (reg.mem_size as i32) - reg.off;
-                if remaining > 0 { remaining } else { 0 }
+                if remaining > 0 {
+                    remaining
+                } else {
+                    0
+                }
             } else {
                 i32::MAX
             }
@@ -1811,94 +2280,86 @@ fn check_mem_size_bounds(
 ) -> Result<()> {
     // Store the max size for return value bounds later
     meta.msize_max_value = reg.umax_value;
-    
+
     if reg.is_const() {
         let size = reg.const_value() as i64;
-        
+
         // Check for negative size (signed interpretation)
         if size < 0 {
-            return Err(VerifierError::InvalidHelperCall(
-                format!("R{} has negative size {}", meta.regno, size)
-            ));
+            return Err(VerifierError::InvalidHelperCall(format!(
+                "R{} has negative size {}",
+                meta.regno, size
+            )));
         }
-        
+
         // Check for zero when not allowed
         if size == 0 && !zero_allowed {
-            return Err(VerifierError::InvalidHelperCall(
-                format!("R{} has zero size but zero is not allowed", meta.regno)
-            ));
+            return Err(VerifierError::InvalidHelperCall(format!(
+                "R{} has zero size but zero is not allowed",
+                meta.regno
+            )));
         }
-        
+
         meta.access_size = size as i32;
-        
+
         // Verify against the memory buffer size from the previous argument
         if meta.mem_size > 0 && size > meta.mem_size as i64 {
-            return Err(VerifierError::InvalidHelperCall(
-                format!(
-                    "size {} exceeds memory buffer size {}",
-                    size, meta.mem_size
-                )
-            ));
+            return Err(VerifierError::InvalidHelperCall(format!(
+                "size {} exceeds memory buffer size {}",
+                size, meta.mem_size
+            )));
         }
     } else {
         // Variable size - check bounds
-        
+
         // Minimum must not be negative
         if reg.smin_value < 0 {
-            return Err(VerifierError::InvalidHelperCall(
-                format!(
-                    "R{} min value {} is negative",
-                    meta.regno, reg.smin_value
-                )
-            ));
+            return Err(VerifierError::InvalidHelperCall(format!(
+                "R{} min value {} is negative",
+                meta.regno, reg.smin_value
+            )));
         }
-        
+
         // If zero not allowed, minimum must be > 0
         if !zero_allowed && reg.umin_value == 0 {
-            return Err(VerifierError::InvalidHelperCall(
-                format!(
-                    "R{} may be zero but zero size is not allowed",
-                    meta.regno
-                )
-            ));
+            return Err(VerifierError::InvalidHelperCall(format!(
+                "R{} may be zero but zero size is not allowed",
+                meta.regno
+            )));
         }
-        
+
         // Check maximum against buffer size
         if meta.mem_size > 0 && reg.umax_value > meta.mem_size as u64 {
-            return Err(VerifierError::InvalidHelperCall(
-                format!(
-                    "R{} unbounded memory access, max size {} exceeds buffer {}",
-                    meta.regno, reg.umax_value, meta.mem_size
-                )
-            ));
+            return Err(VerifierError::InvalidHelperCall(format!(
+                "R{} unbounded memory access, max size {} exceeds buffer {}",
+                meta.regno, reg.umax_value, meta.mem_size
+            )));
         }
-        
+
         // For unprivileged mode, require bounded access
         // The kernel requires exact bounds or marked initialization
         if reg.umax_value == u64::MAX {
-            return Err(VerifierError::InvalidHelperCall(
-                format!(
-                    "R{} has unbounded size, cannot determine memory access bounds",
-                    meta.regno
-                )
-            ));
+            return Err(VerifierError::InvalidHelperCall(format!(
+                "R{} has unbounded size, cannot determine memory access bounds",
+                meta.regno
+            )));
         }
-        
+
         meta.access_size = reg.umax_value as i32;
     }
-    
+
     Ok(())
 }
 
 /// Check memory argument type
 fn check_mem_arg(reg: &BpfRegState, expected: &str) -> Result<()> {
     match reg.reg_type {
-        BpfRegType::PtrToStack |
-        BpfRegType::PtrToMapValue |
-        BpfRegType::PtrToMapKey |
-        BpfRegType::PtrToMem |
-        BpfRegType::PtrToPacket |
-        BpfRegType::PtrToPacketMeta => Ok(()),
+        BpfRegType::PtrToStack
+        | BpfRegType::PtrToMapValue
+        | BpfRegType::PtrToMapKey
+        | BpfRegType::PtrToMem
+        | BpfRegType::PtrToPacket
+        | BpfRegType::PtrToPacketMeta => Ok(()),
         BpfRegType::ScalarValue if reg.is_null() => Ok(()), // NULL is OK for some
         _ => Err(VerifierError::TypeMismatch {
             expected: expected.into(),
@@ -1920,16 +2381,16 @@ fn set_helper_return(
     } else {
         None
     };
-    
+
     let map_uid = if let Some(map_regno) = meta.map_ptr {
         state.reg(map_regno).map(|r| r.map_uid).unwrap_or(0)
     } else {
         0
     };
 
-    let r0 = state.reg_mut(BPF_REG_0).ok_or(VerifierError::Internal(
-        "no R0".into(),
-    ))?;
+    let r0 = state
+        .reg_mut(BPF_REG_0)
+        .ok_or(VerifierError::Internal("no R0".into()))?;
 
     match proto.ret_type {
         BpfRetType::Void => {
@@ -1942,11 +2403,11 @@ fn set_helper_return(
         BpfRetType::PtrToMapValueOrNull | BpfRetType::PtrToMapValue => {
             r0.mark_known_zero();
             r0.reg_type = BpfRegType::PtrToMapValue;
-            
+
             // Propagate map metadata for bounds checking
             r0.map_ptr = map_ptr;
             r0.map_uid = map_uid;
-            
+
             if proto.ret_type == BpfRetType::PtrToMapValueOrNull {
                 r0.type_flags = BpfTypeFlag::PTR_MAYBE_NULL;
                 // Assign unique ID for NULL tracking
@@ -1959,7 +2420,7 @@ fn set_helper_return(
         BpfRetType::PtrToSocketOrNull | BpfRetType::PtrToSocket => {
             r0.mark_known_zero();
             r0.reg_type = BpfRegType::PtrToSocket;
-            
+
             if proto.ret_type == BpfRetType::PtrToSocketOrNull {
                 r0.type_flags = BpfTypeFlag::PTR_MAYBE_NULL;
                 r0.ref_obj_id = meta.ref_obj_id;
@@ -1988,7 +2449,7 @@ fn set_helper_return(
             r0.reg_type = BpfRegType::PtrToMem;
             // Track memory size from the size argument
             r0.mem_size = meta.msize_max_value as u32;
-            
+
             if proto.ret_type == BpfRetType::PtrToMemOrNull {
                 r0.type_flags = BpfTypeFlag::PTR_MAYBE_NULL;
                 *env_id_gen += 1;
@@ -2011,7 +2472,7 @@ fn set_helper_return(
             r0.mark_known_zero();
             r0.reg_type = BpfRegType::PtrToBtfId;
             // BTF ID would be set from meta.ret_btf_id if we had it
-            
+
             if proto.ret_type == BpfRetType::PtrToBtfIdOrNull {
                 r0.type_flags = BpfTypeFlag::PTR_MAYBE_NULL;
                 *env_id_gen += 1;
@@ -2044,10 +2505,7 @@ fn set_helper_return(
 }
 
 /// Check map and function compatibility
-pub fn check_map_func_compatibility(
-    map_type: BpfMapType,
-    func_id: BpfFuncId,
-) -> Result<()> {
+pub fn check_map_func_compatibility(map_type: BpfMapType, func_id: BpfFuncId) -> Result<()> {
     // Some helpers only work with specific map types
     match func_id {
         BpfFuncId::TailCall => {

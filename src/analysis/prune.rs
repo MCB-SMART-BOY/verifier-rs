@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0
+
 //! State pruning for BPF verifier
 //!
 //! This module implements state pruning optimization. When exploring
@@ -12,17 +14,12 @@
 //! This implements the `is_state_visited()` and related functions from
 //! the kernel verifier.
 
+use crate::analysis::precision::mark_all_scalars_precise;
+use crate::analysis::states_equal::{states_equal_with_config, CompareConfig, CompareMode};
+use crate::core::error::{Result, VerifierError};
+use crate::core::types::*;
 use crate::state::reg_state::BpfRegState;
 use crate::state::verifier_state::BpfVerifierState;
-use crate::core::types::*;
-use crate::core::error::{Result, VerifierError};
-use crate::analysis::states_equal::{
-    states_equal_with_config,
-    CompareConfig,
-    CompareMode,
-};
-use crate::analysis::precision::mark_all_scalars_precise;
-
 
 use alloc::vec::Vec;
 
@@ -171,7 +168,7 @@ pub struct StateCache {
 }
 
 /// Compute a hash of a verifier state for fast comparison
-/// 
+///
 /// This hash is used to quickly filter out obviously different states
 /// before doing the expensive full comparison. The hash captures:
 /// - Frame count and current frame index
@@ -181,13 +178,13 @@ pub fn hash_verifier_state(state: &BpfVerifierState) -> u64 {
     // Use a simple FNV-1a like hash
     const FNV_PRIME: u64 = 0x100000001b3;
     const FNV_OFFSET: u64 = 0xcbf29ce484222325;
-    
+
     let mut hash = FNV_OFFSET;
-    
+
     // Hash frame structure
     hash ^= state.curframe as u64;
     hash = hash.wrapping_mul(FNV_PRIME);
-    
+
     // Hash current function's registers (most important for pruning)
     if let Some(func) = state.cur_func() {
         // Hash R0-R10 types and key properties
@@ -195,26 +192,26 @@ pub fn hash_verifier_state(state: &BpfVerifierState) -> u64 {
             // Combine register index with type
             hash ^= ((i as u64) << 8) | (reg.reg_type as u64);
             hash = hash.wrapping_mul(FNV_PRIME);
-            
+
             // For scalars, include bounds info in hash
             if reg.reg_type == BpfRegType::ScalarValue {
                 // Use a mix of min/max bounds
                 hash ^= (reg.umin_value >> 32) ^ (reg.umax_value & 0xFFFFFFFF);
                 hash = hash.wrapping_mul(FNV_PRIME);
             }
-            
+
             // For pointers, include offset
             if reg.is_pointer() {
                 hash ^= reg.off as u64;
                 hash = hash.wrapping_mul(FNV_PRIME);
             }
         }
-        
+
         // Hash stack allocation size
         hash ^= func.stack.allocated_stack as u64;
         hash = hash.wrapping_mul(FNV_PRIME);
     }
-    
+
     hash
 }
 
@@ -222,7 +219,7 @@ pub fn hash_verifier_state(state: &BpfVerifierState) -> u64 {
 /// This is faster but less precise than full hash
 pub fn hash_verifier_state_quick(state: &BpfVerifierState) -> u64 {
     let mut hash: u64 = state.curframe as u64;
-    
+
     if let Some(func) = state.cur_func() {
         // Just hash register types
         for reg in &func.regs {
@@ -230,7 +227,7 @@ pub fn hash_verifier_state_quick(state: &BpfVerifierState) -> u64 {
         }
         hash ^= func.stack.allocated_stack as u64;
     }
-    
+
     hash
 }
 
@@ -283,13 +280,13 @@ impl StateCache {
     ) -> StateId {
         // Allocate a unique ID
         let state_id = self.alloc_state_id();
-        
+
         // Compute hash for indexing
         let state_hash = hash_verifier_state(&state);
-        
+
         let entry = self.cache.entry(insn_idx).or_default();
         let state_idx = entry.states.len();
-        
+
         // Create cached state with or without parent
         let cached = if let Some(pid) = parent_id {
             CachedState::new_with_parent(state_id, state, insn_idx, pid)
@@ -297,19 +294,19 @@ impl StateCache {
             CachedState::new(state_id, state, insn_idx)
         };
         entry.states.push(cached);
-        
+
         // Add to hash index
         self.hash_index
             .entry((insn_idx, state_hash))
             .or_default()
             .push(state_idx);
-        
+
         // Add to ID lookup
         self.id_to_location.insert(state_id, (insn_idx, state_idx));
-        
+
         self.total_states += 1;
         self.peak_states = self.peak_states.max(self.total_states);
-        
+
         state_id
     }
 
@@ -323,42 +320,44 @@ impl StateCache {
     /// Returns Ok(()) on success, or an error if an inconsistency is detected.
     pub fn update_branch_counts(&mut self, start_id: StateId) -> Result<()> {
         let mut current_id = Some(start_id);
-        
+
         while let Some(id) = current_id {
             // Get the state's location
             let location = match self.id_to_location.get(&id) {
                 Some(loc) => loc.clone(),
                 None => break, // State not found (might have been freed)
             };
-            
+
             // Get the cached state
-            let cached = match self.cache.get_mut(&location.0)
+            let cached = match self
+                .cache
+                .get_mut(&location.0)
                 .and_then(|head| head.states.get_mut(location.1))
             {
                 Some(c) => c,
                 None => break,
             };
-            
+
             // Skip if already in free list
             if cached.in_free_list {
                 current_id = cached.parent_id;
                 continue;
             }
-            
+
             // Decrement branch count
             let all_branches_done = cached.complete_branch();
             let parent_id = cached.parent_id;
-            
+
             // If there are still branches remaining, stop propagating
             if !all_branches_done {
                 break;
             }
-            
+
             // All branches from this state are done - it's now fully verified
             // Continue to parent
             current_id = parent_id;
         }
-        
+
         Ok(())
     }
 
@@ -376,14 +375,18 @@ impl StateCache {
     }
 
     /// Evict a state based on miss/hit heuristics
-    /// 
+    ///
     /// States with high miss count relative to hit count are unlikely
     /// to be useful for pruning and can be evicted.
     pub fn maybe_evict_state(&mut self, id: StateId, is_force_checkpoint: bool) {
         if let Some(cached) = self.get_by_id_mut(id) {
             // Use bigger threshold for checkpoints to help iterator convergence
-            let n = if is_force_checkpoint && cached.branches > 0 { 64 } else { 3 };
-            
+            let n = if is_force_checkpoint && cached.branches > 0 {
+                64
+            } else {
+                3
+            };
+
             if cached.miss_cnt > cached.hit_cnt * n + n {
                 self.mark_for_removal(id);
             }
@@ -391,11 +394,11 @@ impl StateCache {
     }
 
     /// Check if the current state can be pruned against cached states
-    /// 
+    ///
     /// Uses hash-based lookup for faster matching when many states exist
     pub fn check_prune(&mut self, insn_idx: usize, cur: &BpfVerifierState) -> bool {
         let cur_hash = hash_verifier_state(cur);
-        
+
         // First try hash-based lookup (fast path)
         if let Some(indices) = self.hash_index.get(&(insn_idx, cur_hash)) {
             if let Some(head) = self.cache.get(&insn_idx) {
@@ -410,7 +413,7 @@ impl StateCache {
                 }
             }
         }
-        
+
         // Fall back to full scan (handles hash collisions and different-hash equivalent states)
         if let Some(head) = self.cache.get(&insn_idx) {
             for cached in &head.states {
@@ -426,7 +429,7 @@ impl StateCache {
     /// Check prune using only hash-based lookup (faster but may miss some matches)
     pub fn check_prune_fast(&mut self, insn_idx: usize, cur: &BpfVerifierState) -> bool {
         let cur_hash = hash_verifier_state(cur);
-        
+
         if let Some(indices) = self.hash_index.get(&(insn_idx, cur_hash)) {
             if let Some(head) = self.cache.get(&insn_idx) {
                 for &idx in indices {
@@ -452,12 +455,12 @@ impl StateCache {
         }
     }
 
-    /// Get hash efficiency statistics
-    pub fn hash_efficiency(&self) -> f64 {
+    /// Get hash efficiency as percentage (0-100)
+    pub fn hash_efficiency_percent(&self) -> u32 {
         if self.prune_hits == 0 {
-            0.0
+            0
         } else {
-            self.hash_hits as f64 / self.prune_hits as f64
+            ((self.hash_hits as u64 * 100) / self.prune_hits as u64) as u32
         }
     }
 
@@ -531,7 +534,6 @@ pub struct StateVisitContext {
     pub parent_state_id: Option<StateId>,
 }
 
-
 impl StateVisitContext {
     /// Create a new empty visit context
     pub fn new() -> Self {
@@ -555,9 +557,7 @@ impl StateVisitContext {
     /// Check if we should skip adding state due to loop heuristics
     pub fn should_skip_add_in_loop(&self) -> bool {
         // In a loop, avoid adding states too frequently
-        !self.force_new_state
-            && self.jmps_since_prune < 20
-            && self.insns_since_prune < 100
+        !self.force_new_state && self.jmps_since_prune < 20 && self.insns_since_prune < 100
     }
 }
 
@@ -591,7 +591,7 @@ pub fn is_state_visited(
             if cached.in_free_list {
                 continue;
             }
-            
+
             // Only compare states at the same instruction
             if cached.insn_idx != insn_idx {
                 continue;
@@ -657,7 +657,7 @@ pub fn is_state_visited(
                     } else if cur.callback_unroll_depth > cached.state.callback_unroll_depth + 4 {
                         // Too many callback unrolls
                         return Err(VerifierError::TooComplex(
-                            "callback unroll depth exceeded".into()
+                            "callback unroll depth exceeded".into(),
                         ));
                     }
                     continue;
@@ -675,7 +675,7 @@ pub fn is_state_visited(
                         cache.loop_detections += 1;
                         return Err(VerifierError::InfiniteLoop(insn_idx));
                     }
-                    
+
                     // Check for widening opportunity - if we've seen similar states
                     // multiple times, we might need to widen bounds
                     if cached.hit_cnt > 3 {
@@ -688,7 +688,7 @@ pub fn is_state_visited(
                 if ctx.should_skip_add_in_loop() {
                     should_add_state = false;
                 }
-                
+
                 // Increment miss count for states we didn't match
                 cached.miss_cnt += 1;
                 continue;
@@ -714,9 +714,13 @@ pub fn is_state_visited(
             } else {
                 // Increment miss count
                 cached.miss_cnt += 1;
-                
+
                 // Maybe evict this state based on miss/hit ratio
-                let n = if ctx.is_force_checkpoint && cached.branches > 0 { 64 } else { 3 };
+                let n = if ctx.is_force_checkpoint && cached.branches > 0 {
+                    64
+                } else {
+                    3
+                };
                 if cached.miss_cnt > cached.hit_cnt * n + n {
                     cached.in_free_list = true;
                 }
@@ -729,7 +733,7 @@ pub fn is_state_visited(
         cache.prune_hits += 1;
         return Ok(StateVisitResult::Prune(state_id));
     }
-    
+
     if loop_detected && !ctx.force_new_state {
         // We detected a potential loop but didn't prove it's infinite
         // Force adding a new state to track progress
@@ -738,11 +742,7 @@ pub fn is_state_visited(
 
     // Add current state to cache if appropriate
     if should_add_state {
-        let new_state_id = cache.push_state_with_parent(
-            insn_idx,
-            cur.clone(),
-            ctx.parent_state_id,
-        );
+        let new_state_id = cache.push_state_with_parent(insn_idx, cur.clone(), ctx.parent_state_id);
         Ok(StateVisitResult::Explore(new_state_id))
     } else {
         Ok(StateVisitResult::ExploreNoCache)
@@ -847,9 +847,10 @@ pub fn check_iter_convergence(cur: &BpfVerifierState, old: &BpfVerifierState) ->
     for slot in &cur_func.stack.stack {
         let slot_type = slot.slot_type[BPF_REG_SIZE - 1];
         if slot_type == BpfStackSlotType::Iter
-            && slot.spilled_ptr.iter.state == BpfIterState::Active {
-                return true;
-            }
+            && slot.spilled_ptr.iter.state == BpfIterState::Active
+        {
+            return true;
+        }
     }
 
     false
@@ -922,10 +923,13 @@ fn has_stale_liveness(cached: &BpfVerifierState, cur: &BpfVerifierState) -> bool
             Some(f) => f,
             None => continue,
         };
-        
+
         // Check registers for stale liveness
-        for (i, (cached_reg, cur_reg)) in cached_func.regs.iter()
-            .zip(cur_func.regs.iter()).enumerate() 
+        for (i, (cached_reg, cur_reg)) in cached_func
+            .regs
+            .iter()
+            .zip(cur_func.regs.iter())
+            .enumerate()
         {
             // If register types don't match, liveness info may be stale
             if cached_reg.reg_type != cur_reg.reg_type {
@@ -936,48 +940,54 @@ fn has_stale_liveness(cached: &BpfVerifierState, cur: &BpfVerifierState) -> bool
                     return true;
                 }
             }
-            
+
             // If cached marked as not needing precision but current does,
             // the cached state may lead to incorrect pruning
-            if !cached_reg.precise && cur_reg.precise 
-                && cur_reg.reg_type == BpfRegType::ScalarValue {
+            if !cached_reg.precise && cur_reg.precise && cur_reg.reg_type == BpfRegType::ScalarValue
+            {
                 // Current path requires precision that cached doesn't have
                 // This could cause incorrect pruning
                 return true;
             }
-            
+
             // Check for ID mismatches in pointer tracking
             // If IDs don't match, the liveness relationships are stale
-            if cached_reg.id != 0 && cur_reg.id != 0 
-                && cached_reg.id != cur_reg.id 
-                && cached_reg.reg_type == cur_reg.reg_type {
+            if cached_reg.id != 0
+                && cur_reg.id != 0
+                && cached_reg.id != cur_reg.id
+                && cached_reg.reg_type == cur_reg.reg_type
+            {
                 // Same type but different ID - relationships may be stale
                 // This is conservative; some cases might still be valid
                 let _ = i; // suppress warning
             }
         }
-        
+
         // Check stack slots for stale liveness
-        for (cached_slot, cur_slot) in cached_func.stack.stack.iter()
-            .zip(cur_func.stack.stack.iter()) 
+        for (cached_slot, cur_slot) in cached_func
+            .stack
+            .stack
+            .iter()
+            .zip(cur_func.stack.stack.iter())
         {
             if cached_slot.slot_type != cur_slot.slot_type {
                 // Stack slot type changed - could affect liveness
                 if cached_slot.slot_type[0] != BpfStackSlotType::Invalid
-                    && cur_slot.slot_type[0] != BpfStackSlotType::Invalid {
+                    && cur_slot.slot_type[0] != BpfStackSlotType::Invalid
+                {
                     // Both have data but different types
                     return true;
                 }
             }
         }
     }
-    
+
     // Check for frame count mismatch
     if cached.curframe != cur.curframe {
         // Different call depth - liveness info may not apply
         // This is handled separately in state comparison
     }
-    
+
     false
 }
 
@@ -1011,33 +1021,31 @@ pub fn complete_branch(cache: &mut StateCache, insn_idx: usize) {
 /// * `from_idx` - The instruction index where liveness was discovered
 /// * `to_idx` - The instruction index to propagate liveness to
 /// * `live_regs` - Bitmask of registers that are live (bit i = register i)
-pub fn propagate_liveness(
-    cache: &mut StateCache,
-    from_idx: usize,
-    to_idx: usize,
-    live_regs: u16,
-) {
+pub fn propagate_liveness(cache: &mut StateCache, from_idx: usize, to_idx: usize, live_regs: u16) {
     // Skip if no registers are live or indices are invalid
     if live_regs == 0 || from_idx <= to_idx {
         return;
     }
-    
+
     // Get the cached states at the target instruction
     let head = match cache.get_mut(to_idx) {
         Some(h) => h,
         None => return,
     };
-    
+
     // Propagate liveness to all cached states at this instruction
     for cached in &mut head.states {
         // Get the current frame
-        let func = match cached.state.frame.get_mut(cached.state.curframe)
-            .and_then(|f| f.as_mut()) 
+        let func = match cached
+            .state
+            .frame
+            .get_mut(cached.state.curframe)
+            .and_then(|f| f.as_mut())
         {
             Some(f) => f,
             None => continue,
         };
-        
+
         // Mark each live register
         for i in 0..MAX_BPF_REG {
             if (live_regs & (1 << i)) != 0 {
@@ -1063,14 +1071,11 @@ pub fn propagate_liveness(
 /// When we prune a path because it matches a cached state,
 /// we need to propagate any precision requirements from the
 /// cached state's subsequent execution.
-pub fn propagate_precision(
-    cur: &mut BpfVerifierState,
-    cached: &BpfVerifierState,
-) -> Result<()> {
+pub fn propagate_precision(cur: &mut BpfVerifierState, cached: &BpfVerifierState) -> Result<()> {
     // Propagate precision requirements from cached to current state
     // This ensures that registers marked as needing precision in the
     // cached path are also marked in the current path
-    
+
     for frame_idx in 0..=cur.curframe.min(cached.curframe) {
         let cur_func = match cur.frame.get_mut(frame_idx).and_then(|f| f.as_mut()) {
             Some(f) => f,
@@ -1080,29 +1085,32 @@ pub fn propagate_precision(
             Some(f) => f,
             None => continue,
         };
-        
+
         // Propagate register precision
-        for (i, (cur_reg, cached_reg)) in cur_func.regs.iter_mut()
-            .zip(cached_func.regs.iter()).enumerate()
+        for (i, (cur_reg, cached_reg)) in cur_func
+            .regs
+            .iter_mut()
+            .zip(cached_func.regs.iter())
+            .enumerate()
         {
             // If cached register needs precision and cur doesn't have it marked
-            if cached_reg.precise && !cur_reg.precise
-                && cur_reg.reg_type == BpfRegType::ScalarValue {
-                    cur_reg.precise = true;
-                }
-            
+            if cached_reg.precise && !cur_reg.precise && cur_reg.reg_type == BpfRegType::ScalarValue
+            {
+                cur_reg.precise = true;
+            }
+
             // Check if cached register was read (liveness propagation)
             if cached_reg.live.read && !cur_reg.live.read {
                 cur_reg.live.read = true;
             }
-            
+
             let _ = i; // Suppress unused warning
         }
-        
+
         // Propagate stack slot precision
         let cur_slots = cur_func.stack.stack.len();
         let cached_slots = cached_func.stack.stack.len();
-        
+
         for spi in 0..cur_slots.min(cached_slots) {
             if let (Some(cur_slot), Some(cached_slot)) = (
                 cur_func.stack.stack.get_mut(spi),
@@ -1111,14 +1119,16 @@ pub fn propagate_precision(
                 // If both are spilled scalars, propagate precision
                 if cur_slot.slot_type[BPF_REG_SIZE - 1] == BpfStackSlotType::Spill
                     && cached_slot.slot_type[BPF_REG_SIZE - 1] == BpfStackSlotType::Spill
-                    && cached_slot.spilled_ptr.precise && !cur_slot.spilled_ptr.precise
-                        && cur_slot.spilled_ptr.reg_type == BpfRegType::ScalarValue {
-                            cur_slot.spilled_ptr.precise = true;
-                        }
+                    && cached_slot.spilled_ptr.precise
+                    && !cur_slot.spilled_ptr.precise
+                    && cur_slot.spilled_ptr.reg_type == BpfRegType::ScalarValue
+                {
+                    cur_slot.spilled_ptr.precise = true;
+                }
             }
         }
     }
-    
+
     Ok(())
 }
 
@@ -1137,20 +1147,24 @@ pub fn propagate_precision_to_parent(
     } else {
         false
     };
-    
+
     if !needs_precision {
         return Ok(());
     }
-    
+
     // Mark the corresponding register in parent as precise
-    if let Some(func) = parent.frame.get_mut(parent.curframe).and_then(|f| f.as_mut()) {
+    if let Some(func) = parent
+        .frame
+        .get_mut(parent.curframe)
+        .and_then(|f| f.as_mut())
+    {
         if let Some(reg) = func.regs.get_mut(regno) {
             if reg.reg_type == BpfRegType::ScalarValue {
                 reg.precise = true;
             }
         }
     }
-    
+
     Ok(())
 }
 
@@ -1216,7 +1230,7 @@ impl JmpHistory {
 }
 
 /// Checkpoint for state rollback during verification
-/// 
+///
 /// Checkpoints allow the verifier to save its state at a particular point
 /// and roll back if a path proves invalid or too complex.
 #[derive(Debug, Clone)]
@@ -1429,22 +1443,22 @@ impl ExplorationMetrics {
         self.widenings_performed += 1;
     }
 
-    /// Get pruning efficiency ratio
-    pub fn pruning_efficiency(&self) -> f64 {
+    /// Get pruning efficiency as percentage (0-100)
+    pub fn pruning_efficiency_percent(&self) -> u32 {
         if self.paths_explored == 0 {
-            0.0
+            0
         } else {
-            self.paths_pruned as f64 / self.paths_explored as f64
+            ((self.paths_pruned as u64 * 100) / self.paths_explored as u64) as u32
         }
     }
 
-    /// Get completion rate
-    pub fn completion_rate(&self) -> f64 {
+    /// Get completion rate as percentage (0-100)
+    pub fn completion_rate_percent(&self) -> u32 {
         let total = self.paths_completed + self.paths_errored + self.paths_pruned;
         if total == 0 {
-            0.0
+            0
         } else {
-            self.paths_completed as f64 / total as f64
+            ((self.paths_completed as u64 * 100) / total as u64) as u32
         }
     }
 }
@@ -1452,21 +1466,33 @@ impl ExplorationMetrics {
 impl core::fmt::Display for ExplorationMetrics {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         writeln!(f, "Exploration Metrics:")?;
-        writeln!(f, "  Paths: {} explored, {} pruned, {} completed, {} errored",
-            self.paths_explored, self.paths_pruned, 
-            self.paths_completed, self.paths_errored)?;
-        writeln!(f, "  Max path length: {}, Max branch depth: {}",
-            self.max_path_length, self.max_branch_depth)?;
+        writeln!(
+            f,
+            "  Paths: {} explored, {} pruned, {} completed, {} errored",
+            self.paths_explored, self.paths_pruned, self.paths_completed, self.paths_errored
+        )?;
+        writeln!(
+            f,
+            "  Max path length: {}, Max branch depth: {}",
+            self.max_path_length, self.max_branch_depth
+        )?;
         writeln!(f, "  Peak states in memory: {}", self.peak_states_in_memory)?;
-        writeln!(f, "  Back edges: {}, Widenings: {}",
-            self.back_edges_detected, self.widenings_performed)?;
-        writeln!(f, "  Pruning efficiency: {:.1}%", self.pruning_efficiency() * 100.0)?;
+        writeln!(
+            f,
+            "  Back edges: {}, Widenings: {}",
+            self.back_edges_detected, self.widenings_performed
+        )?;
+        writeln!(
+            f,
+            "  Pruning efficiency: {}%",
+            self.pruning_efficiency_percent()
+        )?;
         Ok(())
     }
 }
 
 /// Widening operation for loop convergence
-/// 
+///
 /// When a loop iterates many times without converging, we can widen
 /// the bounds to force convergence at the cost of precision.
 pub fn widen_scalar_bounds(reg: &mut BpfRegState) {
@@ -1507,7 +1533,7 @@ pub fn widen_loop_registers(
     metrics: &mut ExplorationMetrics,
 ) {
     let cur_frame = cur.curframe;
-    
+
     // Get current and old function states
     let (cur_func, old_func) = match (
         cur.frame.get_mut(cur_frame).and_then(|f| f.as_mut()),
@@ -1518,11 +1544,15 @@ pub fn widen_loop_registers(
     };
 
     // Find registers that changed between iterations
-    for (i, (cur_reg, old_reg)) in cur_func.regs.iter_mut()
-        .zip(old_func.regs.iter()).enumerate() 
+    for (i, (cur_reg, old_reg)) in cur_func
+        .regs
+        .iter_mut()
+        .zip(old_func.regs.iter())
+        .enumerate()
     {
-        if cur_reg.reg_type != BpfRegType::ScalarValue 
-            || old_reg.reg_type != BpfRegType::ScalarValue {
+        if cur_reg.reg_type != BpfRegType::ScalarValue
+            || old_reg.reg_type != BpfRegType::ScalarValue
+        {
             continue;
         }
 
@@ -1566,7 +1596,7 @@ pub fn widen_loop_registers(
 // iterations.
 
 /// Check if two registers are "exact" matches for loop detection
-/// 
+///
 /// Two registers are exact if they have the same type, bounds, and var_off.
 /// This is used to determine if widening is necessary.
 pub fn regs_exact(
@@ -1617,15 +1647,15 @@ pub fn regs_exact(
 }
 
 /// Maybe widen a single register for loop convergence
-/// 
+///
 /// This implements the kernel's `maybe_widen_reg()` function.
-/// 
+///
 /// The register is widened (marked unknown) if:
 /// - It's a scalar value
 /// - Types match between old and current
 /// - Neither is marked as precise
 /// - They don't match exactly
-/// 
+///
 /// This is the key operation that allows iterator loops to converge.
 pub fn maybe_widen_reg(
     rold: &BpfRegState,
@@ -1636,35 +1666,35 @@ pub fn maybe_widen_reg(
     if rold.reg_type != BpfRegType::ScalarValue {
         return false;
     }
-    
+
     // Types must match
     if rold.reg_type != rcur.reg_type {
         return false;
     }
-    
+
     // Don't widen if either is precise - precision means we need exact tracking
     if rold.precise || rcur.precise {
         return false;
     }
-    
+
     // Don't widen if they already match exactly
     if regs_exact(rold, rcur, idmap) {
         return false;
     }
-    
+
     // Widen the current register to unknown
     rcur.mark_unknown(false);
     true
 }
 
 /// Widen imprecise scalars across all frames for loop convergence (prune version)
-/// 
+///
 /// This implements the kernel's `widen_imprecise_scalars()` function for pruning.
-/// 
+///
 /// Called before state comparison at iterator next calls. Widens any imprecise
 /// scalar that doesn't match exactly between the old (cached) state and current
 /// state. This allows loops with changing counters to converge.
-/// 
+///
 /// Returns the number of registers widened.
 pub fn widen_imprecise_scalars_for_prune(
     old: &BpfVerifierState,
@@ -1672,10 +1702,10 @@ pub fn widen_imprecise_scalars_for_prune(
 ) -> u32 {
     let mut widened_count = 0u32;
     let mut idmap = crate::analysis::states_equal::IdMap::new();
-    
+
     // Process frames from current (innermost) to outermost
     let max_frame = old.curframe.min(cur.curframe);
-    
+
     for fr in (0..=max_frame).rev() {
         let old_func = match old.frame.get(fr).and_then(|f| f.as_ref()) {
             Some(f) => f,
@@ -1685,30 +1715,30 @@ pub fn widen_imprecise_scalars_for_prune(
             Some(f) => f,
             None => continue,
         };
-        
+
         // Widen registers
         for i in 0..MAX_BPF_REG {
             if maybe_widen_reg(&old_func.regs[i], &mut cur_func.regs[i], &mut idmap) {
                 widened_count += 1;
             }
         }
-        
+
         // Widen spilled scalars on stack
         let old_slots = old_func.stack.stack.len();
         let cur_slots = cur_func.stack.stack.len();
         let min_slots = old_slots.min(cur_slots);
-        
+
         for spi in 0..min_slots {
             // Check if both slots contain spilled scalars
-            let old_is_spill = old_func.stack.stack[spi].slot_type[BPF_REG_SIZE - 1] 
-                == BpfStackSlotType::Spill;
-            let cur_is_spill = cur_func.stack.stack[spi].slot_type[BPF_REG_SIZE - 1] 
-                == BpfStackSlotType::Spill;
-            
+            let old_is_spill =
+                old_func.stack.stack[spi].slot_type[BPF_REG_SIZE - 1] == BpfStackSlotType::Spill;
+            let cur_is_spill =
+                cur_func.stack.stack[spi].slot_type[BPF_REG_SIZE - 1] == BpfStackSlotType::Spill;
+
             if !old_is_spill || !cur_is_spill {
                 continue;
             }
-            
+
             if maybe_widen_reg(
                 &old_func.stack.stack[spi].spilled_ptr,
                 &mut cur_func.stack.stack[spi].spilled_ptr,
@@ -1718,20 +1748,20 @@ pub fn widen_imprecise_scalars_for_prune(
             }
         }
     }
-    
+
     widened_count
 }
 
 /// Process iterator next call - apply widening and check for convergence
-/// 
+///
 /// This is called when verifier reaches an iterator next call (e.g., bpf_iter_num_next).
 /// It implements the key loop convergence logic:
-/// 
+///
 /// 1. Find a cached state at this instruction with pending branches (active loop)
 /// 2. Widen imprecise scalars in current state
 /// 3. Check if widened current state is within cached state's ranges (RANGE_WITHIN)
 /// 4. If so, the loop has converged - we can stop exploring this path
-/// 
+///
 /// Returns:
 /// - `Some(state_id)` if loop converged (can prune)
 /// - `None` if should continue exploration
@@ -1742,48 +1772,48 @@ pub fn process_iter_next_call(
 ) -> Option<StateId> {
     // Get cached states at this instruction
     let head = cache.get_mut(insn_idx)?;
-    
+
     for cached in &mut head.states {
         // Skip states not at this instruction
         if cached.insn_idx != insn_idx {
             continue;
         }
-        
+
         // Skip states without pending branches (not an active loop)
         if cached.branches == 0 {
             continue;
         }
-        
+
         // Skip states in free list
         if cached.in_free_list {
             continue;
         }
-        
+
         // Check if iterator is in active state in the cached state
         let iter_active = check_iter_active(&cached.state);
         if !iter_active {
             continue;
         }
-        
+
         // Apply widening to current state
         let widened = widen_imprecise_scalars_for_prune(&cached.state, cur);
-        
+
         // Check for convergence using RANGE_WITHIN comparison
         let config = crate::analysis::states_equal::CompareConfig::for_range_within();
         if crate::analysis::states_equal::states_equal_with_config(cur, &cached.state, &config) {
             // Loop has converged!
             cached.hit_cnt += 1;
             cached.verified = true;
-            
+
             // Log widening info if verbose
             if widened > 0 {
                 // In a real implementation, we'd log this
             }
-            
+
             return Some(cached.id);
         }
     }
-    
+
     None
 }
 
@@ -1794,7 +1824,7 @@ fn check_iter_active(state: &BpfVerifierState) -> bool {
             Some(f) => f,
             None => continue,
         };
-        
+
         for slot in &func.stack.stack {
             if slot.slot_type[BPF_REG_SIZE - 1] == BpfStackSlotType::Iter {
                 if slot.spilled_ptr.iter.state == BpfIterState::Active {
@@ -1803,12 +1833,12 @@ fn check_iter_active(state: &BpfVerifierState) -> bool {
             }
         }
     }
-    
+
     false
 }
 
 /// Process may_goto instruction for bounded loop convergence
-/// 
+///
 /// Similar to iterator handling, but for may_goto bounded loops.
 /// May_goto uses a depth counter to track loop iterations.
 pub fn process_may_goto(
@@ -1817,21 +1847,21 @@ pub fn process_may_goto(
     cur: &BpfVerifierState,
 ) -> Option<StateId> {
     let head = cache.get_mut(insn_idx)?;
-    
+
     for cached in &mut head.states {
         if cached.insn_idx != insn_idx {
             continue;
         }
-        
+
         if cached.branches == 0 || cached.in_free_list {
             continue;
         }
-        
+
         // Different may_goto depths indicate different loop iterations
         if cached.state.may_goto_depth == cur.may_goto_depth {
             continue;
         }
-        
+
         // Check for convergence using RANGE_WITHIN
         let config = crate::analysis::states_equal::CompareConfig::for_range_within();
         if crate::analysis::states_equal::states_equal_with_config(cur, &cached.state, &config) {
@@ -1839,49 +1869,46 @@ pub fn process_may_goto(
             return Some(cached.id);
         }
     }
-    
+
     None
 }
 
 /// Detect potential infinite loop
-/// 
+///
 /// This is called when we suspect a loop might be infinite. Returns true if
 /// the states are equivalent enough to indicate an infinite loop.
-/// 
+///
 /// Key checks:
 /// - States match exactly (not just subsumption)
 /// - Iterator depths don't differ (no progress being made)
 /// - May_goto and callback depths match
-pub fn detect_infinite_loop(
-    old: &BpfVerifierState,
-    cur: &BpfVerifierState,
-) -> bool {
+pub fn detect_infinite_loop(old: &BpfVerifierState, cur: &BpfVerifierState) -> bool {
     // First, quick check if states could be looping
     if !states_maybe_looping(old, cur) {
         return false;
     }
-    
+
     // Check for exact state match
     let config = crate::analysis::states_equal::CompareConfig::for_loop_detection();
     if !crate::analysis::states_equal::states_equal_with_config(cur, old, &config) {
         return false;
     }
-    
+
     // Check iterator depths - if different, we're making progress
     if iter_active_depths_differ(old, cur) {
         return false;
     }
-    
+
     // Check may_goto depth
     if old.may_goto_depth != cur.may_goto_depth {
         return false;
     }
-    
+
     // Check callback unroll depth
     if old.callback_unroll_depth != cur.callback_unroll_depth {
         return false;
     }
-    
+
     // All checks passed - this is likely an infinite loop
     true
 }
@@ -1907,7 +1934,7 @@ pub const MAX_CALL_FRAMES: usize = 8;
 pub const MAX_BACKEDGE_ITERS: usize = 64;
 
 /// Call chain identifier for SCC tracking
-/// 
+///
 /// A callchain identifies a unique path through the call graph to an SCC.
 /// Different call paths to the same SCC are tracked separately because
 /// parent state relationships differ.
@@ -1932,7 +1959,7 @@ impl SccCallchain {
 }
 
 /// A backedge state for SCC precision propagation
-/// 
+///
 /// When we detect a loop (state matches a cached state with pending branches),
 /// we save the current state as a backedge. Later, we propagate precision
 /// requirements from the matched cached state back through the backedge states.
@@ -1947,12 +1974,15 @@ pub struct SccBackedge {
 impl SccBackedge {
     /// Create a new backedge
     pub fn new(state: BpfVerifierState, equal_state_id: StateId) -> Self {
-        Self { state, equal_state_id }
+        Self {
+            state,
+            equal_state_id,
+        }
     }
 }
 
 /// SCC visit tracking for a specific callchain
-/// 
+///
 /// Each unique callchain through an SCC gets its own visit instance.
 /// This tracks the entry state and accumulated backedges for precision
 /// propagation when the SCC exploration completes.
@@ -1993,7 +2023,7 @@ impl SccVisit {
 }
 
 /// Runtime SCC visit info for a single SCC
-/// 
+///
 /// Contains all visit instances for different callchains to this SCC.
 /// This is different from `analysis::scc::SccInfo` which is for CFG analysis.
 #[derive(Debug, Clone, Default)]
@@ -2019,7 +2049,7 @@ impl SccVisitInfo {
     }
 
     /// Get or create a visit for the given callchain
-    /// 
+    ///
     /// Returns None only in the unlikely case of internal inconsistency
     pub fn get_or_create_visit(&mut self, callchain: SccCallchain) -> Option<&mut SccVisit> {
         if self.find_visit(&callchain).is_none() {
@@ -2051,10 +2081,10 @@ impl SccTracker {
     }
 
     /// Compute the callchain for a verifier state
-    /// 
+    ///
     /// Looks for the topmost frame with an instruction in an SCC and forms
     /// the callchain as the call sites leading to that frame.
-    /// 
+    ///
     /// Returns true if state is in an SCC, false otherwise.
     pub fn compute_callchain(
         &mut self,
@@ -2062,7 +2092,7 @@ impl SccTracker {
         insn_aux: &[crate::verifier::env::InsnAuxData],
     ) -> bool {
         self.callchain_buf = SccCallchain::default();
-        
+
         for frame in 0..=state.curframe {
             let insn_idx = if frame == state.curframe {
                 state.insn_idx
@@ -2073,11 +2103,11 @@ impl SccTracker {
                     None => continue,
                 }
             };
-            
+
             if insn_idx >= insn_aux.len() {
                 continue;
             }
-            
+
             let scc = insn_aux[insn_idx].scc;
             if scc != 0 {
                 self.callchain_buf.scc = scc;
@@ -2086,7 +2116,7 @@ impl SccTracker {
                 self.callchain_buf.callsites[frame] = insn_idx;
             }
         }
-        
+
         false
     }
 
@@ -2096,7 +2126,7 @@ impl SccTracker {
     }
 
     /// Enter an SCC - ensure visit exists and set entry state if empty
-    /// 
+    ///
     /// Called from is_state_visited when we add a new state to the cache.
     pub fn maybe_enter_scc(
         &mut self,
@@ -2107,7 +2137,7 @@ impl SccTracker {
         if !self.compute_callchain(state, insn_aux) {
             return false;
         }
-        
+
         let callchain = self.callchain_buf.clone();
         let info = self.scc_info.entry(callchain.scc).or_default();
         if let Some(visit) = info.get_or_create_visit(callchain) {
@@ -2121,7 +2151,7 @@ impl SccTracker {
     }
 
     /// Exit an SCC - propagate backedges and reset visit
-    /// 
+    ///
     /// Called from update_branch_counts when a state's branches reach 0.
     /// Returns Ok(()) on success, Err on propagation failure.
     pub fn maybe_exit_scc(
@@ -2134,63 +2164,64 @@ impl SccTracker {
         if !self.compute_callchain(state, insn_aux) {
             return Ok(());
         }
-        
+
         let callchain = self.callchain_buf.clone();
         let scc_id = callchain.scc;
-        
+
         // Check if we should process this exit
         let should_process = {
             let info = match self.scc_info.get(&scc_id) {
                 Some(i) => i,
                 None => return Ok(()),
             };
-            
+
             let visit = match info.find_visit(&callchain) {
                 Some(v) => v,
                 None => return Ok(()),
             };
-            
+
             visit.entry_state_id == Some(state_id)
         };
-        
+
         if !should_process {
             return Ok(());
         }
-        
+
         // Extract backedges for processing
         let backedges = {
             let info = match self.scc_info.get_mut(&scc_id) {
                 Some(i) => i,
                 None => return Ok(()),
             };
-            
+
             let visit = match info.find_visit_mut(&callchain) {
                 Some(v) => v,
                 None => return Ok(()),
             };
-            
+
             core::mem::take(&mut visit.backedges)
         };
-        
+
         // Propagate backedges (no longer borrowing self.scc_info)
-        let (propagation_rounds, fallback) = Self::propagate_backedges_standalone(backedges, cache)?;
+        let (propagation_rounds, fallback) =
+            Self::propagate_backedges_standalone(backedges, cache)?;
         self.total_propagation_rounds += propagation_rounds;
         if fallback {
             self.fallback_count += 1;
         }
-        
+
         // Reset the visit entry state
         if let Some(info) = self.scc_info.get_mut(&scc_id) {
             if let Some(visit) = info.find_visit_mut(&callchain) {
                 visit.entry_state_id = None;
             }
         }
-        
+
         Ok(())
     }
 
     /// Add a backedge state
-    /// 
+    ///
     /// Called when is_state_visited finds a loop (RANGE_WITHIN match).
     pub fn add_backedge(
         &mut self,
@@ -2200,33 +2231,33 @@ impl SccTracker {
     ) -> Result<()> {
         if !self.compute_callchain(state, insn_aux) {
             return Err(VerifierError::Internal(
-                "add_backedge: no SCC in verification path".into()
+                "add_backedge: no SCC in verification path".into(),
             ));
         }
-        
+
         let callchain = self.callchain_buf.clone();
         let info = match self.scc_info.get_mut(&callchain.scc) {
             Some(i) => i,
             None => {
                 return Err(VerifierError::Internal(
-                    "add_backedge: no visit info for callchain".into()
+                    "add_backedge: no visit info for callchain".into(),
                 ));
             }
         };
-        
+
         let visit = match info.find_visit_mut(&callchain) {
             Some(v) => v,
             None => {
                 return Err(VerifierError::Internal(
-                    "add_backedge: no visit for callchain".into()
+                    "add_backedge: no visit for callchain".into(),
                 ));
             }
         };
-        
+
         let backedge = SccBackedge::new(state.clone(), equal_state_id);
         visit.add_backedge(backedge);
         self.total_backedges += 1;
-        
+
         Ok(())
     }
 
@@ -2239,13 +2270,13 @@ impl SccTracker {
         if !self.compute_callchain(state, insn_aux) {
             return false;
         }
-        
+
         let callchain = &self.callchain_buf;
         let info = match self.scc_info.get(&callchain.scc) {
             Some(i) => i,
             None => return false,
         };
-        
+
         match info.find_visit(callchain) {
             Some(v) => v.has_backedges(),
             None => false,
@@ -2253,11 +2284,11 @@ impl SccTracker {
     }
 
     /// Propagate precision from backedge states (standalone version)
-    /// 
+    ///
     /// Iteratively propagates precision marks from the equal_state (cached state
     /// that the backedge matched) to the backedge state and its parents,
     /// until a fixpoint is reached.
-    /// 
+    ///
     /// Returns (propagation_rounds, did_fallback) on success.
     fn propagate_backedges_standalone(
         mut backedges: Vec<SccBackedge>,
@@ -2266,7 +2297,7 @@ impl SccTracker {
         let mut iteration = 0;
         let mut total_rounds = 0u64;
         let mut did_fallback = false;
-        
+
         loop {
             if iteration >= MAX_BACKEDGE_ITERS {
                 // Too many iterations - fall back to marking all scalars precise
@@ -2276,30 +2307,30 @@ impl SccTracker {
                 did_fallback = true;
                 break;
             }
-            
+
             let mut changed = false;
-            
+
             for backedge in &mut backedges {
                 // Get the equal state from cache
                 let equal_state = match cache.get_by_id(backedge.equal_state_id) {
                     Some(cached) => &cached.state,
                     None => continue,
                 };
-                
+
                 // Propagate precision from equal_state to backedge.state
                 if propagate_precision_internal(equal_state, &mut backedge.state)? {
                     changed = true;
                 }
             }
-            
+
             total_rounds += 1;
             iteration += 1;
-            
+
             if !changed {
                 break;
             }
         }
-        
+
         Ok((total_rounds, did_fallback))
     }
 
@@ -2311,7 +2342,7 @@ impl SccTracker {
 }
 
 /// Internal precision propagation from one state to another
-/// 
+///
 /// Propagates precision marks from `from` state to `to` state.
 /// Returns true if any changes were made.
 fn propagate_precision_internal(
@@ -2319,7 +2350,7 @@ fn propagate_precision_internal(
     to: &mut BpfVerifierState,
 ) -> Result<bool> {
     let mut changed = false;
-    
+
     for frame_idx in 0..=from.curframe.min(to.curframe) {
         let from_func = match from.frame.get(frame_idx).and_then(|f| f.as_ref()) {
             Some(f) => f,
@@ -2329,7 +2360,7 @@ fn propagate_precision_internal(
             Some(f) => f,
             None => continue,
         };
-        
+
         // Propagate register precision
         for (from_reg, to_reg) in from_func.regs.iter().zip(to_func.regs.iter_mut()) {
             if from_reg.reg_type == BpfRegType::ScalarValue
@@ -2341,15 +2372,15 @@ fn propagate_precision_internal(
                 changed = true;
             }
         }
-        
+
         // Propagate stack slot precision
         let from_slots = from_func.stack.stack.len();
         let to_slots = to_func.stack.stack.len();
-        
+
         for spi in 0..from_slots.min(to_slots) {
             let from_slot = &from_func.stack.stack[spi];
             let to_slot = &mut to_func.stack.stack[spi];
-            
+
             if from_slot.slot_type[BPF_REG_SIZE - 1] == BpfStackSlotType::Spill
                 && to_slot.slot_type[BPF_REG_SIZE - 1] == BpfStackSlotType::Spill
                 && from_slot.spilled_ptr.reg_type == BpfRegType::ScalarValue
@@ -2362,7 +2393,7 @@ fn propagate_precision_internal(
             }
         }
     }
-    
+
     Ok(changed)
 }
 // ============================================================================
@@ -2383,7 +2414,7 @@ pub enum PressureLevel {
 }
 
 /// Memory pressure manager for state cache
-/// 
+///
 /// Monitors the number of cached states and triggers eviction
 /// when memory pressure increases. This prevents the verifier
 /// from consuming too much memory on complex programs.
@@ -2393,12 +2424,12 @@ pub struct MemoryPressureManager {
     max_states: usize,
     /// Current number of states
     current_states: usize,
-    /// Threshold for elevated pressure (percentage of max)
-    elevated_threshold: f64,
-    /// Threshold for high pressure (percentage of max)
-    high_threshold: f64,
-    /// Threshold for critical pressure (percentage of max)
-    critical_threshold: f64,
+    /// Threshold for elevated pressure (percentage 0-100)
+    elevated_threshold_percent: u32,
+    /// Threshold for high pressure (percentage 0-100)
+    high_threshold_percent: u32,
+    /// Threshold for critical pressure (percentage 0-100)
+    critical_threshold_percent: u32,
     /// Number of evictions performed
     pub evictions_performed: u64,
     /// Number of times pressure level changed
@@ -2411,27 +2442,27 @@ impl MemoryPressureManager {
         Self {
             max_states,
             current_states: 0,
-            elevated_threshold: 0.7,
-            high_threshold: 0.85,
-            critical_threshold: 0.95,
+            elevated_threshold_percent: 70,
+            high_threshold_percent: 85,
+            critical_threshold_percent: 95,
             evictions_performed: 0,
             pressure_changes: 0,
         }
     }
 
-    /// Create with custom thresholds
+    /// Create with custom thresholds (percentages 0-100)
     pub fn with_thresholds(
         max_states: usize,
-        elevated: f64,
-        high: f64,
-        critical: f64,
+        elevated_percent: u32,
+        high_percent: u32,
+        critical_percent: u32,
     ) -> Self {
         Self {
             max_states,
             current_states: 0,
-            elevated_threshold: elevated,
-            high_threshold: high,
-            critical_threshold: critical,
+            elevated_threshold_percent: elevated_percent,
+            high_threshold_percent: high_percent,
+            critical_threshold_percent: critical_percent,
             evictions_performed: 0,
             pressure_changes: 0,
         }
@@ -2442,7 +2473,7 @@ impl MemoryPressureManager {
         let old_level = self.pressure_level();
         self.current_states = count;
         let new_level = self.pressure_level();
-        
+
         if old_level != new_level {
             self.pressure_changes += 1;
         }
@@ -2453,14 +2484,15 @@ impl MemoryPressureManager {
         if self.max_states == 0 {
             return PressureLevel::Normal;
         }
-        
-        let ratio = self.current_states as f64 / self.max_states as f64;
-        
-        if ratio >= self.critical_threshold {
+
+        // Calculate percentage using integer math (scaled by 100)
+        let ratio_percent = (self.current_states as u64 * 100 / self.max_states as u64) as u32;
+
+        if ratio_percent >= self.critical_threshold_percent {
             PressureLevel::Critical
-        } else if ratio >= self.high_threshold {
+        } else if ratio_percent >= self.high_threshold_percent {
             PressureLevel::High
-        } else if ratio >= self.elevated_threshold {
+        } else if ratio_percent >= self.elevated_threshold_percent {
             PressureLevel::Elevated
         } else {
             PressureLevel::Normal
@@ -2473,7 +2505,7 @@ impl MemoryPressureManager {
             PressureLevel::Normal => 0,
             PressureLevel::Elevated => self.current_states / 20, // 5%
             PressureLevel::High => self.current_states / 10,     // 10%
-            PressureLevel::Critical => self.current_states / 5,   // 20%
+            PressureLevel::Critical => self.current_states / 5,  // 20%
         }
     }
 
@@ -2489,7 +2521,8 @@ impl MemoryPressureManager {
 
     /// Get remaining capacity before critical
     pub fn remaining_capacity(&self) -> usize {
-        let critical_count = (self.max_states as f64 * self.critical_threshold) as usize;
+        let critical_count =
+            (self.max_states as u64 * self.critical_threshold_percent as u64 / 100) as usize;
         critical_count.saturating_sub(self.current_states)
     }
 }
@@ -2533,7 +2566,9 @@ impl EvictionPolicy {
             None => return Vec::new(),
         };
 
-        let mut candidates: Vec<(StateId, u64)> = head.states.iter()
+        let mut candidates: Vec<(StateId, u64)> = head
+            .states
+            .iter()
             .filter(|c| !c.in_free_list && c.verified)
             .map(|c| (c.id, self.compute_score(c)))
             .collect();
@@ -2541,7 +2576,8 @@ impl EvictionPolicy {
         // Sort by score (lower is better candidate for eviction)
         candidates.sort_by_key(|(_, score)| *score);
 
-        candidates.into_iter()
+        candidates
+            .into_iter()
             .take(count)
             .map(|(id, _)| id)
             .collect()
@@ -2581,18 +2617,14 @@ impl EvictionPolicy {
                     50
                 };
                 let age_factor = (u64::MAX - cached.id) / 1000000;
-                
+
                 hit_score + miss_penalty + age_factor
             }
         }
     }
 
     /// Select states for global eviction across all instructions
-    pub fn select_global_eviction(
-        &self,
-        cache: &StateCache,
-        count: usize,
-    ) -> Vec<StateId> {
+    pub fn select_global_eviction(&self, cache: &StateCache, count: usize) -> Vec<StateId> {
         let mut all_candidates: Vec<(StateId, u64)> = Vec::new();
 
         for head in cache.cache.values() {
@@ -2605,7 +2637,8 @@ impl EvictionPolicy {
 
         all_candidates.sort_by_key(|(_, score)| *score);
 
-        all_candidates.into_iter()
+        all_candidates
+            .into_iter()
             .take(count)
             .map(|(id, _)| id)
             .collect()
@@ -2636,7 +2669,7 @@ pub enum PruningMode {
 }
 
 /// Adaptive pruning configuration
-/// 
+///
 /// Adjusts pruning behavior based on program complexity and memory pressure.
 /// This helps balance verification precision with resource usage.
 #[derive(Debug, Clone)]
@@ -2649,8 +2682,8 @@ pub struct AdaptivePruning {
     states_pruned: u64,
     /// Adjustment interval (number of states before reconsidering mode)
     adjustment_interval: u64,
-    /// Prune ratio target (pruned/added)
-    target_prune_ratio: f64,
+    /// Prune ratio target as percentage (0-100)
+    target_prune_ratio_percent: u32,
     /// Mode changes performed
     pub mode_changes: u64,
 }
@@ -2663,19 +2696,19 @@ impl AdaptivePruning {
             states_added: 0,
             states_pruned: 0,
             adjustment_interval: 100,
-            target_prune_ratio: 0.3,
+            target_prune_ratio_percent: 30,
             mode_changes: 0,
         }
     }
 
     /// Create with custom parameters
-    pub fn with_params(interval: u64, target_ratio: f64) -> Self {
+    pub fn with_params(interval: u64, target_ratio_percent: u32) -> Self {
         Self {
             current_mode: PruningMode::Normal,
             states_added: 0,
             states_pruned: 0,
             adjustment_interval: interval,
-            target_prune_ratio: target_ratio,
+            target_prune_ratio_percent: target_ratio_percent,
             mode_changes: 0,
         }
     }
@@ -2698,17 +2731,17 @@ impl AdaptivePruning {
     /// Adjust pruning mode based on pressure level
     pub fn adjust_mode(&mut self, pressure: PressureLevel) {
         let old_mode = self.current_mode;
-        
+
         self.current_mode = match pressure {
             PressureLevel::Normal => {
-                // Check prune ratio
-                let ratio = if self.states_added > 0 {
-                    self.states_pruned as f64 / self.states_added as f64
+                // Check prune ratio as percentage
+                let ratio_percent = if self.states_added > 0 {
+                    ((self.states_pruned * 100) / self.states_added) as u32
                 } else {
-                    0.0
+                    0
                 };
-                
-                if ratio < self.target_prune_ratio * 0.5 {
+
+                if ratio_percent < self.target_prune_ratio_percent / 2 {
                     // Low pruning - might need more aggressive mode
                     PruningMode::Relaxed
                 } else {
@@ -2771,7 +2804,7 @@ impl Default for AdaptivePruning {
 // ============================================================================
 
 /// Integrated pruning controller combining all pruning strategies
-/// 
+///
 /// This controller coordinates memory pressure management, eviction,
 /// and adaptive pruning to maintain efficient verification.
 #[derive(Debug)]
@@ -2818,12 +2851,12 @@ impl PruningController {
     pub fn with_config(
         max_states: usize,
         policy: EvictionPolicy,
-        target_prune_ratio: f64,
+        target_prune_ratio_percent: u32,
     ) -> Self {
         Self {
             pressure: MemoryPressureManager::new(max_states),
             eviction_policy: policy,
-            adaptive: AdaptivePruning::with_params(100, target_prune_ratio),
+            adaptive: AdaptivePruning::with_params(100, target_prune_ratio_percent),
             stats: PruningStats::default(),
         }
     }
@@ -2831,7 +2864,7 @@ impl PruningController {
     /// Update controller with current cache state
     pub fn update(&mut self, cache: &StateCache) {
         self.pressure.update_state_count(cache.total_states);
-        
+
         if self.adaptive.should_adjust() {
             self.adaptive.adjust_mode(self.pressure.pressure_level());
         }
@@ -2849,7 +2882,7 @@ impl PruningController {
         }
 
         let to_evict = self.eviction_policy.select_global_eviction(cache, target);
-        
+
         for id in &to_evict {
             cache.mark_for_removal(*id);
         }
@@ -2901,22 +2934,22 @@ impl PruningController {
         self.adaptive.should_skip_cache()
     }
 
-    /// Get cache efficiency ratio
-    pub fn cache_efficiency(&self) -> f64 {
+    /// Get cache efficiency as percentage (0-100)
+    pub fn cache_efficiency_percent(&self) -> u32 {
         let total = self.stats.cache_hits + self.stats.cache_misses;
         if total == 0 {
-            0.0
+            0
         } else {
-            self.stats.cache_hits as f64 / total as f64
+            ((self.stats.cache_hits as u64 * 100) / total as u64) as u32
         }
     }
 
-    /// Get pruning efficiency ratio
-    pub fn pruning_efficiency(&self) -> f64 {
+    /// Get pruning efficiency as percentage (0-100)
+    pub fn pruning_efficiency_percent(&self) -> u32 {
         if self.stats.states_added == 0 {
-            0.0
+            0
         } else {
-            self.stats.states_pruned as f64 / self.stats.states_added as f64
+            ((self.stats.states_pruned as u64 * 100) / self.stats.states_added as u64) as u32
         }
     }
 }

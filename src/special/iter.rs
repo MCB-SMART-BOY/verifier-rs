@@ -1,17 +1,18 @@
+// SPDX-License-Identifier: GPL-2.0
+
 //! BPF iterator support.
 //!
 //! BPF iterators allow programs to iterate over kernel data structures safely.
 //! Each iterator type has its own lifecycle: new -> next* -> destroy.
 
-
 use alloc::{format, vec::Vec};
 
-use crate::stdlib::BTreeMap;
-use crate::state::reg_state::BpfRegState;
-use crate::state::stack_state::{StackManager, iter_get_spi};
-use crate::state::reference::ReferenceManager;
-use crate::core::types::*;
 use crate::core::error::{Result, VerifierError};
+use crate::core::types::*;
+use crate::state::reference::ReferenceManager;
+use crate::state::reg_state::BpfRegState;
+use crate::state::stack_state::{iter_get_spi, StackManager};
+use crate::stdlib::BTreeMap;
 
 /// Mark stack slots for an iterator
 pub fn mark_stack_slots_iter(
@@ -60,11 +61,7 @@ pub fn unmark_stack_slots_iter(
 }
 
 /// Check if iterator slots are valid for uninitialized use
-pub fn is_iter_reg_valid_uninit(
-    reg: &BpfRegState,
-    stack: &StackManager,
-    nr_slots: usize,
-) -> bool {
+pub fn is_iter_reg_valid_uninit(reg: &BpfRegState, stack: &StackManager, nr_slots: usize) -> bool {
     match iter_get_spi(reg, nr_slots, stack.allocated_stack) {
         Ok(spi) => stack.is_iter_valid_uninit(spi, nr_slots),
         Err(_) => true, // Out of bounds is OK, will grow later
@@ -81,9 +78,9 @@ pub fn is_iter_reg_valid_init(
     let spi = iter_get_spi(reg, nr_slots, stack.allocated_stack)?;
 
     for i in 0..nr_slots {
-        let slot = stack.get_slot_by_spi(spi - i).ok_or(VerifierError::InvalidIterator(
-            "slot not found".into(),
-        ))?;
+        let slot = stack
+            .get_slot_by_spi(spi - i)
+            .ok_or(VerifierError::InvalidIterator("slot not found".into()))?;
 
         let st = &slot.spilled_ptr;
 
@@ -128,15 +125,11 @@ pub fn is_iter_reg_valid_init(
 }
 
 /// Get the iterator reference object ID
-pub fn iter_ref_obj_id(
-    reg: &BpfRegState,
-    stack: &StackManager,
-    nr_slots: usize,
-) -> Result<u32> {
+pub fn iter_ref_obj_id(reg: &BpfRegState, stack: &StackManager, nr_slots: usize) -> Result<u32> {
     let spi = iter_get_spi(reg, nr_slots, stack.allocated_stack)?;
-    let slot = stack.get_slot_by_spi(spi).ok_or(VerifierError::InvalidIterator(
-        "slot not found".into(),
-    ))?;
+    let slot = stack
+        .get_slot_by_spi(spi)
+        .ok_or(VerifierError::InvalidIterator("slot not found".into()))?;
     Ok(slot.spilled_ptr.ref_obj_id)
 }
 
@@ -147,9 +140,9 @@ pub fn iter_get_state(
     nr_slots: usize,
 ) -> Result<BpfIterState> {
     let spi = iter_get_spi(reg, nr_slots, stack.allocated_stack)?;
-    let slot = stack.get_slot_by_spi(spi).ok_or(VerifierError::InvalidIterator(
-        "slot not found".into(),
-    ))?;
+    let slot = stack
+        .get_slot_by_spi(spi)
+        .ok_or(VerifierError::InvalidIterator("slot not found".into()))?;
     Ok(slot.spilled_ptr.iter.state)
 }
 
@@ -161,46 +154,34 @@ pub fn iter_set_state(
     state: BpfIterState,
 ) -> Result<()> {
     let spi = iter_get_spi(reg, nr_slots, stack.allocated_stack)?;
-    let slot = stack.get_slot_mut_by_spi(spi).ok_or(VerifierError::InvalidIterator(
-        "slot not found".into(),
-    ))?;
+    let slot = stack
+        .get_slot_mut_by_spi(spi)
+        .ok_or(VerifierError::InvalidIterator("slot not found".into()))?;
     slot.spilled_ptr.iter.state = state;
     Ok(())
 }
 
 /// Get the iterator depth
-pub fn iter_get_depth(
-    reg: &BpfRegState,
-    stack: &StackManager,
-    nr_slots: usize,
-) -> Result<u32> {
+pub fn iter_get_depth(reg: &BpfRegState, stack: &StackManager, nr_slots: usize) -> Result<u32> {
     let spi = iter_get_spi(reg, nr_slots, stack.allocated_stack)?;
-    let slot = stack.get_slot_by_spi(spi).ok_or(VerifierError::InvalidIterator(
-        "slot not found".into(),
-    ))?;
+    let slot = stack
+        .get_slot_by_spi(spi)
+        .ok_or(VerifierError::InvalidIterator("slot not found".into()))?;
     Ok(slot.spilled_ptr.iter.depth)
 }
 
 /// Increment the iterator depth
-pub fn iter_inc_depth(
-    stack: &mut StackManager,
-    reg: &BpfRegState,
-    nr_slots: usize,
-) -> Result<u32> {
+pub fn iter_inc_depth(stack: &mut StackManager, reg: &BpfRegState, nr_slots: usize) -> Result<u32> {
     let spi = iter_get_spi(reg, nr_slots, stack.allocated_stack)?;
-    let slot = stack.get_slot_mut_by_spi(spi).ok_or(VerifierError::InvalidIterator(
-        "slot not found".into(),
-    ))?;
+    let slot = stack
+        .get_slot_mut_by_spi(spi)
+        .ok_or(VerifierError::InvalidIterator("slot not found".into()))?;
     slot.spilled_ptr.iter.depth += 1;
     Ok(slot.spilled_ptr.iter.depth)
 }
 
 /// Mark iterator as read
-pub fn mark_iter_read(
-    stack: &mut StackManager,
-    reg: &BpfRegState,
-    nr_slots: usize,
-) -> Result<()> {
+pub fn mark_iter_read(stack: &mut StackManager, reg: &BpfRegState, nr_slots: usize) -> Result<()> {
     let spi = iter_get_spi(reg, nr_slots, stack.allocated_stack)?;
 
     for i in 0..nr_slots {
@@ -215,23 +196,32 @@ pub fn mark_iter_read(
 /// Check if this is an iterator kfunc
 pub fn is_iter_kfunc(func_id: u32, kfunc_names: &[(&str, u32)]) -> bool {
     kfunc_names.iter().any(|(name, id)| {
-        *id == func_id && (name.contains("iter_new") || name.contains("iter_next") || name.contains("iter_destroy"))
+        *id == func_id
+            && (name.contains("iter_new")
+                || name.contains("iter_next")
+                || name.contains("iter_destroy"))
     })
 }
 
 /// Check if this is an iter_new kfunc
 pub fn is_iter_new_kfunc(func_id: u32, kfunc_names: &[(&str, u32)]) -> bool {
-    kfunc_names.iter().any(|(name, id)| *id == func_id && name.contains("iter_new"))
+    kfunc_names
+        .iter()
+        .any(|(name, id)| *id == func_id && name.contains("iter_new"))
 }
 
 /// Check if this is an iter_next kfunc
 pub fn is_iter_next_kfunc(func_id: u32, kfunc_names: &[(&str, u32)]) -> bool {
-    kfunc_names.iter().any(|(name, id)| *id == func_id && name.contains("iter_next"))
+    kfunc_names
+        .iter()
+        .any(|(name, id)| *id == func_id && name.contains("iter_next"))
 }
 
 /// Check if this is an iter_destroy kfunc
 pub fn is_iter_destroy_kfunc(func_id: u32, kfunc_names: &[(&str, u32)]) -> bool {
-    kfunc_names.iter().any(|(name, id)| *id == func_id && name.contains("iter_destroy"))
+    kfunc_names
+        .iter()
+        .any(|(name, id)| *id == func_id && name.contains("iter_destroy"))
 }
 
 /// Process iterator next call - handles state transition logic
@@ -241,9 +231,9 @@ pub fn process_iter_next_call(
     nr_slots: usize,
 ) -> Result<bool> {
     let spi = iter_get_spi(reg, nr_slots, stack.allocated_stack)?;
-    let slot = stack.get_slot_by_spi(spi).ok_or(VerifierError::InvalidIterator(
-        "slot not found".into(),
-    ))?;
+    let slot = stack
+        .get_slot_by_spi(spi)
+        .ok_or(VerifierError::InvalidIterator("slot not found".into()))?;
 
     let state = slot.spilled_ptr.iter.state;
 
@@ -257,11 +247,9 @@ pub fn process_iter_next_call(
             // Iterator is already drained, always returns null
             Ok(false) // Only one outcome
         }
-        BpfIterState::Invalid => {
-            Err(VerifierError::InvalidIterator(
-                "iterator in invalid state".into(),
-            ))
-        }
+        BpfIterState::Invalid => Err(VerifierError::InvalidIterator(
+            "iterator in invalid state".into(),
+        )),
     }
 }
 
@@ -334,7 +322,7 @@ impl IteratorKind {
 }
 
 /// Iterator state machine for open-coded iterators
-/// 
+///
 /// Open-coded iterators follow this lifecycle:
 /// 1. bpf_iter_<type>_new() - Initialize iterator (Invalid -> Active)
 /// 2. bpf_iter_<type>_next() - Get next element (may return NULL when drained)
@@ -385,7 +373,13 @@ impl Default for IteratorStateMachine {
 
 impl IteratorStateMachine {
     /// Create a new iterator state machine
-    pub fn new(kind: IteratorKind, btf_id: u32, ref_obj_id: u32, insn_idx: usize, is_rcu: bool) -> Self {
+    pub fn new(
+        kind: IteratorKind,
+        btf_id: u32,
+        ref_obj_id: u32,
+        insn_idx: usize,
+        is_rcu: bool,
+    ) -> Self {
         Self {
             state: BpfIterState::Active,
             kind,
@@ -404,15 +398,13 @@ impl IteratorStateMachine {
     /// Process a next() call - returns (continue_active, may_be_null)
     pub fn process_next(&mut self) -> Result<(bool, bool)> {
         match self.state {
-            BpfIterState::Invalid => {
-                Err(VerifierError::InvalidIterator(
-                    "next() called on uninitialized iterator".into()
-                ))
-            }
+            BpfIterState::Invalid => Err(VerifierError::InvalidIterator(
+                "next() called on uninitialized iterator".into(),
+            )),
             BpfIterState::Active => {
                 self.next_count += 1;
                 self.depth += 1;
-                
+
                 if self.depth >= self.max_depth {
                     // Force convergence - assume iterator will drain
                     self.has_drained_path = true;
@@ -438,7 +430,7 @@ impl IteratorStateMachine {
     }
 
     /// Check if iterator has converged (safe to prune)
-    /// 
+    ///
     /// An iterator converges when:
     /// 1. It has been marked as drained, OR
     /// 2. The depth has reached max_depth, OR
@@ -455,7 +447,7 @@ impl IteratorStateMachine {
         if self.btf_id != other.btf_id {
             return false;
         }
-        
+
         // Same state
         if self.state != other.state {
             return false;
@@ -480,7 +472,7 @@ impl IteratorStateMachine {
     pub fn validate_destroy(&self) -> Result<()> {
         if self.state == BpfIterState::Invalid {
             return Err(VerifierError::InvalidIterator(
-                "destroy() called on uninitialized iterator".into()
+                "destroy() called on uninitialized iterator".into(),
             ));
         }
         Ok(())
@@ -511,18 +503,19 @@ impl IteratorConvergenceTracker {
     /// Register a new iterator
     pub fn register(&mut self, iter: IteratorStateMachine) -> Result<()> {
         let ref_id = iter.ref_obj_id;
-        
+
         // Check nesting limits
         self.current_nesting += 1;
         if self.current_nesting > self.max_nesting {
             self.max_nesting = self.current_nesting;
         }
-        
+
         // Check if this kind allows nesting
         if self.current_nesting > 1 && !iter.kind.allows_nesting() {
-            return Err(VerifierError::InvalidIterator(
-                format!("{:?} iterator cannot be nested", iter.kind)
-            ));
+            return Err(VerifierError::InvalidIterator(format!(
+                "{:?} iterator cannot be nested",
+                iter.kind
+            )));
         }
 
         self.active_iters.insert(ref_id, iter);
@@ -548,7 +541,7 @@ impl IteratorConvergenceTracker {
             Ok(())
         } else {
             Err(VerifierError::InvalidIterator(
-                "destroying unknown iterator".into()
+                "destroying unknown iterator".into(),
             ))
         }
     }
@@ -572,9 +565,10 @@ impl IteratorConvergenceTracker {
     pub fn validate_cleanup(&self) -> Result<()> {
         if !self.active_iters.is_empty() {
             let refs: Vec<u32> = self.active_iters.keys().copied().collect();
-            return Err(VerifierError::InvalidIterator(
-                format!("iterators not destroyed: {:?}", refs)
-            ));
+            return Err(VerifierError::InvalidIterator(format!(
+                "iterators not destroyed: {:?}",
+                refs
+            )));
         }
         Ok(())
     }
@@ -598,8 +592,9 @@ pub fn check_iter_state_convergence(
     };
 
     // Both must be iterators
-    if cur_slot.get_type() != BpfStackSlotType::Iter 
-        || old_slot.get_type() != BpfStackSlotType::Iter {
+    if cur_slot.get_type() != BpfStackSlotType::Iter
+        || old_slot.get_type() != BpfStackSlotType::Iter
+    {
         return false;
     }
 
@@ -611,7 +606,8 @@ pub fn check_iter_state_convergence(
     // Check state - if old was active and cur is also active with same or higher depth,
     // we've made progress and may have converged
     if old_slot.spilled_ptr.iter.state == BpfIterState::Active
-        && cur_slot.spilled_ptr.iter.state == BpfIterState::Active {
+        && cur_slot.spilled_ptr.iter.state == BpfIterState::Active
+    {
         // Same depth means we're in a fixed point
         if cur_slot.spilled_ptr.iter.depth == old_slot.spilled_ptr.iter.depth {
             return true;
@@ -622,7 +618,8 @@ pub fn check_iter_state_convergence(
 
     // If old was active but cur is drained, that's convergence
     if old_slot.spilled_ptr.iter.state == BpfIterState::Active
-        && cur_slot.spilled_ptr.iter.state == BpfIterState::Drained {
+        && cur_slot.spilled_ptr.iter.state == BpfIterState::Drained
+    {
         return true;
     }
 
@@ -632,7 +629,7 @@ pub fn check_iter_state_convergence(
 }
 
 /// Validate iterator frame invariants
-/// 
+///
 /// Ensures iterator state is consistent across function frames
 pub fn validate_iter_frame_invariants(
     stack: &StackManager,
