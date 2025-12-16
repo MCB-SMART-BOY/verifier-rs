@@ -4,6 +4,7 @@ config BPF_VERIFIER_RUST
 	bool "Rust implementation of BPF verifier"
 	depends on BPF_SYSCALL
 	depends on RUST
+	depends on !RUST_IS_AVAILABLE_BINDGEN_LIBCLANG || RUST_BINDGEN_VERSION_TEXT >= "0.69"
 	default n
 	help
 	  This option enables the Rust implementation of the BPF verifier
@@ -13,8 +14,10 @@ config BPF_VERIFIER_RUST
 	  but with additional compile-time safety guarantees provided by Rust's
 	  type system and ownership model.
 
-	  This is currently experimental. When enabled, you can select which
-	  verifier to use at runtime via a sysctl parameter.
+	  When enabled, you can switch between verifiers at runtime via sysctl:
+	    echo 1 > /proc/sys/kernel/bpf_rust_verifier
+
+	  This requires Rust 1.83.0 or later and bindgen 0.69.0 or later.
 
 	  If unsure, say N.
 
@@ -32,10 +35,13 @@ config BPF_VERIFIER_RUST_DEFAULT
 config BPF_VERIFIER_RUST_DEBUG
 	bool "Enable Rust BPF verifier debug output"
 	depends on BPF_VERIFIER_RUST
+	depends on DEBUG_KERNEL
 	default n
 	help
 	  Enable verbose debug output from the Rust BPF verifier.
 	  This can be useful for debugging verifier issues but may
-	  significantly impact performance.
+	  significantly impact performance and log size.
+
+	  Only enable this for development and debugging.
 
 	  If unsure, say N.

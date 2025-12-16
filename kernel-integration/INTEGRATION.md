@@ -1,164 +1,237 @@
-# Kernel Integration Guide
+# Kernel Integration Guide (Linux 6.12+)
 
-This document describes how to integrate the Rust BPF verifier into the Linux kernel.
+This document describes how to integrate the Rust BPF verifier into
+the Linux kernel using the native Rust support available in Linux 6.12+.
 
 ## Prerequisites
 
-1. Linux kernel source with Rust support (6.1+)
-2. Rust toolchain compatible with the kernel version
-3. This Rust BPF verifier crate
+- Linux kernel 6.12+ source with Rust support enabled
+- Rust toolchain 1.83.0+ (as required by kernel)
+- bindgen 0.69.0+
+- LLVM/Clang 18+
+
+## Key Changes from Earlier Versions
+
+Starting with Linux 6.12, Rust for Linux has matured significantly:
+
+1. **No C glue code required** - Pure Rust modules using `kernel::Module` trait
+2. **Native kernel crate** - Full access to kernel APIs via `kernel::prelude::*`
+3. **Improved build system** - Kbuild handles Rust compilation natively
+4. **Better abstractions** - `KVec`, `Arc`, synchronization primitives available
 
 ## Integration Steps
 
-### Step 1: Copy Files to Kernel Source Tree
+### Step 1: Enable Rust Support in Kernel
 
 ```bash
-# Copy Rust source
-cp -r src/ $KERNEL_SRC/rust/kernel/bpf_verifier/
+cd $KERNEL_SRC
 
-# Copy integration files
-cp kernel-integration/Kconfig $KERNEL_SRC/kernel/bpf/Kconfig.rust
-cp kernel-integration/Makefile $KERNEL_SRC/kernel/bpf/Makefile.rust
-cp kernel-integration/bpf_verifier_rust_glue.c $KERNEL_SRC/kernel/bpf/
+# Check Rust availability
+make LLVM=1 rustavailable
+
+# Configure kernel
+make LLVM=1 menuconfig
 ```
 
-### Step 2: Modify Kernel BPF Kconfig
+Enable these options:
+```
+General setup --->
+    [*] Rust support
+    
+Networking support --->
+    Networking options --->
+        [*] BPF subsystem --->
+            [*] Rust implementation of BPF verifier
+```
+
+### Step 2: Copy Verifier Source
+
+```bash
+# Create directory in kernel tree
+mkdir -p $KERNEL_SRC/rust/kernel/bpf_verifier
+
+# Copy source files
+cp -r src/* $KERNEL_SRC/rust/kernel/bpf_verifier/
+
+# Copy integration module
+cp kernel-integration/rust_bpf_verifier.rs $KERNEL_SRC/kernel/bpf/
+```
+
+### Step 3: Modify Kernel Build Files
 
 Add to `kernel/bpf/Kconfig`:
-
 ```kconfig
 source "kernel/bpf/Kconfig.rust"
 ```
 
-### Step 3: Modify Kernel BPF Makefile
-
 Add to `kernel/bpf/Makefile`:
-
 ```makefile
-include $(src)/Makefile.rust
+obj-$(CONFIG_BPF_VERIFIER_RUST) += rust_bpf_verifier.o
 ```
 
 ### Step 4: Hook into BPF Verification Path
 
-Modify `kernel/bpf/verifier.c` to optionally use Rust verifier:
+Modify `kernel/bpf/verifier.c`:
 
 ```c
 #ifdef CONFIG_BPF_VERIFIER_RUST
-extern int bpf_rust_verify_prog(struct bpf_verifier_env *env);
-extern bool bpf_rust_verifier_enabled(void);
+// Rust entry point - no separate declaration file needed
+// The symbol is exported by the Rust module
+extern int rust_bpf_check(struct bpf_verifier_env *env);
+
+static bool use_rust_verifier(void)
+{
+    // Check sysctl or config default
+    return sysctl_bpf_rust_verifier;
+}
 #endif
 
 int bpf_check(struct bpf_prog **prog, union bpf_attr *attr,
               bpfptr_t uattr, u32 uattr_size)
 {
-    struct bpf_verifier_env *env;
-    int ret;
-
-    /* ... existing setup code ... */
+    // ... existing setup ...
 
 #ifdef CONFIG_BPF_VERIFIER_RUST
-    if (bpf_rust_verifier_enabled()) {
-        ret = bpf_rust_verify_prog(env);
+    if (use_rust_verifier()) {
+        ret = rust_bpf_check(env);
         if (ret != -ENOSYS)
             goto cleanup;
-        /* Fall through to C verifier if Rust returns ENOSYS */
+        // Fall through if Rust returns ENOSYS
     }
 #endif
 
-    /* ... existing C verifier code ... */
+    // ... existing C verifier code ...
 }
 ```
 
-### Step 5: Configure and Build
+### Step 5: Build the Kernel
 
 ```bash
-cd $KERNEL_SRC
-
-# Enable Rust support
-make LLVM=1 rustavailable
-
-# Configure kernel
-make menuconfig
-# Enable: General setup -> Rust support
-# Enable: Networking -> BPF -> Rust BPF verifier
-
-# Build
 make LLVM=1 -j$(nproc)
 ```
 
 ## Runtime Configuration
 
-The Rust verifier can be enabled/disabled at runtime via sysctl:
-
 ```bash
-# Check current status
+# Check if Rust verifier is available
 cat /proc/sys/kernel/bpf_rust_verifier
 
 # Enable Rust verifier
 echo 1 > /proc/sys/kernel/bpf_rust_verifier
 
-# Disable Rust verifier (use C verifier)
+# Disable (use C verifier)
 echo 0 > /proc/sys/kernel/bpf_rust_verifier
 ```
 
+## Module Structure (Linux 6.12+ Style)
+
+```rust
+use kernel::prelude::*;
+
+module! {
+    type: RustBpfVerifier,
+    name: "rust_bpf_verifier",
+    authors: ["BPF Contributors"],
+    description: "Rust BPF verifier",
+    license: "GPL",
+}
+
+struct RustBpfVerifier { /* state */ }
+
+impl kernel::Module for RustBpfVerifier {
+    fn init(_module: &'static ThisModule) -> Result<Self> {
+        pr_info!("Rust BPF verifier loaded\n");
+        Ok(Self { /* init */ })
+    }
+}
+
+impl Drop for RustBpfVerifier {
+    fn drop(&mut self) {
+        pr_info!("Rust BPF verifier unloaded\n");
+    }
+}
+```
+
+## Available Kernel APIs
+
+The `kernel` crate provides:
+
+| Module | Description |
+|--------|-------------|
+| `kernel::sync` | Mutex, SpinLock, RwSemaphore |
+| `kernel::alloc` | KVec, KBox allocation |
+| `kernel::prelude` | Common imports |
+| `kernel::error` | Error handling, Result |
+| `kernel::print` | pr_info!, pr_err!, etc. |
+
 ## Testing
 
-1. Load a simple BPF program and verify it works:
-   ```bash
-   bpftool prog load test.bpf.o /sys/fs/bpf/test
-   ```
+```bash
+# Load test BPF program
+bpftool prog load test.bpf.o /sys/fs/bpf/test
 
-2. Check kernel logs for verifier output:
-   ```bash
-   dmesg | grep -i "bpf.*verifier"
-   ```
+# Check kernel logs
+dmesg | grep -i rust.*bpf
 
-3. Run BPF selftests:
-   ```bash
-   cd tools/testing/selftests/bpf
-   make
-   ./test_verifier
-   ```
+# Run BPF selftests
+cd tools/testing/selftests/bpf
+./test_verifier
+```
 
 ## Debugging
 
-Enable debug output by setting `CONFIG_BPF_VERIFIER_RUST_DEBUG=y` in kernel config.
+Enable debug config:
+```
+CONFIG_BPF_VERIFIER_RUST_DEBUG=y
+```
 
-Debug messages will appear in kernel log (`dmesg`).
+View detailed logs:
+```bash
+dmesg | grep rust_bpf
+```
 
 ## Architecture
 
 ```
-                    User Space
-                        |
-                        | bpf() syscall
-                        v
-    +-------------------------------------------+
-    |              bpf_check()                  |
-    |                   |                       |
-    |    +--------------+--------------+        |
-    |    |                             |        |
-    |    v                             v        |
-    | C Verifier              Rust Verifier     |
-    | (verifier.c)            (this crate)      |
-    |                               |           |
-    |                               v           |
-    |                    +------------------+   |
-    |                    | rust_bpf_verify  |   |
-    |                    | (FFI entry)      |   |
-    |                    +------------------+   |
-    |                               |           |
-    |                               v           |
-    |                    +------------------+   |
-    |                    | MainVerifier     |   |
-    |                    | (pure Rust)      |   |
-    |                    +------------------+   |
-    +-------------------------------------------+
-                    Kernel Space
+┌─────────────────────────────────────────────────────────┐
+│                    User Space                            │
+│                  bpf() syscall                          │
+└─────────────────────────────────────────────────────────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────┐
+│                    bpf_check()                          │
+│                        │                                │
+│         ┌──────────────┴──────────────┐                │
+│         │                             │                 │
+│         ▼                             ▼                 │
+│    C Verifier                  Rust Verifier           │
+│   (verifier.c)              (rust_bpf_verifier.rs)     │
+│                                      │                  │
+│                                      ▼                  │
+│                            ┌─────────────────┐         │
+│                            │ kernel::Module  │         │
+│                            │ (pure Rust)     │         │
+│                            └─────────────────┘         │
+│                                      │                  │
+│                                      ▼                  │
+│                            ┌─────────────────┐         │
+│                            │ bpf_verifier    │         │
+│                            │ crate (our lib) │         │
+│                            └─────────────────┘         │
+└─────────────────────────────────────────────────────────┘
 ```
 
-## Compatibility
+## Compatibility Matrix
 
-- Kernel version: 6.1+ (with Rust support)
-- Architecture: x86_64, arm64 (tested)
-- Rust version: As required by kernel (currently 1.78+)
+| Kernel | Rust | bindgen | Status |
+|--------|------|---------|--------|
+| 6.12   | 1.82 | 0.69    | Supported |
+| 6.13   | 1.83 | 0.70    | Supported |
+| 6.14+  | 1.84+| 0.71+   | Recommended |
+
+## References
+
+- [Rust for Linux Documentation](https://docs.kernel.org/rust/)
+- [Kernel Crate API](https://rust-for-linux.github.io/docs/kernel/)
+- [Rust for Linux GitHub](https://github.com/Rust-for-Linux/linux)
