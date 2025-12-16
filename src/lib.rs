@@ -174,3 +174,21 @@ mod panic_impl {
         }
     }
 }
+
+// ============================================================================
+// Kernel mode stubs for Rust runtime requirements
+// ============================================================================
+
+/// EH personality stub - required even with panic=abort in some cases
+#[cfg(all(not(feature = "std"), not(test), feature = "kernel"))]
+#[no_mangle]
+pub extern "C" fn rust_eh_personality() {}
+
+/// Unwind resume stub - required even with panic=abort
+#[cfg(all(not(feature = "std"), not(test), feature = "kernel"))]
+#[no_mangle]
+pub extern "C" fn _Unwind_Resume(_: usize) -> ! {
+    loop {}
+}
+
+// Note: Global allocator is defined in ffi.rs when ffi feature is enabled

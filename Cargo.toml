@@ -49,8 +49,8 @@ harness = false
 default = ["std"]
 # Standard library support (user-space)
 std = ["thiserror"]
-# Kernel mode (no_std)
-kernel = []
+# Kernel mode (no_std) - implies ffi for C bindings
+kernel = ["ffi"]
 # C FFI bindings for kernel integration
 ffi = []
 # Enable verbose logging
@@ -61,6 +61,9 @@ stats = []
 # Profile for kernel builds (panic=abort required)
 [profile.release]
 panic = "abort"
+# Optimize for size to reduce kernel module size
+lto = true
+codegen-units = 1
 
 [profile.dev]
 panic = "abort"

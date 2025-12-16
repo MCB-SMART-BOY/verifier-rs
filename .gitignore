@@ -34,3 +34,24 @@ kernel-module/.tmp_versions/
 kernel-module/tests/test_loader
 kernel-module/tests/*.o
 kernel-module/src/*.o
+# Kernel module VM files
+kernel-module/vm/alpine-disk.qcow2
+kernel-module/vm/alpine-virt.iso
+kernel-module/vm/rootfs.img
+kernel-module/vm/shared/
+
+# Build artifacts
+kernel-module/src/.*.cmd
+kernel-module/src/.*.d
+kernel-module/test/test_ioctl
+kernel-module/test/test_simple
+kernel-module/*.o
+kernel-module/*.ko
+kernel-module/*.mod*
+kernel-module/Module.symvers
+kernel-module/modules.order
+kernel-module/.tmp_versions/
+
+# Rust build
+target/
+tests/userspace/target/

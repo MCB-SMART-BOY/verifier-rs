@@ -1,5 +1,5 @@
 /*
- * BPF Verifier Rust Implementation - C Header
+ * BPF Verifier Rust Implementation - C Header (Kernel Compatible)
  *
  * This header provides the C interface for the Rust BPF verifier.
  * It mirrors the kernel's bpf_check() API for drop-in replacement.
@@ -11,9 +11,27 @@
 #ifndef _BPF_VERIFIER_RS_H
 #define _BPF_VERIFIER_RS_H
 
+#ifdef __KERNEL__
+/* Kernel space: use kernel types */
+#include <linux/types.h>
+typedef u8  uint8_t;
+typedef u16 uint16_t;
+typedef u32 uint32_t;
+typedef u64 uint64_t;
+typedef s8  int8_t;
+typedef s16 int16_t;
+typedef s32 int32_t;
+typedef s64 int64_t;
+typedef _Bool bool;
+#define true 1
+#define false 0
+/* In kernel mode, bpf_prog_type is already defined in linux/bpf.h */
+#else
+/* User space: use standard types */
 #include <stdint.h>
 #include <stdbool.h>
 #include <stddef.h>
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -82,7 +100,9 @@ struct bpf_verifier_stats_rs {
 /*
  * Log callback function type
  */
+#ifndef __KERNEL__
 typedef void (*bpf_log_callback_t)(uint32_t level, const uint8_t *msg, size_t len);
+#endif
 
 /*
  * Core API Functions
@@ -148,6 +168,7 @@ int bpf_verifier_get_stats(
     struct bpf_verifier_stats_rs *stats
 );
 
+#ifndef __KERNEL__
 /**
  * bpf_verifier_set_log_callback - Set logging callback
  * @callback: Function to call for log messages
@@ -161,42 +182,44 @@ void bpf_verifier_clear_log_callback(void);
 
 /*
  * BPF Program Types (matching kernel values)
+ * Only defined in user space - kernel already has these in linux/bpf.h
  */
 enum bpf_prog_type_rs {
-    BPF_PROG_TYPE_UNSPEC = 0,
-    BPF_PROG_TYPE_SOCKET_FILTER = 1,
-    BPF_PROG_TYPE_KPROBE = 2,
-    BPF_PROG_TYPE_SCHED_CLS = 3,
-    BPF_PROG_TYPE_SCHED_ACT = 4,
-    BPF_PROG_TYPE_TRACEPOINT = 5,
-    BPF_PROG_TYPE_XDP = 6,
-    BPF_PROG_TYPE_PERF_EVENT = 7,
-    BPF_PROG_TYPE_CGROUP_SKB = 8,
-    BPF_PROG_TYPE_CGROUP_SOCK = 9,
-    BPF_PROG_TYPE_LWT_IN = 10,
-    BPF_PROG_TYPE_LWT_OUT = 11,
-    BPF_PROG_TYPE_LWT_XMIT = 12,
-    BPF_PROG_TYPE_SOCK_OPS = 13,
-    BPF_PROG_TYPE_SK_SKB = 14,
-    BPF_PROG_TYPE_CGROUP_DEVICE = 15,
-    BPF_PROG_TYPE_SK_MSG = 16,
-    BPF_PROG_TYPE_RAW_TRACEPOINT = 17,
-    BPF_PROG_TYPE_CGROUP_SOCK_ADDR = 18,
-    BPF_PROG_TYPE_LWT_SEG6LOCAL = 19,
-    BPF_PROG_TYPE_LIRC_MODE2 = 20,
-    BPF_PROG_TYPE_SK_REUSEPORT = 21,
-    BPF_PROG_TYPE_FLOW_DISSECTOR = 22,
-    BPF_PROG_TYPE_CGROUP_SYSCTL = 23,
-    BPF_PROG_TYPE_RAW_TRACEPOINT_WRITABLE = 24,
-    BPF_PROG_TYPE_CGROUP_SOCKOPT = 25,
-    BPF_PROG_TYPE_TRACING = 26,
-    BPF_PROG_TYPE_STRUCT_OPS = 27,
-    BPF_PROG_TYPE_EXT = 28,
-    BPF_PROG_TYPE_LSM = 29,
-    BPF_PROG_TYPE_SK_LOOKUP = 30,
-    BPF_PROG_TYPE_SYSCALL = 31,
-    BPF_PROG_TYPE_NETFILTER = 32,
+    BPF_PROG_TYPE_RS_UNSPEC = 0,
+    BPF_PROG_TYPE_RS_SOCKET_FILTER = 1,
+    BPF_PROG_TYPE_RS_KPROBE = 2,
+    BPF_PROG_TYPE_RS_SCHED_CLS = 3,
+    BPF_PROG_TYPE_RS_SCHED_ACT = 4,
+    BPF_PROG_TYPE_RS_TRACEPOINT = 5,
+    BPF_PROG_TYPE_RS_XDP = 6,
+    BPF_PROG_TYPE_RS_PERF_EVENT = 7,
+    BPF_PROG_TYPE_RS_CGROUP_SKB = 8,
+    BPF_PROG_TYPE_RS_CGROUP_SOCK = 9,
+    BPF_PROG_TYPE_RS_LWT_IN = 10,
+    BPF_PROG_TYPE_RS_LWT_OUT = 11,
+    BPF_PROG_TYPE_RS_LWT_XMIT = 12,
+    BPF_PROG_TYPE_RS_SOCK_OPS = 13,
+    BPF_PROG_TYPE_RS_SK_SKB = 14,
+    BPF_PROG_TYPE_RS_CGROUP_DEVICE = 15,
+    BPF_PROG_TYPE_RS_SK_MSG = 16,
+    BPF_PROG_TYPE_RS_RAW_TRACEPOINT = 17,
+    BPF_PROG_TYPE_RS_CGROUP_SOCK_ADDR = 18,
+    BPF_PROG_TYPE_RS_LWT_SEG6LOCAL = 19,
+    BPF_PROG_TYPE_RS_LIRC_MODE2 = 20,
+    BPF_PROG_TYPE_RS_SK_REUSEPORT = 21,
+    BPF_PROG_TYPE_RS_FLOW_DISSECTOR = 22,
+    BPF_PROG_TYPE_RS_CGROUP_SYSCTL = 23,
+    BPF_PROG_TYPE_RS_RAW_TRACEPOINT_WRITABLE = 24,
+    BPF_PROG_TYPE_RS_CGROUP_SOCKOPT = 25,
+    BPF_PROG_TYPE_RS_TRACING = 26,
+    BPF_PROG_TYPE_RS_STRUCT_OPS = 27,
+    BPF_PROG_TYPE_RS_EXT = 28,
+    BPF_PROG_TYPE_RS_LSM = 29,
+    BPF_PROG_TYPE_RS_SK_LOOKUP = 30,
+    BPF_PROG_TYPE_RS_SYSCALL = 31,
+    BPF_PROG_TYPE_RS_NETFILTER = 32,
 };
+#endif /* !__KERNEL__ */
 
 #ifdef __cplusplus
 }

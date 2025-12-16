@@ -64,6 +64,38 @@ extern int bpf_verifier_get_stats(
     struct bpf_verifier_stats_rs *stats
 );
 
+/* ============================================================================
+ * Memory allocation wrappers for Rust
+ * 
+ * These are called by the Rust global allocator. We provide them here because
+ * kmalloc/kfree may be inline functions or macros in some kernel configurations.
+ * ============================================================================
+ */
+
+void *__kmalloc(size_t size, gfp_t flags);
+
+void *rust_kmalloc(size_t size, unsigned int flags)
+{
+    void *ptr;
+    
+    /* Use the passed flags, but also accept GFP_KERNEL (0xCC0) from Rust */
+    if (flags == 0xCC0)
+        flags = GFP_KERNEL;
+    
+    ptr = kmalloc(size, flags);
+    if (!ptr && size > 0) {
+        pr_warn("bpf_verifier_rs: kmalloc(%zu) failed\n", size);
+    }
+    return ptr;
+}
+EXPORT_SYMBOL_GPL(rust_kmalloc);
+
+void rust_kfree(const void *ptr)
+{
+    kfree(ptr);
+}
+EXPORT_SYMBOL_GPL(rust_kfree);
+
 /* Log callback for kernel logging */
 static void kernel_log_callback(uint32_t level, const uint8_t *msg, size_t len)
 {
@@ -140,15 +172,20 @@ static long verifier_ioctl(struct file *file, unsigned int cmd, unsigned long ar
         }
 
         /* Create verifier environment */
+        pr_info("bpf_verifier_rs: creating env for %u insns, type %u\n",
+                req.insn_cnt, req.prog_type);
         handle = bpf_verifier_env_new(insns, req.insn_cnt, req.prog_type,
                                       capable(CAP_BPF) || capable(CAP_SYS_ADMIN));
         if (!handle) {
+            pr_err("bpf_verifier_rs: env creation failed\n");
             ret = -ENOMEM;
             goto out_free;
         }
+        pr_info("bpf_verifier_rs: env created, running verify\n");
 
         /* Run verification */
         req.result = bpf_verify(handle);
+        pr_info("bpf_verifier_rs: verify returned %d\n", req.result);
 
         /* Copy result back */
         if (copy_to_user((void __user *)arg, &req, sizeof(req)))

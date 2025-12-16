@@ -6,16 +6,16 @@
 # Module object
 obj-m := bpf_verifier_rs.o
 
-# Source files
+# Source files - only C wrapper
 bpf_verifier_rs-y := src/bpf_verifier_mod.o
 
 # Include paths
 ccflags-y := -I$(src)/../include -I$(src)/include
 
-# Link with Rust static library
-# Note: The Rust library must be built first with:
-#   cargo build --release --features "kernel,ffi" --no-default-features
-RUST_LIB := $(src)/../target/release/libbpf_verifier.a
+# Link with pre-processed Rust library
+# The Rust library is built with custom kernel target and processed to remove problematic sections
+RUST_OBJ := $(src)/rust_lib_stripped.o
+bpf_verifier_rs-y += rust_lib_stripped.o
 
-# Add Rust library to linking
-$(MODULE_NAME)-y += $(RUST_LIB)
+# Disable objtool for Rust code (it doesn't understand Rust-generated code)
+OBJECT_FILES_NON_STANDARD_rust_lib_stripped.o := y

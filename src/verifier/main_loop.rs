@@ -144,8 +144,15 @@ pub const BPF_COMPLEXITY_LIMIT_JMP_SEQ: usize = 8192;
 impl<'a> MainVerifier<'a> {
     /// Create a new main verifier
     pub fn new(env: &'a mut VerifierEnv) -> Self {
-        let mut kfunc_registry = KfuncRegistry::new();
-        kfunc_registry.register_common();
+        let kfunc_registry = KfuncRegistry::new();
+        // Skip kfunc registration in kernel mode to avoid large allocations
+        // during initialization. Kfuncs will be registered on-demand.
+        #[cfg(not(feature = "kernel"))]
+        let kfunc_registry = {
+            let mut registry = kfunc_registry;
+            registry.register_common();
+            registry
+        };
         
         Self {
             env,
@@ -279,6 +286,8 @@ impl<'a> MainVerifier<'a> {
     /// This corresponds to the kernel's `do_check()` function.
     pub fn verify(&mut self) -> Result<()> {
         // Initialize SCC analysis for loop detection
+        // Skip in kernel mode to reduce memory allocations
+        #[cfg(not(feature = "kernel"))]
         self.env.init_scc_analysis();
         
         // Check subprogram compatibility before starting

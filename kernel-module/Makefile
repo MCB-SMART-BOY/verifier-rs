@@ -39,16 +39,26 @@ EXTRA_LDFLAGS := -L$(RUST_ROOT)/target/release -lbpf_verifier
 # Default target
 all: rust_lib module
 
-# Build Rust static library
+# Build Rust static library with kernel-compatible target
+# Uses custom target to avoid GOT relocations
+RUST_TARGET := $(RUST_ROOT)/x86_64-linux-kernel.json
+RUST_LIB_KERNEL := $(RUST_ROOT)/target/x86_64-linux-kernel/release/libbpf_verifier.a
+
 rust_lib:
-	@echo "Building Rust static library..."
-	cd $(RUST_ROOT) && cargo build --release --features "kernel,ffi" --no-default-features
-	@echo "Rust library built: $(RUST_LIB)"
+	@echo "Building Rust static library with kernel target..."
+	@if [ -f "$(RUST_LIB_KERNEL)" ]; then \
+		echo "Rust library already exists: $(RUST_LIB_KERNEL)"; \
+	else \
+		cd $(RUST_ROOT) && cargo +nightly build --release --features "kernel,ffi" --no-default-features \
+			-Z build-std=core,alloc --target $(RUST_TARGET); \
+	fi
+	@echo "Processing library..."
+	sh $(PWD)/strip-rust-lib.sh
 
 # Build kernel module
 module: rust_lib
 	@echo "Building kernel module..."
-	$(MAKE) -C $(KDIR) M=$(PWD) modules
+	$(MAKE) -C $(KDIR) M=$(PWD) OBJTOOL=/bin/true modules
 
 # Clean everything
 clean:

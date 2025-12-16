@@ -1,0 +1,11 @@
+[package]
+name = "userspace-tests"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "userspace-tests"
+path = "main.rs"
+
+[dependencies]
+bpf-verifier = { path = "../.." }

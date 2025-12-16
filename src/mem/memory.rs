@@ -43,7 +43,7 @@ pub fn check_ptr_alignment(
     let off = reg.off + reg.var_off.value as i32;
 
     // Check basic alignment
-    if strict && !(off as u32).is_multiple_of(access_size) {
+    if strict && (off as u32) % access_size != 0 {
         return Err(VerifierError::InvalidMemoryAccess(format!(
             "misaligned access: offset {} not aligned to {} bytes",
             off, access_size
