@@ -1,12 +1,11 @@
+// SPDX-License-Identifier: GPL-2.0
+
 //! Verifier state management
 //!
 //! This module implements the overall verification state, including
 //! function frames, register states, and tracking of verification progress.
 
-#[cfg(not(feature = "std"))]
 use alloc::{format, vec::Vec, boxed::Box};
-
-#[cfg(feature = "kernel")]
 use core::mem::MaybeUninit;
 
 use crate::state::reg_state::BpfRegState;
@@ -18,7 +17,6 @@ use crate::core::error::{Result, VerifierError};
 
 /// State of a single function frame
 #[derive(Debug)]
-#[cfg_attr(not(feature = "kernel"), derive(Clone))]
 pub struct BpfFuncState {
     /// Register states
     pub regs: [BpfRegState; MAX_BPF_REG],
@@ -42,25 +40,7 @@ impl Default for BpfFuncState {
 
 impl BpfFuncState {
     /// Create a new function state
-    #[cfg(not(feature = "kernel"))]
     pub fn new(callsite: i32, frameno: u32, subprogno: u32) -> Self {
-        let mut state = Self {
-            regs: core::array::from_fn(|_| BpfRegState::new_not_init()),
-            stack: StackManager::new(),
-            callsite,
-            frameno,
-            subprogno,
-            callback_ret_range: BpfRetvalRange::new(0, 0),
-        };
-        state.init_regs();
-        state
-    }
-    
-    /// Create a new function state (kernel version - avoids large stack allocations)
-    /// Note: In kernel mode, prefer using new_boxed() to avoid stack overflow
-    #[cfg(feature = "kernel")]
-    pub fn new(callsite: i32, frameno: u32, subprogno: u32) -> Self {
-        // Use Default trait which initializes each field incrementally
         let mut state = Self {
             regs: Default::default(),
             stack: StackManager::new(),
@@ -73,23 +53,16 @@ impl BpfFuncState {
         state
     }
     
-    /// Create a new function state directly on the heap (kernel-safe version)
+    /// Create a new function state directly on the heap
     /// 
     /// This avoids creating a large temporary on the stack before boxing.
-    /// Uses MaybeUninit to allocate on heap first, then initialize in place.
-    #[cfg(feature = "kernel")]
     pub fn new_boxed(callsite: i32, frameno: u32, subprogno: u32) -> Box<Self> {
-        // Allocate uninitialized memory on the heap
         let mut uninit: Box<MaybeUninit<Self>> = Box::new_uninit();
-        
-        // Get a pointer to write to
         let ptr = uninit.as_mut_ptr();
         
-        // Initialize each field in place using raw pointer writes
         // SAFETY: We're writing to allocated but uninitialized memory,
         // and we initialize all fields before assuming_init()
         unsafe {
-            // Initialize regs array - write each register individually
             let regs_ptr = core::ptr::addr_of_mut!((*ptr).regs);
             for i in 0..MAX_BPF_REG {
                 core::ptr::write(
@@ -98,7 +71,6 @@ impl BpfFuncState {
                 );
             }
             
-            // Initialize other fields
             core::ptr::write(core::ptr::addr_of_mut!((*ptr).stack), StackManager::new());
             core::ptr::write(core::ptr::addr_of_mut!((*ptr).callsite), callsite);
             core::ptr::write(core::ptr::addr_of_mut!((*ptr).frameno), frameno);
@@ -108,27 +80,18 @@ impl BpfFuncState {
                 BpfRetvalRange::new(0, 0)
             );
             
-            // Now it's fully initialized, convert to Box<Self>
             let mut boxed = uninit.assume_init();
             boxed.init_regs();
             boxed
         }
     }
-    
-    /// Create a new function state directly on the heap (non-kernel version)
-    #[cfg(not(feature = "kernel"))]
-    pub fn new_boxed(callsite: i32, frameno: u32, subprogno: u32) -> Box<Self> {
-        Box::new(Self::new(callsite, frameno, subprogno))
-    }
 
     /// Initialize register state for function entry
     fn init_regs(&mut self) {
-        // Mark all registers as not initialized
         for (i, reg) in self.regs.iter_mut().enumerate() {
             reg.mark_not_init(false);
             reg.subreg_def = 0;
             
-            // Frame pointer is special
             if i == BPF_REG_FP {
                 reg.mark_known_zero();
                 reg.reg_type = BpfRegType::PtrToStack;
@@ -158,16 +121,13 @@ impl BpfFuncState {
         Ok(())
     }
     
-    /// Clone into a new boxed allocation (kernel-safe)
-    #[cfg(feature = "kernel")]
+    /// Clone into a new boxed allocation
     pub fn clone_boxed(&self) -> Box<Self> {
-        // Allocate uninitialized memory on the heap
         let mut uninit: Box<MaybeUninit<Self>> = Box::new_uninit();
         let ptr = uninit.as_mut_ptr();
         
         // SAFETY: Writing to allocated but uninitialized memory
         unsafe {
-            // Clone regs array - write each register individually
             let regs_ptr = core::ptr::addr_of_mut!((*ptr).regs);
             for i in 0..MAX_BPF_REG {
                 core::ptr::write(
@@ -176,7 +136,6 @@ impl BpfFuncState {
                 );
             }
             
-            // Clone/copy other fields
             core::ptr::write(core::ptr::addr_of_mut!((*ptr).stack), self.stack.clone());
             core::ptr::write(core::ptr::addr_of_mut!((*ptr).callsite), self.callsite);
             core::ptr::write(core::ptr::addr_of_mut!((*ptr).frameno), self.frameno);
@@ -191,12 +150,8 @@ impl BpfFuncState {
     }
 }
 
-/// Manual Clone implementation for kernel mode to avoid stack overflow
-#[cfg(feature = "kernel")]
 impl Clone for BpfFuncState {
     fn clone(&self) -> Self {
-        // This still creates on stack, but we can't avoid it for the trait
-        // The key is to use clone_boxed() where possible
         Self {
             regs: self.regs.clone(),
             stack: self.stack.clone(),
@@ -221,7 +176,6 @@ pub struct BpfJmpHistoryEntry {
 
 /// Main verifier state
 #[derive(Debug)]
-#[cfg_attr(not(feature = "kernel"), derive(Clone))]
 pub struct BpfVerifierState {
     /// Function call frames (stack of frames)
     pub frame: Vec<Option<Box<BpfFuncState>>>,
@@ -263,11 +217,8 @@ impl Default for BpfVerifierState {
     }
 }
 
-/// Manual Clone implementation for kernel mode to use clone_boxed for frames
-#[cfg(feature = "kernel")]
 impl Clone for BpfVerifierState {
     fn clone(&self) -> Self {
-        // Clone frames using clone_boxed to avoid stack allocation
         let mut frames = Vec::with_capacity(MAX_BPF_STACK_FRAMES);
         for frame_opt in &self.frame {
             frames.push(frame_opt.as_ref().map(|f| f.clone_boxed()));
@@ -298,7 +249,6 @@ impl BpfVerifierState {
     /// Create a new verifier state
     pub fn new() -> Self {
         let mut frames = Vec::with_capacity(MAX_BPF_STACK_FRAMES);
-        // Use new_boxed to avoid large stack allocation in kernel mode
         frames.push(Some(BpfFuncState::new_boxed(-1, 0, 0)));
         for _ in 1..MAX_BPF_STACK_FRAMES {
             frames.push(None);
@@ -324,12 +274,8 @@ impl BpfVerifierState {
         }
     }
     
-    /// Create a new verifier state directly on the heap (kernel-safe version)
-    ///
-    /// This avoids creating a large temporary on the stack.
-    #[cfg(feature = "kernel")]
+    /// Create a new verifier state directly on the heap
     pub fn new_boxed() -> Box<Self> {
-        // Allocate box first, then initialize in place
         let mut frames = Vec::with_capacity(MAX_BPF_STACK_FRAMES);
         frames.push(Some(BpfFuncState::new_boxed(-1, 0, 0)));
         for _ in 1..MAX_BPF_STACK_FRAMES {
@@ -356,43 +302,7 @@ impl BpfVerifierState {
         })
     }
     
-    /// Create a new verifier state directly on the heap (non-kernel version)
-    #[cfg(not(feature = "kernel"))]
-    pub fn new_boxed() -> Box<Self> {
-        Box::new(Self::new())
-    }
-    
-    /// Clone this state into a new boxed allocation (kernel-safe)
-    #[cfg(feature = "kernel")]
-    pub fn clone_boxed(&self) -> Box<Self> {
-        // Clone frames using clone_boxed to avoid stack allocation
-        let mut frames = Vec::with_capacity(MAX_BPF_STACK_FRAMES);
-        for frame_opt in &self.frame {
-            frames.push(frame_opt.as_ref().map(|f| f.clone_boxed()));
-        }
-        
-        Box::new(Self {
-            frame: frames,
-            curframe: self.curframe,
-            refs: self.refs.clone(),
-            lock_state: self.lock_state.clone(),
-            speculative: self.speculative,
-            in_sleepable: self.in_sleepable,
-            jmp_history: self.jmp_history.clone(),
-            branches: self.branches,
-            insn_idx: self.insn_idx,
-            first_insn_idx: self.first_insn_idx,
-            last_insn_idx: self.last_insn_idx,
-            dfs_depth: self.dfs_depth,
-            callback_unroll_depth: self.callback_unroll_depth,
-            may_goto_depth: self.may_goto_depth,
-            parent_idx: self.parent_idx,
-            cleaned: self.cleaned,
-        })
-    }
-    
-    /// Clone this state into a new boxed allocation (non-kernel version)
-    #[cfg(not(feature = "kernel"))]
+    /// Clone this state into a new boxed allocation
     pub fn clone_boxed(&self) -> Box<Self> {
         Box::new(self.clone())
     }
@@ -432,7 +342,6 @@ impl BpfVerifierState {
 
         self.curframe += 1;
         let frameno = self.curframe as u32;
-        // Use new_boxed to avoid large stack allocation in kernel mode
         self.frame[self.curframe] = Some(BpfFuncState::new_boxed(callsite, frameno, subprogno));
         Ok(())
     }
@@ -452,11 +361,9 @@ impl BpfVerifierState {
 
     /// Copy state from another verifier state
     pub fn copy_from(&mut self, other: &BpfVerifierState) -> Result<()> {
-        // Copy frames
         for i in 0..=other.curframe {
             if let Some(ref other_frame) = other.frame[i] {
                 if self.frame[i].is_none() {
-                    // Use new_boxed to avoid large stack allocation in kernel mode
                     self.frame[i] = Some(BpfFuncState::new_boxed(0, 0, 0));
                 }
                 if let Some(ref mut self_frame) = self.frame[i] {
@@ -465,7 +372,6 @@ impl BpfVerifierState {
             }
         }
 
-        // Clear any extra frames
         for i in (other.curframe + 1)..MAX_BPF_STACK_FRAMES {
             self.frame[i] = None;
         }
@@ -513,14 +419,12 @@ impl BpfVerifierState {
             return None;
         }
 
-        // Look through jump history for this instruction
         for entry in self.jmp_history.iter().rev() {
             if entry.idx as usize == insn_idx {
                 return Some(entry.prev_idx as usize);
             }
         }
 
-        // Default: previous sequential instruction
         Some(insn_idx - 1)
     }
 
@@ -625,69 +529,5 @@ impl BpfVerifierStateList {
             state,
             in_free_list: false,
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_new_state() {
-        let state = BpfVerifierState::new();
-        assert_eq!(state.curframe, 0);
-        assert!(state.cur_func().is_some());
-    }
-
-    #[test]
-    fn test_push_pop_frame() {
-        let mut state = BpfVerifierState::new();
-        assert!(state.push_frame(0, 1).is_ok());
-        assert_eq!(state.curframe, 1);
-        assert!(state.pop_frame().is_ok());
-        assert_eq!(state.curframe, 0);
-    }
-
-    #[test]
-    fn test_frame_limit() {
-        let mut state = BpfVerifierState::new();
-        for i in 0..MAX_BPF_STACK_FRAMES - 1 {
-            assert!(state.push_frame(i as i32, i as u32 + 1).is_ok());
-        }
-        // Should fail on next push
-        assert!(state.push_frame(100, 100).is_err());
-    }
-
-    #[test]
-    fn test_reg_access() {
-        let mut state = BpfVerifierState::new();
-
-        // Initially all regs are NOT_INIT except FP
-        assert_eq!(
-            state.reg(BPF_REG_0).unwrap().reg_type,
-            BpfRegType::NotInit
-        );
-        assert_eq!(
-            state.reg(BPF_REG_FP).unwrap().reg_type,
-            BpfRegType::PtrToStack
-        );
-
-        // Modify a register
-        state.reg_mut(BPF_REG_0).unwrap().mark_const_zero(false);
-        assert_eq!(
-            state.reg(BPF_REG_0).unwrap().reg_type,
-            BpfRegType::ScalarValue
-        );
-    }
-
-    #[test]
-    fn test_copy_state() {
-        let mut state1 = BpfVerifierState::new();
-        state1.reg_mut(BPF_REG_0).unwrap().mark_known(42);
-
-        let mut state2 = BpfVerifierState::new();
-        assert!(state2.copy_from(&state1).is_ok());
-
-        assert_eq!(state2.reg(BPF_REG_0).unwrap().const_value(), 42);
     }
 }

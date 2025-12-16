@@ -1,12 +1,9 @@
+// SPDX-License-Identifier: GPL-2.0
+
 //! Error types for the BPF verifier
 
 use crate::stdlib::String;
-
-#[cfg(not(feature = "std"))]
 use core::fmt;
-
-#[cfg(feature = "std")]
-use thiserror::Error;
 
 /// Result type alias for verifier operations
 pub type Result<T> = core::result::Result<T, VerifierError>;
@@ -14,170 +11,62 @@ pub type Result<T> = core::result::Result<T, VerifierError>;
 /// Errors that can occur during BPF program verification
 #[allow(missing_docs)]
 #[derive(Debug, Clone)]
-#[cfg_attr(feature = "std", derive(Error))]
 pub enum VerifierError {
-    #[cfg_attr(feature = "std", error("empty program"))]
     EmptyProgram,
-
-    #[cfg_attr(feature = "std", error("program too large: {0} instructions"))]
     ProgramTooLarge(usize),
-
-    #[cfg_attr(feature = "std", error("invalid instruction index {0}"))]
     InvalidInsnIdx(usize),
-
-    #[cfg_attr(feature = "std", error("jump out of range: target {0}, prog_len {1}"))]
     JumpOutOfRange(usize, usize),
-
-    #[cfg_attr(feature = "std", error("invalid jump target {0}"))]
     InvalidJumpTarget(usize),
-
-    #[cfg_attr(feature = "std", error("fall through exit"))]
     FallThroughExit,
-
-    #[cfg_attr(feature = "std", error("verification limit exceeded: {0}"))]
     VerificationLimitExceeded(String),
-
-    #[cfg_attr(feature = "std", error("invalid instruction at index {0}"))]
     InvalidInstruction(usize),
-
-    #[cfg_attr(feature = "std", error("invalid register {0}"))]
     InvalidRegister(u8),
-
-    #[cfg_attr(feature = "std", error("register {0} not initialized"))]
     UninitializedRegister(u8),
-
-    #[cfg_attr(feature = "std", error("invalid memory access: {0}"))]
     InvalidMemoryAccess(String),
-
-    #[cfg_attr(feature = "std", error("out of bounds stack access at offset {0}"))]
     StackOutOfBounds(i32),
-
-    #[cfg_attr(feature = "std", error("invalid offset {0}"))]
     InvalidOffset(i64),
-
-    #[cfg_attr(feature = "std", error("unreleased reference with id {0}"))]
     UnreleasedReference(u32),
-
-    #[cfg_attr(feature = "std", error("invalid pointer arithmetic: {0}"))]
     InvalidPointerArithmetic(String),
-
-    #[cfg_attr(feature = "std", error("program too complex: {0}"))]
     TooComplex(String),
-
-    #[cfg_attr(feature = "std", error("invalid jump destination {0}"))]
     InvalidJumpDestination(i32),
-
-    #[cfg_attr(feature = "std", error("back-edge detected, loops not allowed"))]
     BackEdgeDetected,
-
-    #[cfg_attr(feature = "std", error("unreachable instruction at index {0}"))]
     UnreachableInstruction(usize),
-
-    #[cfg_attr(feature = "std", error("invalid helper call: {0}"))]
     InvalidHelperCall(String),
-
-    #[cfg_attr(feature = "std", error("type mismatch: expected {expected}, got {got}"))]
     TypeMismatch { expected: String, got: String },
-
-    #[cfg_attr(feature = "std", error("invalid pointer: {0}"))]
     InvalidPointer(String),
-
-    #[cfg_attr(feature = "std", error("permission denied: {0}"))]
     PermissionDenied(String),
-
-    #[cfg_attr(feature = "std", error("invalid map access: {0}"))]
     InvalidMapAccess(String),
-
-    #[cfg_attr(feature = "std", error("invalid context access: {0}"))]
     InvalidContextAccess(String),
-
-    #[cfg_attr(feature = "std", error("pointer leak in unprivileged mode"))]
     PointerLeak,
-
-    #[cfg_attr(feature = "std", error("division by zero"))]
     DivisionByZero,
-
-    #[cfg_attr(feature = "std", error("invalid dynptr operation: {0}"))]
     InvalidDynptr(String),
-
-    #[cfg_attr(feature = "std", error("invalid iterator operation: {0}"))]
     InvalidIterator(String),
-
-    #[cfg_attr(feature = "std", error("invalid lock operation: {0}"))]
     InvalidLock(String),
-
-    #[cfg_attr(feature = "std", error("invalid IRQ operation: {0}"))]
     InvalidIrq(String),
-
-    #[cfg_attr(feature = "std", error("resource limit exceeded: {0}"))]
     ResourceLimitExceeded(String),
-
-    #[cfg_attr(feature = "std", error("complexity limit exceeded: {0}"))]
     ComplexityLimitExceeded(String),
-
-    #[cfg_attr(feature = "std", error("internal error: {0}"))]
     Internal(String),
-
-    #[cfg_attr(feature = "std", error("out of memory"))]
     OutOfMemory,
-
-    #[cfg_attr(feature = "std", error("invalid BTF: {0}"))]
     InvalidBtf(String),
-
-    #[cfg_attr(feature = "std", error("invalid kfunc: {0}"))]
     InvalidKfunc(String),
-
-    #[cfg_attr(feature = "std", error("invalid program type: {0}"))]
     InvalidProgramType(String),
-
-    #[cfg_attr(feature = "std", error("speculative execution violation"))]
     SpeculativeViolation,
-
-    #[cfg_attr(feature = "std", error("bounds check failed: {0}"))]
     BoundsCheckFailed(String),
-
-    #[cfg_attr(feature = "std", error("too many subprograms"))]
     TooManySubprogs,
-
-    #[cfg_attr(feature = "std", error("call stack overflow"))]
     CallStackOverflow,
-
-    #[cfg_attr(feature = "std", error("stack overflow: {0} bytes"))]
     StackOverflow(i32),
-
-    #[cfg_attr(feature = "std", error("invalid subprogram: {0}"))]
     InvalidSubprog(String),
-
-    #[cfg_attr(feature = "std", error("expected pointer in register {0}"))]
     ExpectedPointer(u8),
-
-    #[cfg_attr(feature = "std", error("invalid instruction size at {0}"))]
     InvalidInsnSize(usize),
-
-    #[cfg_attr(feature = "std", error("invalid atomic operation {0:#x}"))]
     InvalidAtomicOp(u32),
-
-    #[cfg_attr(feature = "std", error("invalid state: {0}"))]
     InvalidState(String),
-
-    #[cfg_attr(feature = "std", error("invalid function call: {0}"))]
     InvalidFunctionCall(String),
-
-    #[cfg_attr(feature = "std", error("out of bounds access at offset {offset} with size {size}"))]
     OutOfBounds { offset: i32, size: i32 },
-
-    #[cfg_attr(feature = "std", error("infinite loop detected at instruction {0}"))]
     InfiniteLoop(usize),
-
-    #[cfg_attr(feature = "std", error("invalid pointer comparison: {0}"))]
     InvalidPointerComparison(String),
-
-    #[cfg_attr(feature = "std", error("invalid return value: {0}"))]
     InvalidReturnValue(String),
 }
 
-// Manual Display implementation for no_std
-#[cfg(not(feature = "std"))]
 impl fmt::Display for VerifierError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -249,7 +138,7 @@ impl VerifierError {
         )
     }
 
-    /// Convert to kernel errno value (for kernel module use)
+    /// Convert to kernel errno value
     /// 
     /// These correspond to Linux kernel error codes:
     /// - EINVAL (22): Invalid argument
@@ -257,7 +146,6 @@ impl VerifierError {
     /// - EACCES (13): Permission denied
     /// - E2BIG (7): Argument list too long (used for complexity limits)
     /// - EPERM (1): Operation not permitted
-    #[cfg(feature = "kernel")]
     pub fn to_kernel_errno(&self) -> i32 {
         match self {
             // Memory errors
@@ -282,18 +170,6 @@ impl VerifierError {
 
             // All other errors are EINVAL
             _ => -22, // EINVAL
-        }
-    }
-
-    /// Create from kernel errno (for kernel module use)
-    #[cfg(feature = "kernel")]
-    pub fn from_kernel_errno(errno: i32) -> Self {
-        match errno {
-            -12 => VerifierError::OutOfMemory,
-            -1 => VerifierError::PermissionDenied(String::from("operation not permitted")),
-            -13 => VerifierError::InvalidMemoryAccess(String::from("access denied")),
-            -7 => VerifierError::TooComplex(String::from("program too complex")),
-            _ => VerifierError::Internal(String::from("unknown error")),
         }
     }
 }

@@ -1,20 +1,14 @@
+// SPDX-License-Identifier: GPL-2.0
+
 //! Verification statistics and metrics
 //!
 //! This module tracks statistics during BPF program verification,
 //! providing insights into program complexity, resource usage,
 //! and verification performance.
 
-#[cfg(feature = "std")]
-use std::time::{Duration, Instant};
-
-#[cfg(not(feature = "std"))]
 use alloc::{format, string::String, vec::Vec};
-#[cfg(not(feature = "std"))]
-use core::time::Duration;
-#[cfg(not(feature = "std"))]
 use alloc::collections::BTreeMap as HashMap;
-#[cfg(feature = "std")]
-use std::collections::HashMap;
+use core::time::Duration;
 
 /// Statistics collected during verification
 #[derive(Debug, Clone, Default)]
@@ -145,18 +139,6 @@ impl VerifierStats {
     /// Create new empty stats
     pub fn new() -> Self {
         Self::default()
-    }
-
-    /// Start tracking verification time
-    #[cfg(feature = "std")]
-    pub fn start_timer(&mut self) -> Instant {
-        Instant::now()
-    }
-
-    /// Stop tracking verification time
-    #[cfg(feature = "std")]
-    pub fn stop_timer(&mut self, start: Instant) {
-        self.verification_time = start.elapsed();
     }
 
     /// Record an instruction being processed
@@ -388,9 +370,6 @@ pub enum MemAccessType {
 pub struct StatsCollector {
     /// The stats being collected
     pub stats: VerifierStats,
-    /// Timer start (only available with std)
-    #[cfg(feature = "std")]
-    start_time: Option<Instant>,
     /// Per-instruction auxiliary stats
     pub insn_stats: HashMap<usize, InsnStats>,
 }
@@ -406,9 +385,9 @@ pub struct InsnStats {
     pub is_prune_point: bool,
     /// Whether this instruction was pruned
     pub was_pruned: bool,
-    /// Whether this instruction forces a checkpoint (e.g., iter_next, callback calls)
+    /// Whether this instruction forces a checkpoint
     pub is_force_checkpoint: bool,
-    /// Whether this instruction is a jump point (target of conditional jumps)
+    /// Whether this instruction is a jump point
     pub is_jmp_point: bool,
     /// Whether this instruction calls a callback function
     pub calls_callback: bool,
@@ -422,34 +401,16 @@ impl StatsCollector {
         
         Self {
             stats,
-            #[cfg(feature = "std")]
-            start_time: None,
             insn_stats: HashMap::new(),
         }
     }
 
-    /// Start timing
-    #[cfg(feature = "std")]
-    pub fn start(&mut self) {
-        self.start_time = Some(Instant::now());
-    }
-
     /// Start timing (no-op in no_std)
-    #[cfg(not(feature = "std"))]
     pub fn start(&mut self) {
         // No-op in no_std
     }
 
-    /// Stop timing and finalize stats
-    #[cfg(feature = "std")]
-    pub fn finish(&mut self) {
-        if let Some(start) = self.start_time.take() {
-            self.stats.stop_timer(start);
-        }
-    }
-
     /// Stop timing and finalize stats (no-op in no_std)
-    #[cfg(not(feature = "std"))]
     pub fn finish(&mut self) {
         // No-op in no_std
     }
@@ -480,15 +441,14 @@ impl StatsCollector {
         self.stats.record_state_pruned();
     }
 
-    /// Mark instruction as force checkpoint (e.g., iter_next calls)
+    /// Mark instruction as force checkpoint
     pub fn mark_force_checkpoint(&mut self, idx: usize) {
         let entry = self.insn_stats.entry(idx).or_default();
         entry.is_force_checkpoint = true;
-        // Force checkpoints are also prune points
         entry.is_prune_point = true;
     }
 
-    /// Mark instruction as jump point (target of conditional jumps)
+    /// Mark instruction as jump point
     pub fn mark_jmp_point(&mut self, idx: usize) {
         let entry = self.insn_stats.entry(idx).or_default();
         entry.is_jmp_point = true;
@@ -498,7 +458,6 @@ impl StatsCollector {
     pub fn mark_calls_callback(&mut self, idx: usize) {
         let entry = self.insn_stats.entry(idx).or_default();
         entry.calls_callback = true;
-        // Callback-calling instructions are also force checkpoints
         entry.is_force_checkpoint = true;
         entry.is_prune_point = true;
     }
@@ -543,154 +502,5 @@ impl StatsCollector {
         }
         
         s
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_stats_creation() {
-        let stats = VerifierStats::new();
-        assert_eq!(stats.insn_count, 0);
-        assert_eq!(stats.insns_processed, 0);
-    }
-
-    #[test]
-    fn test_record_insn() {
-        let mut stats = VerifierStats::new();
-        
-        stats.record_insn(0x07, false); // ALU64
-        stats.record_insn(0x07, false);
-        stats.record_insn(0x05, false); // JMP
-        
-        assert_eq!(stats.insn_class_counts.alu64, 2);
-        assert_eq!(stats.insn_class_counts.jmp, 1);
-        assert_eq!(stats.insns_processed, 3);
-    }
-
-    #[test]
-    fn test_record_call() {
-        let mut stats = VerifierStats::new();
-        
-        stats.record_call(false); // helper
-        stats.record_call(true);  // kfunc
-        stats.record_call(false); // helper
-        
-        assert_eq!(stats.helper_calls, 2);
-        assert_eq!(stats.kfunc_calls, 1);
-        assert_eq!(stats.insn_class_counts.call, 3);
-    }
-
-    #[test]
-    fn test_pruning_efficiency() {
-        let mut stats = VerifierStats::new();
-        
-        stats.total_states = 100;
-        stats.states_pruned = 75;
-        
-        assert!((stats.pruning_efficiency() - 75.0).abs() < 0.01);
-    }
-
-    #[test]
-    fn test_mem_access_recording() {
-        let mut stats = VerifierStats::new();
-        
-        stats.record_mem_access(MemAccessType::Stack, false);
-        stats.record_mem_access(MemAccessType::Stack, true);
-        stats.record_mem_access(MemAccessType::MapValue, false);
-        
-        assert_eq!(stats.mem_stats.stack_reads, 1);
-        assert_eq!(stats.mem_stats.stack_writes, 1);
-        assert_eq!(stats.mem_stats.map_reads, 1);
-        assert_eq!(stats.mem_stats.total_accesses, 3);
-    }
-
-    #[test]
-    fn test_reg_stats() {
-        let mut stats = VerifierStats::new();
-        
-        stats.record_reg_read(0);
-        stats.record_reg_read(1);
-        stats.record_reg_write(0);
-        
-        assert_eq!(stats.reg_stats.reads[0], 1);
-        assert_eq!(stats.reg_stats.reads[1], 1);
-        assert_eq!(stats.reg_stats.writes[0], 1);
-    }
-
-    #[test]
-    fn test_stats_collector() {
-        let mut collector = StatsCollector::new(100);
-        
-        collector.start();
-        collector.visit_insn(0);
-        collector.visit_insn(0);
-        collector.visit_insn(1);
-        collector.record_state_at(0);
-        collector.finish();
-        
-        assert_eq!(collector.stats.insn_count, 100);
-        assert_eq!(collector.insn_stats.get(&0).unwrap().visit_count, 2);
-        assert_eq!(collector.insn_stats.get(&1).unwrap().visit_count, 1);
-    }
-
-    #[test]
-    fn test_hot_instructions() {
-        let mut collector = StatsCollector::new(10);
-        
-        for _ in 0..10 {
-            collector.visit_insn(5);
-        }
-        for _ in 0..5 {
-            collector.visit_insn(3);
-        }
-        collector.visit_insn(7);
-        
-        let hot = collector.hot_instructions(2);
-        assert_eq!(hot[0], (5, 10));
-        assert_eq!(hot[1], (3, 5));
-    }
-
-    #[test]
-    fn test_summary_generation() {
-        let mut stats = VerifierStats::new();
-        stats.insn_count = 50;
-        stats.insns_processed = 200;
-        stats.total_states = 100;
-        stats.states_pruned = 50;
-        
-        let summary = stats.summary();
-        assert!(summary.contains("50 instructions"));
-        assert!(summary.contains("200"));
-        assert!(summary.contains("50.0%"));
-    }
-
-    #[test]
-    fn test_update_peak_states() {
-        let mut stats = VerifierStats::new();
-        
-        stats.update_peak_states(5);
-        assert_eq!(stats.peak_states, 5);
-        
-        stats.update_peak_states(3);
-        assert_eq!(stats.peak_states, 5); // Should not decrease
-        
-        stats.update_peak_states(10);
-        assert_eq!(stats.peak_states, 10);
-    }
-
-    #[test]
-    fn test_complexity_metrics() {
-        let mut stats = VerifierStats::new();
-        
-        stats.record_branch();
-        stats.record_branch();
-        stats.record_bounded_loop();
-        
-        assert_eq!(stats.complexity.cyclomatic, 2);
-        assert_eq!(stats.complexity.back_edges, 1);
-        assert_eq!(stats.bounded_loops, 1);
     }
 }

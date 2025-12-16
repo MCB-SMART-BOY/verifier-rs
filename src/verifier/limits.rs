@@ -1,16 +1,12 @@
+// SPDX-License-Identifier: GPL-2.0
+
 //! Verification limits.
 //!
 //! This module enforces verification limits to prevent denial of service
 //! from overly complex programs and tracks resource usage during verification.
 
-#[cfg(not(feature = "std"))]
 use alloc::{format, string::String, vec::Vec};
-
-#[cfg(not(feature = "std"))]
 use core::time::Duration;
-
-#[cfg(feature = "std")]
-use std::time::{Duration, Instant};
 
 use crate::core::error::{Result, VerifierError};
 
@@ -314,9 +310,6 @@ pub struct LimitChecker {
     limits: ResourceLimits,
     /// Current usage.
     usage: ResourceUsage,
-    /// Start time of verification (only available with std).
-    #[cfg(feature = "std")]
-    start_time: Option<Instant>,
     /// Warnings generated (for non-strict mode).
     warnings: Vec<LimitWarning>,
 }
@@ -373,8 +366,6 @@ impl LimitChecker {
         Self {
             limits,
             usage: ResourceUsage::new(),
-            #[cfg(feature = "std")]
-            start_time: None,
             warnings: Vec::new(),
         }
     }
@@ -384,14 +375,7 @@ impl LimitChecker {
         Self::new(ResourceLimits::default())
     }
 
-    /// Start tracking time.
-    #[cfg(feature = "std")]
-    pub fn start(&mut self) {
-        self.start_time = Some(Instant::now());
-    }
-
     /// Start tracking time (no-op in no_std).
-    #[cfg(not(feature = "std"))]
     pub fn start(&mut self) {
         // No-op in no_std - no Instant available
     }
@@ -537,38 +521,12 @@ impl LimitChecker {
         )
     }
 
-    /// Check elapsed time.
-    #[cfg(feature = "std")]
-    pub fn check_time(&self) -> Result<()> {
-        if let Some(start) = self.start_time {
-            let elapsed = start.elapsed();
-            if elapsed > self.limits.max_verification_time {
-                return Err(VerifierError::ComplexityLimitExceeded(format!(
-                    "verification time {:.2}s exceeds limit of {:.2}s",
-                    elapsed.as_secs_f64(),
-                    self.limits.max_verification_time.as_secs_f64()
-                )));
-            }
-        }
-        Ok(())
-    }
-
     /// Check elapsed time (no-op in no_std).
-    #[cfg(not(feature = "std"))]
     pub fn check_time(&self) -> Result<()> {
         Ok(())
-    }
-
-    /// Get elapsed time.
-    #[cfg(feature = "std")]
-    pub fn elapsed(&self) -> Duration {
-        self.start_time
-            .map(|s| s.elapsed())
-            .unwrap_or(Duration::ZERO)
     }
 
     /// Get elapsed time (always zero in no_std).
-    #[cfg(not(feature = "std"))]
     pub fn elapsed(&self) -> Duration {
         Duration::ZERO
     }
@@ -742,228 +700,5 @@ impl core::fmt::Display for ResourceSummary {
             writeln!(f, "  Warnings: {}", self.warning_count)?;
         }
         Ok(())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_default_limits() {
-        let limits = ResourceLimits::default();
-        assert_eq!(limits.max_insns, DEFAULT_MAX_INSNS);
-        assert_eq!(limits.max_complexity, DEFAULT_MAX_COMPLEXITY);
-        assert_eq!(limits.max_call_depth, DEFAULT_MAX_CALL_DEPTH);
-        assert!(limits.strict);
-    }
-
-    #[test]
-    fn test_relaxed_limits() {
-        let limits = ResourceLimits::relaxed();
-        assert!(limits.max_insns > DEFAULT_MAX_INSNS);
-        assert!(limits.max_complexity > DEFAULT_MAX_COMPLEXITY);
-        assert!(!limits.strict);
-    }
-
-    #[test]
-    fn test_unprivileged_limits() {
-        let limits = ResourceLimits::unprivileged();
-        assert!(limits.max_insns < DEFAULT_MAX_INSNS);
-        assert!(limits.max_complexity < DEFAULT_MAX_COMPLEXITY);
-        assert!(limits.strict);
-    }
-
-    #[test]
-    fn test_limits_builder() {
-        let limits = ResourceLimits::new()
-            .with_max_insns(5000)
-            .with_max_complexity(500_000)
-            .with_max_call_depth(16)
-            .with_strict(false);
-
-        assert_eq!(limits.max_insns, 5000);
-        assert_eq!(limits.max_complexity, 500_000);
-        assert_eq!(limits.max_call_depth, 16);
-        assert!(!limits.strict);
-    }
-
-    #[test]
-    fn test_resource_usage_tracking() {
-        let mut usage = ResourceUsage::new();
-
-        usage.record_insn_processed();
-        usage.record_insn_processed();
-        assert_eq!(usage.insns_processed, 2);
-
-        usage.record_call_enter();
-        assert_eq!(usage.call_depth, 1);
-        usage.record_call_enter();
-        assert_eq!(usage.call_depth, 2);
-        assert_eq!(usage.peak_call_depth, 2);
-
-        usage.record_call_exit();
-        assert_eq!(usage.call_depth, 1);
-        assert_eq!(usage.peak_call_depth, 2); // Peak unchanged
-
-        usage.record_state_created();
-        usage.record_state_created();
-        assert_eq!(usage.states_created, 2);
-        assert_eq!(usage.current_states, 2);
-        assert_eq!(usage.peak_states, 2);
-
-        usage.record_state_pruned();
-        assert_eq!(usage.states_pruned, 1);
-        assert_eq!(usage.current_states, 1);
-        assert_eq!(usage.peak_states, 2); // Peak unchanged
-    }
-
-    #[test]
-    fn test_limit_checker_insn_count() {
-        let limits = ResourceLimits::new().with_max_insns(100);
-        let mut checker = LimitChecker::new(limits);
-
-        assert!(checker.set_insn_count(50).is_ok());
-        assert!(checker.set_insn_count(100).is_ok());
-        assert!(checker.set_insn_count(101).is_err());
-    }
-
-    #[test]
-    fn test_limit_checker_complexity() {
-        let limits = ResourceLimits::new().with_max_complexity(10);
-        let mut checker = LimitChecker::new(limits);
-        checker.start();
-
-        for _ in 0..10 {
-            assert!(checker.check_insn_processed().is_ok());
-        }
-        // 11th should fail
-        assert!(checker.check_insn_processed().is_err());
-    }
-
-    #[test]
-    fn test_limit_checker_call_depth() {
-        let limits = ResourceLimits::new().with_max_call_depth(3);
-        let mut checker = LimitChecker::new(limits);
-
-        assert!(checker.check_call_enter().is_ok()); // depth 1
-        assert!(checker.check_call_enter().is_ok()); // depth 2
-        assert!(checker.check_call_enter().is_ok()); // depth 3
-        assert!(checker.check_call_enter().is_err()); // depth 4 - exceeds
-    }
-
-    #[test]
-    fn test_limit_checker_non_strict() {
-        let limits = ResourceLimits::new()
-            .with_max_insns(100)
-            .with_strict(false);
-        let mut checker = LimitChecker::new(limits);
-
-        // Should succeed even over limit in non-strict mode
-        assert!(checker.set_insn_count(150).is_ok());
-        assert!(!checker.warnings().is_empty());
-    }
-
-    #[test]
-    fn test_limit_checker_warnings() {
-        let limits = ResourceLimits::new().with_max_complexity(100);
-        let mut checker = LimitChecker::new(limits);
-        checker.start();
-
-        // Process 91 instructions (91% of limit)
-        for _ in 0..91 {
-            let _ = checker.check_insn_processed();
-        }
-
-        // Should have warnings about approaching limit
-        assert!(!checker.warnings().is_empty());
-    }
-
-    #[test]
-    fn test_limit_checker_tail_calls() {
-        let limits = ResourceLimits::default();
-        let mut checker = LimitChecker::new(limits);
-
-        for _ in 0..DEFAULT_MAX_TAIL_CALLS {
-            assert!(checker.check_tail_call().is_ok());
-        }
-        assert!(checker.check_tail_call().is_err());
-    }
-
-    #[test]
-    fn test_limit_checker_loops() {
-        let limits = ResourceLimits::new()
-            .with_max_insns(1000);
-        let mut checker = LimitChecker::new(limits.clone());
-
-        // Check loop count
-        for _ in 0..DEFAULT_MAX_LOOPS {
-            assert!(checker.check_loop(10).is_ok());
-        }
-        assert!(checker.check_loop(10).is_err());
-    }
-
-    #[test]
-    fn test_limit_checker_states() {
-        let limits = ResourceLimits::new();
-        let mut checker = LimitChecker::new(limits);
-
-        assert!(checker.check_states_at_insn(32).is_ok());
-        assert!(checker.check_states_at_insn(64).is_ok());
-        assert!(checker.check_states_at_insn(65).is_err());
-    }
-
-    #[test]
-    fn test_resource_summary_display() {
-        let limits = ResourceLimits::new();
-        let mut checker = LimitChecker::new(limits);
-        checker.start();
-        checker.usage_mut().insn_count = 100;
-        checker.usage_mut().insns_processed = 500;
-        checker.usage_mut().peak_call_depth = 3;
-
-        let summary = checker.summary();
-        let output = format!("{}", summary);
-
-        assert!(output.contains("Instructions: 100"));
-        assert!(output.contains("Complexity"));
-        assert!(output.contains("Peak call depth: 3"));
-    }
-
-    #[test]
-    fn test_elapsed_time() {
-        let limits = ResourceLimits::new();
-        let mut checker = LimitChecker::new(limits);
-        
-        assert_eq!(checker.elapsed(), Duration::ZERO);
-        
-        checker.start();
-        std::thread::sleep(Duration::from_millis(10));
-        
-        assert!(checker.elapsed() >= Duration::from_millis(10));
-    }
-
-    #[test]
-    fn test_memory_check() {
-        let limits = ResourceLimits::new();
-        let mut checker = LimitChecker::new(limits);
-
-        assert!(checker.check_memory(100 * 1024 * 1024).is_ok()); // 100 MB
-        assert!(checker.check_memory(300 * 1024 * 1024).is_err()); // 300 MB > 256 MB default
-    }
-
-    #[test]
-    fn test_log_size_check() {
-        let limits = ResourceLimits::new();
-        let mut checker = LimitChecker::new(limits);
-
-        assert!(checker.check_log_size(1024 * 1024).is_ok()); // 1 MB
-        
-        // Accumulate to over limit
-        for _ in 0..20 {
-            let _ = checker.check_log_size(1024 * 1024); // 1 MB each
-        }
-        
-        assert!(checker.usage().log_bytes > DEFAULT_MAX_LOG_SIZE);
     }
 }

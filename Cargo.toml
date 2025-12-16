@@ -1,73 +1,37 @@
+# SPDX-License-Identifier: GPL-2.0
+
 [package]
-name = "bpf-verifier"
+name = "bpf_verifier"
 version = "0.1.0"
 edition = "2021"
 authors = ["MCB-SMART-BOY <mcb2720838051@gmail.com>"]
-description = "A Rust implementation of the Linux kernel BPF verifier"
+description = "A Rust implementation of the Linux kernel BPF verifier for Rust for Linux"
 license = "GPL-2.0-only"
 repository = "https://github.com/MCB-SMART-BOY/verifier-rs"
-documentation = "https://docs.rs/bpf-verifier"
 readme = "README.md"
-keywords = ["bpf", "ebpf", "verifier", "linux", "security"]
-categories = ["development-tools", "parsing", "no-std"]
+keywords = ["bpf", "ebpf", "verifier", "linux", "kernel", "rust-for-linux"]
+categories = ["no-std", "os::linux-apis"]
 
 [lib]
 name = "bpf_verifier"
 path = "src/lib.rs"
-crate-type = ["lib", "staticlib"]
-
-[[example]]
-name = "demo"
-path = "examples/demo.rs"
-
-[[example]]
-name = "verify_program"
-path = "examples/verify_program.rs"
-
-[[bin]]
-name = "test_harness"
-path = "tools/test_harness.rs"
-required-features = ["std"]
+crate-type = ["rlib"]
 
 [dependencies]
-# thiserror requires std, use conditional compilation
-thiserror = { version = "1.0", optional = true }
-bitflags = "2.4"
-
-# no_std compatible error handling
-derive_more = { version = "1.0", default-features = false, features = ["display", "from"] }
-
-[dev-dependencies]
-# For examples and tests
-criterion = { version = "0.5", features = ["html_reports"] }
-
-[[bench]]
-name = "verifier_benchmarks"
-harness = false
+bitflags = { version = "2.4", default-features = false }
 
 [features]
-default = ["std"]
-# Standard library support (user-space)
-std = ["thiserror"]
-# Kernel mode (no_std) - implies ffi for C bindings
-kernel = ["ffi"]
-# C FFI bindings for kernel integration
-ffi = []
-# Enable verbose logging
+default = []
+# Enable verbose logging (for debugging)
 verbose = []
 # Enable statistics collection
 stats = []
 
-# Profile for kernel builds (panic=abort required)
 [profile.release]
 panic = "abort"
-# Optimize for size to reduce kernel module size
 lto = true
 codegen-units = 1
+opt-level = 2
 
 [profile.dev]
 panic = "abort"
-
-[package.metadata.docs.rs]
-all-features = true
-rustdoc-args = ["--cfg", "docsrs"]

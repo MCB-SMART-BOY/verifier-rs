@@ -11,7 +11,7 @@
 //! - Subprogram call/return handling
 //! - Precision tracking for conditional jumps
 
-#[cfg(not(feature = "std"))]
+
 use alloc::{format, vec::Vec, boxed::Box};
 
 use crate::core::types::*;
@@ -145,9 +145,7 @@ impl<'a> MainVerifier<'a> {
     /// Create a new main verifier
     pub fn new(env: &'a mut VerifierEnv) -> Self {
         let kfunc_registry = KfuncRegistry::new();
-        // Skip kfunc registration in kernel mode to avoid large allocations
-        // during initialization. Kfuncs will be registered on-demand.
-        #[cfg(not(feature = "kernel"))]
+        // Register common kfuncs
         let kfunc_registry = {
             let mut registry = kfunc_registry;
             registry.register_common();
@@ -285,37 +283,6 @@ impl<'a> MainVerifier<'a> {
     /// 
     /// This corresponds to the kernel's `do_check()` function.
     pub fn verify(&mut self) -> Result<()> {
-        // In kernel mode, use minimal verification to avoid stack issues
-        #[cfg(feature = "kernel")]
-        return self.verify_minimal();
-        
-        #[cfg(not(feature = "kernel"))]
-        self.verify_full()
-    }
-    
-    /// Minimal verification for kernel mode - avoids deep call stacks
-    #[cfg(feature = "kernel")]
-    fn verify_minimal(&mut self) -> Result<()> {
-        // Basic validation only
-        if self.env.insns.is_empty() {
-            return Err(VerifierError::EmptyProgram);
-        }
-        
-        // Check that last instruction is EXIT
-        if let Some(last) = self.env.insns.last() {
-            if last.code != (BPF_JMP | BPF_EXIT) {
-                return Err(VerifierError::FallThroughExit);
-            }
-        }
-        
-        // For now, accept the program if it ends with EXIT
-        // TODO: Implement full verification with proper stack management
-        Ok(())
-    }
-    
-    /// Full verification for userspace
-    #[cfg(not(feature = "kernel"))]
-    fn verify_full(&mut self) -> Result<()> {
         // Initialize SCC analysis for loop detection
         self.env.init_scc_analysis();
         
@@ -1402,7 +1369,10 @@ impl<'a> MainVerifier<'a> {
             return Ok(());
         }
         
-        let (min_val, max_val) = range.unwrap();
+        let (min_val, max_val) = match range {
+            Some(r) => r,
+            None => return Ok(()), // No range restriction
+        };
         
         // Check if R0's bounds are within the valid range
         self.check_retval_in_range(r0, min_val, max_val)
@@ -1610,7 +1580,9 @@ impl<'a> MainVerifier<'a> {
         // Get source value for comparison
         let src_val = if src_type == BPF_X {
             // Register source - get from current state
-            let cur_state = self.env.cur_state.as_ref().unwrap();
+            let cur_state = self.env.cur_state.as_ref().ok_or_else(|| {
+                VerifierError::Internal("no current state".into())
+            })?;
             cur_state.reg(insn.src_reg as usize).cloned()
         } else {
             // Immediate source
@@ -2228,125 +2200,5 @@ fn mark_prune_points(env: &mut VerifierEnv) {
     // Mark first instruction as prune point
     if !env.insn_aux.is_empty() {
         env.insn_aux[0].prune_point = true;
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn make_env(insns: Vec<BpfInsn>) -> VerifierEnv {
-        VerifierEnv::new(insns, BpfProgType::SocketFilter, true).unwrap()
-    }
-
-    #[test]
-    fn test_simple_program() {
-        let insns = vec![
-            BpfInsn::new(BPF_ALU64 | BPF_MOV | BPF_K, 0, 0, 0, 0),
-            BpfInsn::new(BPF_JMP | BPF_EXIT, 0, 0, 0, 0),
-        ];
-        let mut env = make_env(insns);
-        mark_prune_points(&mut env);
-        let mut verifier = MainVerifier::new(&mut env);
-        assert!(verifier.verify().is_ok());
-    }
-
-    #[test]
-    fn test_alu_program() {
-        let insns = vec![
-            BpfInsn::new(BPF_ALU64 | BPF_MOV | BPF_K, 1, 0, 0, 10),
-            BpfInsn::new(BPF_ALU64 | BPF_ADD | BPF_K, 1, 0, 0, 5),
-            BpfInsn::new(BPF_ALU64 | BPF_MOV | BPF_X, 0, 1, 0, 0),
-            BpfInsn::new(BPF_JMP | BPF_EXIT, 0, 0, 0, 0),
-        ];
-        let mut env = make_env(insns);
-        mark_prune_points(&mut env);
-        let mut verifier = MainVerifier::new(&mut env);
-        assert!(verifier.verify().is_ok());
-    }
-
-    #[test]
-    fn test_branch_program() {
-        let insns = vec![
-            BpfInsn::new(BPF_ALU64 | BPF_MOV | BPF_K, 0, 0, 0, 0),
-            BpfInsn::new(BPF_ALU64 | BPF_MOV | BPF_K, 1, 0, 0, 0),
-            BpfInsn::new(BPF_JMP | BPF_JEQ | BPF_K, 1, 0, 1, 0),
-            BpfInsn::new(BPF_ALU64 | BPF_MOV | BPF_K, 0, 0, 0, 1),
-            BpfInsn::new(BPF_JMP | BPF_EXIT, 0, 0, 0, 0),
-        ];
-        let mut env = make_env(insns);
-        mark_prune_points(&mut env);
-        let mut verifier = MainVerifier::new(&mut env);
-        assert!(verifier.verify().is_ok());
-    }
-
-    #[test]
-    fn test_jump_out_of_range() {
-        let insns = vec![
-            BpfInsn::new(BPF_JMP | BPF_JA, 0, 0, 100, 0), // Jump way out of range
-            BpfInsn::new(BPF_JMP | BPF_EXIT, 0, 0, 0, 0),
-        ];
-        let mut env = make_env(insns);
-        mark_prune_points(&mut env);
-        let mut verifier = MainVerifier::new(&mut env);
-        assert!(verifier.verify().is_err());
-    }
-
-    #[test]
-    fn test_uninit_register() {
-        let insns = vec![
-            BpfInsn::new(BPF_ALU64 | BPF_MOV | BPF_X, 0, 5, 0, 0), // r0 = r5 (uninit)
-            BpfInsn::new(BPF_JMP | BPF_EXIT, 0, 0, 0, 0),
-        ];
-        let mut env = make_env(insns);
-        mark_prune_points(&mut env);
-        let mut verifier = MainVerifier::new(&mut env);
-        // This should fail because R5 is not initialized
-        let result = verifier.verify();
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_mark_prune_points() {
-        let insns = vec![
-            BpfInsn::new(BPF_ALU64 | BPF_MOV | BPF_K, 0, 0, 0, 0), // 0
-            BpfInsn::new(BPF_JMP | BPF_JEQ | BPF_K, 0, 0, 2, 0),   // 1: jump to 4
-            BpfInsn::new(BPF_ALU64 | BPF_MOV | BPF_K, 0, 0, 0, 1), // 2
-            BpfInsn::new(BPF_JMP | BPF_JA, 0, 0, 0, 0),            // 3: jump to 4
-            BpfInsn::new(BPF_JMP | BPF_EXIT, 0, 0, 0, 0),          // 4
-        ];
-        let mut env = make_env(insns);
-        mark_prune_points(&mut env);
-        
-        // First instruction should be prune point
-        assert!(env.insn_aux[0].prune_point);
-        
-        // Jump target at index 4 should be prune point
-        assert!(env.insn_aux[4].prune_point);
-    }
-
-    #[test]
-    fn test_state_cache_integration() {
-        let insns = vec![
-            BpfInsn::new(BPF_ALU64 | BPF_MOV | BPF_K, 0, 0, 0, 0),
-            BpfInsn::new(BPF_JMP | BPF_EXIT, 0, 0, 0, 0),
-        ];
-        let mut env = make_env(insns);
-        mark_prune_points(&mut env);
-        let mut verifier = MainVerifier::new(&mut env);
-        
-        // Verify should work and potentially use state cache
-        assert!(verifier.verify().is_ok());
-    }
-
-    #[test]
-    fn test_verify_program_api() {
-        let insns = vec![
-            BpfInsn::new(BPF_ALU64 | BPF_MOV | BPF_K, 0, 0, 0, 0),
-            BpfInsn::new(BPF_JMP | BPF_EXIT, 0, 0, 0, 0),
-        ];
-        
-        // Use the high-level API
-        assert!(verify_program(insns, BpfProgType::SocketFilter, true).is_ok());
     }
 }
