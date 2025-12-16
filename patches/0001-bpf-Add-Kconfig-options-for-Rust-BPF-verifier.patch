@@ -1,0 +1,60 @@
+From: MCB-SMART-BOY <mcb2720838051@gmail.com>
+Subject: [PATCH v1 1/3] bpf: Add Kconfig options for Rust BPF verifier
+
+Add configuration options to enable the Rust BPF verifier:
+
+- CONFIG_BPF_VERIFIER_RUST: Enable Rust verifier (depends on RUST)
+- CONFIG_BPF_VERIFIER_RUST_DEFAULT: Use Rust verifier by default
+- CONFIG_BPF_VERIFIER_RUST_DEBUG: Enable debug output
+
+The Rust verifier is disabled by default and requires explicit
+opt-in via Kconfig or runtime sysctl.
+
+Signed-off-by: MCB-SMART-BOY <mcb2720838051@gmail.com>
+---
+ kernel/bpf/Kconfig      |  3 +++
+ kernel/bpf/Kconfig.rust | 45 +++++++++++++++++++++++++++++++++++++++++++++
+ 2 files changed, 48 insertions(+)
+ create mode 100644 kernel/bpf/Kconfig.rust
+
+diff --git a/kernel/bpf/Kconfig b/kernel/bpf/Kconfig
+index xxxx..yyyy 100644
+--- a/kernel/bpf/Kconfig
++++ b/kernel/bpf/Kconfig
+@@ -end of file
++
++source "kernel/bpf/Kconfig.rust"
+
+diff --git a/kernel/bpf/Kconfig.rust b/kernel/bpf/Kconfig.rust
+new file mode 100644
+index 0000000..xxxxxxx
+--- /dev/null
++++ b/kernel/bpf/Kconfig.rust
+@@ -0,0 +1,45 @@
++# SPDX-License-Identifier: GPL-2.0-only
++
++config BPF_VERIFIER_RUST
++	bool "Rust implementation of BPF verifier"
++	depends on BPF_SYSCALL
++	depends on RUST
++	default n
++	help
++	  Enable the Rust implementation of the BPF verifier.
++	  
++	  When enabled, switch between verifiers at runtime:
++	    echo 1 > /proc/sys/kernel/bpf_rust_verifier
++	  
++	  If unsure, say N.
++
++config BPF_VERIFIER_RUST_DEFAULT
++	bool "Use Rust BPF verifier by default"
++	depends on BPF_VERIFIER_RUST
++	default n
++
++config BPF_VERIFIER_RUST_DEBUG
++	bool "Enable Rust BPF verifier debug output"
++	depends on BPF_VERIFIER_RUST
++	depends on DEBUG_KERNEL
++	default n
+--
+2.43.0

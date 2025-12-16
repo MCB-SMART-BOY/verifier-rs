@@ -1,0 +1,42 @@
+From: MCB-SMART-BOY <mcb2720838051@gmail.com>
+Subject: [PATCH v1 3/3] bpf: Hook Rust verifier into verification path
+
+Integrate the Rust BPF verifier into the kernel's BPF verification
+path. When CONFIG_BPF_VERIFIER_RUST is enabled and the runtime
+sysctl is set, bpf_check() will call the Rust verifier.
+
+If the Rust verifier returns -ENOSYS, fall back to the C verifier.
+This allows gradual adoption and testing.
+
+Signed-off-by: MCB-SMART-BOY <mcb2720838051@gmail.com>
+---
+ kernel/bpf/verifier.c | 15 +++++++++++++++
+ 1 file changed, 15 insertions(+)
+
+diff --git a/kernel/bpf/verifier.c b/kernel/bpf/verifier.c
+index xxxx..yyyy 100644
+--- a/kernel/bpf/verifier.c
++++ b/kernel/bpf/verifier.c
+@@ -includes
++#ifdef CONFIG_BPF_VERIFIER_RUST
++extern int rust_bpf_check(struct bpf_verifier_env *env);
++extern bool bpf_rust_verifier_enabled(void);
++#endif
+
+ int bpf_check(struct bpf_prog **prog, union bpf_attr *attr,
+               bpfptr_t uattr, u32 uattr_size)
+ {
+     /* existing setup */
+
++#ifdef CONFIG_BPF_VERIFIER_RUST
++    if (bpf_rust_verifier_enabled()) {
++        ret = rust_bpf_check(env);
++        if (ret != -ENOSYS)
++            goto cleanup;
++    }
++#endif
+
+     /* existing C verifier code */
+ }
+--
+2.43.0
