@@ -208,6 +208,7 @@ impl Tnum {
     }
 
     /// Add two tnums
+    #[allow(clippy::should_implement_trait)]
     pub fn add(self, other: Tnum) -> Self {
         let sm = self.mask.wrapping_add(other.mask);
         let sv = self.value.wrapping_add(other.value);
@@ -221,6 +222,7 @@ impl Tnum {
     }
 
     /// Subtract two tnums
+    #[allow(clippy::should_implement_trait)]
     pub fn sub(self, other: Tnum) -> Self {
         let dv = self.value.wrapping_sub(other.value);
         let alpha = dv.wrapping_add(self.mask);
@@ -234,6 +236,7 @@ impl Tnum {
     }
 
     /// Multiply two tnums
+    #[allow(clippy::should_implement_trait)]
     pub fn mul(self, other: Tnum) -> Self {
         let acc_v = self.value.wrapping_mul(other.value);
         // Multiplication with unknowns is complex; simplify to unknown result

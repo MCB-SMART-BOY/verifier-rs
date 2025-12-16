@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: GPL-2.0
 //! Tests for bpf_verifier::bounds::insn_bounds
 
+use bpf_verifier::prelude::*;
 use bpf_verifier::bounds::insn_bounds::*;
 
-use super::*;
 
     #[test]
     fn test_stack_access_bounds() {
-        use crate::bounds::tnum::Tnum;
+        use bpf_verifier::bounds::tnum::Tnum;
         
         let mut reg = BpfRegState::default();
         reg.reg_type = BpfRegType::PtrToStack;
@@ -21,7 +21,7 @@ use super::*;
 
     #[test]
     fn test_stack_access_out_of_bounds() {
-        use crate::bounds::tnum::Tnum;
+        use bpf_verifier::bounds::tnum::Tnum;
         
         let mut reg = BpfRegState::default();
         reg.reg_type = BpfRegType::PtrToStack;
@@ -34,8 +34,8 @@ use super::*;
 
     #[test]
     fn test_map_value_access_bounds() {
-        use crate::state::reg_state::MapInfo;
-        use crate::bounds::tnum::Tnum;
+        use bpf_verifier::state::reg_state::MapInfo;
+        use bpf_verifier::bounds::tnum::Tnum;
         
         let mut reg = BpfRegState::default();
         reg.reg_type = BpfRegType::PtrToMapValue;
@@ -60,7 +60,7 @@ use super::*;
 
     #[test]
     fn test_ctx_variable_offset_rejected() {
-        use crate::bounds::tnum::Tnum;
+        use bpf_verifier::bounds::tnum::Tnum;
         
         let mut reg = BpfRegState::default();
         reg.reg_type = BpfRegType::PtrToCtx;
@@ -115,7 +115,7 @@ use super::*;
 
     #[test]
     fn test_refine_bounds_on_branch() {
-        use crate::bounds::tnum::Tnum;
+        use bpf_verifier::bounds::tnum::Tnum;
         
         let mut reg = BpfRegState::default();
         reg.reg_type = BpfRegType::ScalarValue;

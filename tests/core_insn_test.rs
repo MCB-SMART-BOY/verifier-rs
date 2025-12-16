@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0
 //! Tests for bpf_verifier::core::insn
 
+use bpf_verifier::prelude::*;
 use bpf_verifier::core::insn::*;
 
-use super::*;
 
     #[test]
     fn test_is_reg64() {

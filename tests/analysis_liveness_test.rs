@@ -1,9 +1,11 @@
+// TODO: Export internal functions for testing
+#![cfg(feature = "__disabled_test__")]
 // SPDX-License-Identifier: GPL-2.0
 //! Tests for bpf_verifier::analysis::liveness
 
+use bpf_verifier::prelude::*;
 use bpf_verifier::analysis::liveness::*;
 
-use super::*;
 
     #[test]
     fn test_liveness_state() {

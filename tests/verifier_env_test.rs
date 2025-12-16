@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0
 //! Tests for bpf_verifier::verifier::env
 
+use bpf_verifier::prelude::*;
 use bpf_verifier::verifier::env::*;
 
-use super::*;
 
     #[test]
     fn test_env_creation() {

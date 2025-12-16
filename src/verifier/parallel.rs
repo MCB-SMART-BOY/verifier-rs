@@ -209,7 +209,7 @@ impl Default for WorkQueue {
 // ============================================================================
 
 /// Strategy for parallel exploration
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ParallelStrategy {
     /// Breadth-first: explore all branches at same depth before going deeper
     BreadthFirst,
@@ -218,6 +218,7 @@ pub enum ParallelStrategy {
     /// Priority-based: use heuristics to prioritize promising paths
     Priority,
     /// Hybrid: combine depth and breadth approaches
+    #[default]
     Hybrid,
 }
 
@@ -245,11 +246,7 @@ impl ParallelStrategy {
     }
 }
 
-impl Default for ParallelStrategy {
-    fn default() -> Self {
-        ParallelStrategy::Hybrid
-    }
-}
+
 
 // ============================================================================
 // Parallel Verification Context

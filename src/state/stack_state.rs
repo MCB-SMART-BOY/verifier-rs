@@ -220,7 +220,7 @@ impl StackState {
 
     /// Create stack state with given size
     pub fn with_size(size: usize) -> Self {
-        let num_slots = (size + BPF_REG_SIZE - 1) / BPF_REG_SIZE;
+        let num_slots = size.div_ceil(BPF_REG_SIZE);
         Self {
             stack: (0..num_slots).map(|_| BpfStackState::new()).collect(),
             allocated_stack: size,
@@ -232,7 +232,7 @@ impl StackState {
         if size > MAX_BPF_STACK {
             return Err(VerifierError::StackOverflow(size as i32));
         }
-        let num_slots = (size + BPF_REG_SIZE - 1) / BPF_REG_SIZE;
+        let num_slots = size.div_ceil(BPF_REG_SIZE);
         while self.stack.len() < num_slots {
             self.stack.push(BpfStackState::new());
         }

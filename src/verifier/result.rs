@@ -115,15 +115,29 @@ pub struct AbortInfo {
 }
 
 /// Reason verification was aborted
-#[allow(missing_docs)]
 #[derive(Debug, Clone)]
 pub enum AbortReason {
     /// Complexity limit exceeded
-    ComplexityLimit { limit: u64, reached: u64 },
+    ComplexityLimit {
+        /// Maximum allowed complexity
+        limit: u64,
+        /// Actual complexity reached
+        reached: u64,
+    },
     /// State limit exceeded
-    StateLimit { limit: usize, reached: usize },
+    StateLimit {
+        /// Maximum allowed states
+        limit: usize,
+        /// Actual states reached
+        reached: usize,
+    },
     /// Timeout
-    Timeout { limit_ms: u64, elapsed_ms: u64 },
+    Timeout {
+        /// Timeout limit in milliseconds
+        limit_ms: u64,
+        /// Elapsed time in milliseconds
+        elapsed_ms: u64,
+    },
     /// User requested abort
     UserAbort,
     /// Internal error
@@ -131,7 +145,6 @@ pub enum AbortReason {
 }
 
 /// Progress made during verification
-#[allow(missing_docs)]
 #[derive(Debug, Clone, Default)]
 pub struct VerificationProgress {
     /// Number of instructions verified
@@ -143,34 +156,61 @@ pub struct VerificationProgress {
 }
 
 /// Context in which an error occurred
-#[allow(missing_docs)]
 #[derive(Debug, Clone)]
 pub enum ErrorContext {
     /// Error during ALU operation
     AluOp {
+        /// ALU operation name
         op: &'static str,
+        /// Destination register
         dst_reg: u8,
+        /// Source operand
         src: AluSource,
     },
     /// Error during memory access
     MemoryAccess {
+        /// Type of memory access
         access_type: MemAccessKind,
+        /// Register holding pointer
         ptr_reg: u8,
+        /// Offset from pointer
         offset: i32,
+        /// Access size in bytes
         size: u32,
     },
     /// Error during jump verification
-    Jump { jump_type: JumpType, target: usize },
+    Jump {
+        /// Type of jump
+        jump_type: JumpType,
+        /// Jump target instruction
+        target: usize,
+    },
     /// Error during call verification
-    Call { call_type: CallType, func_id: i32 },
+    Call {
+        /// Type of call
+        call_type: CallType,
+        /// Function ID being called
+        func_id: i32,
+    },
     /// Error during return verification
-    Return { frame_depth: u32 },
+    Return {
+        /// Current frame depth
+        frame_depth: u32,
+    },
     /// Error verifying register state
-    RegisterState { regno: u8, expected: &'static str },
+    RegisterState {
+        /// Register number
+        regno: u8,
+        /// Expected state description
+        expected: &'static str,
+    },
     /// Error during stack access
     StackAccess {
+        /// Stack offset
         offset: i32,
+        /// Access size
         size: u32,
+        /// Whether this is a write access
         is_write: bool,
     },
     /// Unknown context
@@ -178,38 +218,46 @@ pub enum ErrorContext {
 }
 
 /// Source of ALU operation
-#[allow(missing_docs)]
 #[derive(Debug, Clone)]
 pub enum AluSource {
+    /// Source is a register
     Register(u8),
+    /// Source is an immediate value
     Immediate(i32),
 }
 
 /// Kind of memory access
-#[allow(missing_docs)]
 #[derive(Debug, Clone, Copy)]
 pub enum MemAccessKind {
+    /// Read from memory
     Read,
+    /// Write to memory
     Write,
+    /// Atomic operation
     Atomic,
 }
 
 /// Type of jump
-#[allow(missing_docs)]
 #[derive(Debug, Clone, Copy)]
 pub enum JumpType {
+    /// Unconditional jump
     Unconditional,
+    /// Conditional branch
     Conditional,
+    /// Function call
     Call,
 }
 
 /// Type of call
-#[allow(missing_docs)]
 #[derive(Debug, Clone, Copy)]
 pub enum CallType {
+    /// BPF helper function
     Helper,
+    /// Kernel function (kfunc)
     Kfunc,
+    /// BPF subprogram
     Subprogram,
+    /// Callback function
     Callback,
 }
 
@@ -288,9 +336,10 @@ pub struct ProgramProperties {
 /// Builder for verification results
 #[derive(Debug)]
 pub struct ResultBuilder {
-    #[allow(dead_code)]
+    /// Cached outcome if already built
     outcome: Option<VerificationOutcome>,
-    stats: VerifierStats,
+    /// Verification statistics
+    pub stats: VerifierStats,
     warnings: Vec<VerifierWarning>,
     properties: ProgramProperties,
 }
@@ -338,24 +387,38 @@ impl ResultBuilder {
         }
     }
 
+    /// Check if the result has already been built
+    pub fn is_built(&self) -> bool {
+        self.outcome.is_some()
+    }
+
+    /// Get the cached outcome if available
+    pub fn get_outcome(&self) -> Option<&VerificationOutcome> {
+        self.outcome.as_ref()
+    }
+
     /// Build success result
-    pub fn success(self) -> VerificationOutcome {
-        VerificationOutcome::Success(SuccessInfo {
-            stats: self.stats,
-            warnings: self.warnings,
-            properties: self.properties,
-        })
+    pub fn success(mut self) -> VerificationOutcome {
+        let outcome = VerificationOutcome::Success(SuccessInfo {
+            stats: self.stats.clone(),
+            warnings: self.warnings.clone(),
+            properties: self.properties.clone(),
+        });
+        self.outcome = Some(outcome.clone());
+        outcome
     }
 
     /// Build failure result
-    pub fn failure(self, error: VerifierError, insn_idx: usize) -> VerificationOutcome {
+    pub fn failure(mut self, error: VerifierError, insn_idx: usize) -> VerificationOutcome {
         let mut info = FailureInfo::new(error, insn_idx);
-        info.partial_stats = Some(self.stats);
+        info.partial_stats = Some(self.stats.clone());
 
         // Add suggestions based on error type
         add_error_suggestions(&mut info);
 
-        VerificationOutcome::Failure(info)
+        let outcome = VerificationOutcome::Failure(info);
+        self.outcome = Some(outcome.clone());
+        outcome
     }
 
     /// Build aborted result
@@ -379,7 +442,7 @@ impl Default for ResultBuilder {
 }
 
 /// Add suggestions based on error type
-fn add_error_suggestions(info: &mut FailureInfo) {
+pub fn add_error_suggestions(info: &mut FailureInfo) {
     match &info.error {
         VerifierError::UninitializedRegister(reg) => {
             info.suggestions

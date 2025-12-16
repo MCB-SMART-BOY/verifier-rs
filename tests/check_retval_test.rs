@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0
 //! Tests for bpf_verifier::check::retval
 
-use bpf_verifier::check::retval::*;
+use bpf_verifier::prelude::{BpfProgType, BpfVerifierState, BPF_REG_0};
+use bpf_verifier::check::retval::{BpfRetvalRange, check_return_code, get_prog_retval_range};
 
-use super::*;
 
     #[test]
     fn test_retval_range() {

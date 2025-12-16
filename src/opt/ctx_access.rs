@@ -1150,6 +1150,7 @@ impl SkbOffsets {
     }
 
     /// Create custom offsets
+    #[allow(clippy::too_many_arguments)]
     pub const fn custom(
         len: i32,
         pkt_type: i32,
@@ -2109,9 +2110,8 @@ pub fn find_dead_accesses(accesses: &[CtxAccessInfo], insns: &[BpfInsn]) -> Vec<
         let mut used = false;
         let mut overwritten = false;
 
-        for j in (insn_idx + 1)..insns.len().min(insn_idx + 20) {
-            let check_insn = &insns[j];
-
+        let end = insns.len().min(insn_idx + 20);
+        for check_insn in &insns[(insn_idx + 1)..end] {
             // Check if register is used as source
             if check_insn.src_reg == dst_reg {
                 used = true;
@@ -2153,19 +2153,19 @@ pub fn find_dead_accesses(accesses: &[CtxAccessInfo], insns: &[BpfInsn]) -> Vec<
 
         // Check for redundant loads (same field loaded into different register
         // when previous register still valid)
-        for j in 0..i {
-            if accesses[j].off == access.off
-                && accesses[j].size == access.size
-                && !accesses[j].is_write
+        for prev_access in &accesses[..i] {
+            if prev_access.off == access.off
+                && prev_access.size == access.size
+                && !prev_access.is_write
             {
                 // Check if original register is still valid
-                let orig_insn = accesses[j].insn_idx;
+                let orig_insn = prev_access.insn_idx;
                 let orig_dst = insns[orig_insn].dst_reg;
 
                 // Simple check: if no intervening write to that register
                 let mut still_valid = true;
-                for k in (orig_insn + 1)..insn_idx {
-                    if insns[k].dst_reg == orig_dst {
+                for insn in &insns[(orig_insn + 1)..insn_idx] {
+                    if insn.dst_reg == orig_dst {
                         still_valid = false;
                         break;
                     }

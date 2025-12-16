@@ -558,13 +558,14 @@ pub fn validate_packet_accesses(
 
 /// Check packet write permission for program type
 pub fn check_packet_write_allowed(prog_type: BpfProgType) -> bool {
-    match prog_type {
-        BpfProgType::Xdp => true,
-        BpfProgType::SchedCls | BpfProgType::SchedAct => true,
-        BpfProgType::LwtXmit => true,
-        BpfProgType::SkSkb => true,
-        _ => false,
-    }
+    matches!(
+        prog_type,
+        BpfProgType::Xdp
+            | BpfProgType::SchedCls
+            | BpfProgType::SchedAct
+            | BpfProgType::LwtXmit
+            | BpfProgType::SkSkb
+    )
 }
 
 /// Check if a register contains a packet-related pointer
@@ -716,7 +717,7 @@ fn analyze_data_vs_end_check(
 }
 
 /// Invert a jump operation (for swapped operands)
-fn invert_jmp_op(op: u8) -> u8 {
+pub fn invert_jmp_op(op: u8) -> u8 {
     match op {
         BPF_JGT => BPF_JLT,
         BPF_JGE => BPF_JLE,

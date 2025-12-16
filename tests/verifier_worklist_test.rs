@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0
 //! Tests for bpf_verifier::verifier::worklist
 
+use bpf_verifier::prelude::*;
 use bpf_verifier::verifier::worklist::*;
 
-use super::*;
 
     fn make_state() -> BpfVerifierState {
         BpfVerifierState::new()

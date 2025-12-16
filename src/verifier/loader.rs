@@ -382,9 +382,7 @@ pub fn detect_subprogs(env: &mut VerifierEnv) -> Result<()> {
     // First pass: find all call targets
     let mut call_targets: Vec<usize> = Vec::new();
 
-    for i in 0..len {
-        let insn = &insns[i];
-
+    for (i, insn) in insns.iter().enumerate() {
         // Check for BPF_CALL with pseudo call (subprogram call)
         if insn.code == (BPF_JMP | BPF_CALL) && insn.src_reg == BPF_PSEUDO_CALL {
             let target = (i as i32 + insn.imm + 1) as usize;
@@ -476,7 +474,7 @@ fn finalize_subprog_boundaries(env: &mut VerifierEnv) -> Result<()> {
 /// Jump points are where jump history should be recorded:
 /// - Conditional branches
 /// - Loop back edges
-fn mark_prune_points(env: &mut VerifierEnv) -> Result<()> {
+pub fn mark_prune_points(env: &mut VerifierEnv) -> Result<()> {
     let len = env.insns.len();
 
     // First pass: find all jump targets

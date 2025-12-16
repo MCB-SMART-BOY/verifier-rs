@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0
 //! Tests for bpf_verifier::verifier::result
 
+use bpf_verifier::prelude::*;
 use bpf_verifier::verifier::result::*;
 
-use super::*;
 
     #[test]
     fn test_success_outcome() {
@@ -55,7 +55,7 @@ use super::*;
             VerificationProgress {
                 insns_verified: 500,
                 branches_explored: 100,
-                coverage_percent: 50.0,
+                coverage_percent: 50,
             },
         );
         

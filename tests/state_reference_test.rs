@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0
 //! Tests for bpf_verifier::state::reference
 
+use bpf_verifier::prelude::*;
 use bpf_verifier::state::reference::*;
 
-use super::*;
 
     #[test]
     fn test_acquire_release_ptr() {

@@ -8,7 +8,7 @@
 
 use alloc::{format, string::String, vec::Vec};
 
-use super::bounds::ScalarBounds;
+use super::scalar::ScalarBounds;
 use crate::core::error::{Result, VerifierError};
 use crate::core::types::*;
 use crate::state::reg_state::BpfRegState;
@@ -297,7 +297,7 @@ fn analyze_ctx_access_bounds(
     }
 
     // Alignment check
-    if (total_off as u32) % size != 0 {
+    if !(total_off as u32).is_multiple_of(size) {
         result.warnings.push(format!(
             "unaligned context access: offset {} size {}",
             total_off, size

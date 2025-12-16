@@ -1117,7 +1117,7 @@ impl MapValueConstraints {
         }
 
         // Check alignment
-        if self.alignment > 1 && (offset as u32) % self.alignment != 0 {
+        if self.alignment > 1 && !(offset as u32).is_multiple_of(self.alignment) {
             return Err(VerifierError::InvalidMapAccess(format!(
                 "unaligned access at offset {} (alignment {})",
                 offset, self.alignment

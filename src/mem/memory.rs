@@ -39,7 +39,7 @@ pub fn check_ptr_alignment(reg: &BpfRegState, access_size: u32, strict: bool) ->
     let off = reg.off + reg.var_off.value as i32;
 
     // Check basic alignment
-    if strict && (off as u32) % access_size != 0 {
+    if strict && !(off as u32).is_multiple_of(access_size) {
         return Err(VerifierError::InvalidMemoryAccess(format!(
             "misaligned access: offset {} not aligned to {} bytes",
             off, access_size
@@ -163,7 +163,7 @@ pub fn check_mem_access_with_ctx(
 const BPF_MAX_VAR_OFF: i64 = 1 << 29;
 
 /// Check stack memory access with proper variable offset handling
-fn check_stack_access(
+pub fn check_stack_access(
     state: &mut BpfVerifierState,
     reg: &BpfRegState,
     off: i32,
@@ -420,7 +420,7 @@ fn check_map_key_access(reg: &BpfRegState, off: i32, size: u32) -> Result<BpfReg
 }
 
 /// Check packet memory access with variable offset support
-fn check_packet_access(
+pub fn check_packet_access(
     reg: &BpfRegState,
     off: i32,
     size: u32,
@@ -692,7 +692,7 @@ fn check_btf_id_access(
     // =========================================================================
 
     // BTF struct access should be naturally aligned
-    if size > 0 && size <= 8 && (total_off as u32) % size != 0 {
+    if size > 0 && size <= 8 && !(total_off as u32).is_multiple_of(size) {
         // Unaligned access - may be allowed for packed structs
         // For now, we allow it but log for debugging
         // A full implementation would check BTF attributes

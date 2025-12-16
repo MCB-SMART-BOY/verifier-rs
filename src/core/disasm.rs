@@ -359,7 +359,7 @@ fn disasm_call(insn: &BpfInsn, idx: usize, opts: &DisasmOptions) -> String {
 }
 
 /// Get symbolic name for a helper function
-fn get_helper_name(id: u32) -> Option<&'static str> {
+pub fn get_helper_name(id: u32) -> Option<&'static str> {
     match id {
         1 => Some("map_lookup_elem"),
         2 => Some("map_update_elem"),
@@ -507,8 +507,10 @@ impl<'a> ProgramDumper<'a> {
 
     /// Get program statistics
     pub fn stats(&self) -> ProgramStats {
-        let mut stats = ProgramStats::default();
-        stats.total_insns = self.insns.len();
+        let mut stats = ProgramStats {
+            total_insns: self.insns.len(),
+            ..Default::default()
+        };
 
         for insn in self.insns {
             let class = insn.class();
@@ -544,7 +546,7 @@ impl<'a> ProgramDumper<'a> {
 
         // Stats
         let stats = self.stats();
-        output.push_str(&"; Statistics:\n".to_string());
+        output.push_str("; Statistics:\n");
         output.push_str(&format!(
             ";   ALU64: {}, ALU32: {}\n",
             stats.alu64_insns, stats.alu32_insns

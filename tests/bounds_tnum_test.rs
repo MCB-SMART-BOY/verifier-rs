@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0
 //! Tests for bpf_verifier::bounds::tnum
 
+use bpf_verifier::prelude::*;
 use bpf_verifier::bounds::tnum::*;
 
-use super::*;
 
     #[test]
     fn test_const() {

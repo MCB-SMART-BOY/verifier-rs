@@ -332,9 +332,9 @@ pub struct PatchManager {
     /// Kfunc call patches.
     kfunc_patches: Vec<(usize, u64)>,
     /// Speculation barrier insertions.
-    nospec_patches: Vec<usize>,
+    pub nospec_patches: Vec<usize>,
     /// Zero extension insertions.
-    zext_patches: Vec<(usize, u8)>,
+    pub zext_patches: Vec<(usize, u8)>,
     /// Dead code to remove.
     dead_code: Vec<usize>,
     /// Branch optimization patches.

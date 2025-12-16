@@ -261,14 +261,15 @@ impl ReferenceManager {
                 let ref_state = &self.refs[i];
 
                 // If the reference has type info, verify it matches
-                if ref_state.has_type_info() && expected_btf_id != 0 {
-                    if ref_state.btf_id != expected_btf_id {
-                        let acquire_name = ref_state.acquire_func.unwrap_or("unknown");
-                        return Err(VerifierError::TypeMismatch {
-                            expected: format!("BTF type {} for {}", expected_btf_id, release_func),
-                            got: format!("BTF type {} from {}", ref_state.btf_id, acquire_name),
-                        });
-                    }
+                if ref_state.has_type_info()
+                    && expected_btf_id != 0
+                    && ref_state.btf_id != expected_btf_id
+                {
+                    let acquire_name = ref_state.acquire_func.unwrap_or("unknown");
+                    return Err(VerifierError::TypeMismatch {
+                        expected: format!("BTF type {} for {}", expected_btf_id, release_func),
+                        got: format!("BTF type {} from {}", ref_state.btf_id, acquire_name),
+                    });
                 }
 
                 self.refs.remove(i);

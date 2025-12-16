@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0
 //! Tests for bpf_verifier::verifier::main_loop
 
+use bpf_verifier::prelude::*;
 use bpf_verifier::verifier::main_loop::*;
 
-use super::*;
 
     fn make_env(insns: Vec<BpfInsn>) -> VerifierEnv {
         VerifierEnv::new(insns, BpfProgType::SocketFilter, true).unwrap()
@@ -16,7 +16,7 @@ use super::*;
             BpfInsn::new(BPF_JMP | BPF_EXIT, 0, 0, 0, 0),
         ];
         let mut env = make_env(insns);
-        mark_prune_points(&mut env);
+        mark_prune_points_from_cfg(&mut env);
         let mut verifier = MainVerifier::new(&mut env);
         assert!(verifier.verify().is_ok());
     }
@@ -30,7 +30,7 @@ use super::*;
             BpfInsn::new(BPF_JMP | BPF_EXIT, 0, 0, 0, 0),
         ];
         let mut env = make_env(insns);
-        mark_prune_points(&mut env);
+        mark_prune_points_from_cfg(&mut env);
         let mut verifier = MainVerifier::new(&mut env);
         assert!(verifier.verify().is_ok());
     }
@@ -45,7 +45,7 @@ use super::*;
             BpfInsn::new(BPF_JMP | BPF_EXIT, 0, 0, 0, 0),
         ];
         let mut env = make_env(insns);
-        mark_prune_points(&mut env);
+        mark_prune_points_from_cfg(&mut env);
         let mut verifier = MainVerifier::new(&mut env);
         assert!(verifier.verify().is_ok());
     }
@@ -57,7 +57,7 @@ use super::*;
             BpfInsn::new(BPF_JMP | BPF_EXIT, 0, 0, 0, 0),
         ];
         let mut env = make_env(insns);
-        mark_prune_points(&mut env);
+        mark_prune_points_from_cfg(&mut env);
         let mut verifier = MainVerifier::new(&mut env);
         assert!(verifier.verify().is_err());
     }
@@ -69,7 +69,7 @@ use super::*;
             BpfInsn::new(BPF_JMP | BPF_EXIT, 0, 0, 0, 0),
         ];
         let mut env = make_env(insns);
-        mark_prune_points(&mut env);
+        mark_prune_points_from_cfg(&mut env);
         let mut verifier = MainVerifier::new(&mut env);
         // This should fail because R5 is not initialized
         let result = verifier.verify();
@@ -86,7 +86,7 @@ use super::*;
             BpfInsn::new(BPF_JMP | BPF_EXIT, 0, 0, 0, 0),          // 4
         ];
         let mut env = make_env(insns);
-        mark_prune_points(&mut env);
+        mark_prune_points_from_cfg(&mut env);
         
         // First instruction should be prune point
         assert!(env.insn_aux[0].prune_point);
@@ -102,7 +102,7 @@ use super::*;
             BpfInsn::new(BPF_JMP | BPF_EXIT, 0, 0, 0, 0),
         ];
         let mut env = make_env(insns);
-        mark_prune_points(&mut env);
+        mark_prune_points_from_cfg(&mut env);
         let mut verifier = MainVerifier::new(&mut env);
         
         // Verify should work and potentially use state cache

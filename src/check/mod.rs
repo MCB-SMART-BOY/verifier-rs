@@ -10,6 +10,7 @@
 pub mod alu;
 pub mod arg_checks;
 pub mod atomic;
+pub mod attach_target;
 pub mod callback;
 pub mod helper;
 pub mod helper_db;
@@ -25,6 +26,7 @@ pub mod special_types;
 pub mod subprog;
 
 pub use alu::*;
+pub use attach_target::*;
 pub use helper::*;
 pub use helper_db::*;
 pub use load_store::*;

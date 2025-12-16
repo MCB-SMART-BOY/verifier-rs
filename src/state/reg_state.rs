@@ -7,7 +7,7 @@
 
 use alloc::{format, vec::Vec};
 
-use crate::bounds::bounds::ScalarBounds;
+use crate::bounds::scalar::ScalarBounds;
 use crate::bounds::tnum::Tnum;
 use crate::core::error::{Result, VerifierError};
 use crate::core::types::*;
@@ -70,26 +70,30 @@ pub struct BpfRegState {
 }
 
 /// Liveness tracking for registers
-#[allow(missing_docs)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct RegLiveness {
+    /// Register was read on this path
     pub read: bool,
+    /// Register was written on this path
     pub written: bool,
+    /// Liveness analysis complete for this register
     pub done: bool,
 }
 
 /// Map information for PTR_TO_MAP_VALUE
-#[allow(missing_docs)]
 #[derive(Debug, Clone)]
 pub struct MapInfo {
+    /// Type of the BPF map
     pub map_type: BpfMapType,
+    /// Size of map keys in bytes
     pub key_size: u32,
+    /// Size of map values in bytes
     pub value_size: u32,
+    /// Maximum number of entries
     pub max_entries: u32,
 }
 
 /// BTF information for PTR_TO_BTF_ID
-#[allow(missing_docs)]
 #[derive(Debug, Clone, Default)]
 pub struct BtfInfo {
     /// The BTF type ID
@@ -132,26 +136,29 @@ impl BtfInfo {
 }
 
 /// Dynptr information
-#[allow(missing_docs)]
 #[derive(Debug, Clone, Copy, Default)]
 pub struct DynptrInfo {
+    /// Type of the dynamic pointer
     pub dynptr_type: BpfDynptrType,
+    /// Whether this is the first slot of a two-slot dynptr
     pub first_slot: bool,
 }
 
 /// Iterator information
-#[allow(missing_docs)]
 #[derive(Debug, Clone, Copy, Default)]
 pub struct IterInfo {
+    /// BTF type ID for the iterator
     pub btf_id: u32,
+    /// Current state of the iterator
     pub state: BpfIterState,
+    /// Nesting depth for nested iterators
     pub depth: u32,
 }
 
 /// IRQ flag information
-#[allow(missing_docs)]
 #[derive(Debug, Clone, Copy, Default)]
 pub struct IrqInfo {
+    /// Class of IRQ kfunc that created this state
     pub kfunc_class: IrqKfuncClass,
 }
 

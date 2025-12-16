@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: GPL-2.0
 //! Tests for bpf_verifier::check::sleepable
 
+use bpf_verifier::prelude::*;
 use bpf_verifier::check::sleepable::*;
 
-use super::*;
-    use crate::state::reference::ReferenceManager;
-    use crate::core::types::BpfRegType;
+    use bpf_verifier::state::reference::ReferenceManager;
+    use bpf_verifier::core::types::BpfRegType;
 
     #[test]
     fn test_sleepable_context() {

@@ -100,6 +100,7 @@ pub fn check_stack_write_fixed_off(
 /// initialized by this write (even though we don't know exactly what offsets
 /// are going to be written to). The idea is that we don't want the verifier to
 /// reject future reads that access slots written to through variable offsets.
+#[allow(clippy::too_many_arguments)]
 pub fn check_stack_write_var_off(
     state: &mut BpfVerifierState,
     dst_reg: &BpfRegState,
@@ -297,23 +298,29 @@ pub fn check_stack_read_fixed_off(
                     ));
                 }
                 // Return scalar with reduced precision
-                let mut result = BpfRegState::default();
-                result.reg_type = BpfRegType::ScalarValue;
+                let mut result = BpfRegState {
+                    reg_type: BpfRegType::ScalarValue,
+                    ..Default::default()
+                };
                 result.mark_unknown(false);
                 Ok(result)
             }
         }
         BpfStackSlotType::Misc => {
             // MISC data - return unknown scalar
-            let mut result = BpfRegState::default();
-            result.reg_type = BpfRegType::ScalarValue;
+            let mut result = BpfRegState {
+                reg_type: BpfRegType::ScalarValue,
+                ..Default::default()
+            };
             result.mark_unknown(false);
             Ok(result)
         }
         BpfStackSlotType::Zero => {
             // Zero slot - return known zero
-            let mut result = BpfRegState::default();
-            result.reg_type = BpfRegType::ScalarValue;
+            let mut result = BpfRegState {
+                reg_type: BpfRegType::ScalarValue,
+                ..Default::default()
+            };
             result.mark_known(0);
             Ok(result)
         }
@@ -321,8 +328,10 @@ pub fn check_stack_read_fixed_off(
             // Reading from dynptr slot
             if dst_regno == BPF_REG_0 as u8 {
                 // Allowed for certain operations
-                let mut result = BpfRegState::default();
-                result.reg_type = BpfRegType::ScalarValue;
+                let mut result = BpfRegState {
+                    reg_type: BpfRegType::ScalarValue,
+                    ..Default::default()
+                };
                 result.mark_unknown(false);
                 Ok(result)
             } else {
@@ -444,8 +453,10 @@ pub fn check_stack_read_var_off(
 
     // Variable offset reads always return unknown scalar
     // We can't know which exact slot was accessed
-    let mut result = BpfRegState::default();
-    result.reg_type = BpfRegType::ScalarValue;
+    let mut result = BpfRegState {
+        reg_type: BpfRegType::ScalarValue,
+        ..Default::default()
+    };
     result.mark_unknown(false);
     Ok(result)
 }

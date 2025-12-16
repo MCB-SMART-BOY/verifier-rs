@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: GPL-2.0
 //! Tests for bpf_verifier::check::kfunc
 
+use bpf_verifier::prelude::*;
 use bpf_verifier::check::kfunc::*;
 
-use super::*;
-    use crate::state::reg_state::BpfRegState;
-    use crate::btf::btf::{Btf, BtfType, BtfKind};
+    use bpf_verifier::state::reg_state::BpfRegState;
+    use bpf_verifier::btf::database::{Btf, BtfType, BtfKind};
 
     #[test]
     fn test_kfunc_registry() {

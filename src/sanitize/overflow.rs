@@ -428,7 +428,7 @@ fn is_overflow_safe(
 
                 match direction {
                     PtrAluDirection::Add => cur_off + (umax_offset as i64) <= value_size,
-                    PtrAluDirection::Sub => cur_off - ((-smin_offset) as i64) >= 0,
+                    PtrAluDirection::Sub => cur_off - (-smin_offset) >= 0,
                 }
             } else {
                 false
@@ -749,7 +749,7 @@ pub fn analyze_program_overflow(
 // ============================================================================
 
 /// Combined overflow and sanitization result
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct PtrAluSanitizeResult {
     /// Overflow analysis
     pub overflow: OverflowAnalysis,
@@ -759,17 +759,6 @@ pub struct PtrAluSanitizeResult {
     pub reject_reason: Option<String>,
     /// Combined patches (overflow + spectre)
     pub patches: Vec<BpfInsn>,
-}
-
-impl Default for PtrAluSanitizeResult {
-    fn default() -> Self {
-        Self {
-            overflow: OverflowAnalysis::default(),
-            reject: false,
-            reject_reason: None,
-            patches: Vec::new(),
-        }
-    }
 }
 
 /// Full pointer ALU sanitization check

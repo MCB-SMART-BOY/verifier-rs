@@ -1,9 +1,12 @@
 // SPDX-License-Identifier: GPL-2.0
 //! Tests for bpf_verifier::opt::misc_fixups
 
+extern crate alloc;
+use alloc::collections::BTreeMap;
+
+use bpf_verifier::prelude::*;
 use bpf_verifier::opt::misc_fixups::*;
 
-use super::*;
 
     #[test]
     fn test_is_helper_call() {
@@ -261,7 +264,7 @@ use super::*;
             BpfInsn::new(BPF_ALU64 | BPF_MOV | BPF_K, 0, 0, 0, 0),
             BpfInsn::new(BPF_JMP | BPF_EXIT, 0, 0, 0, 0),
         ];
-        let insn_aux = HashMap::new();
+        let insn_aux = BTreeMap::new();
         let mut subprogs = vec![];
         
         let result = remove_fastcall_spills_fills(&mut insns, &insn_aux, &mut subprogs);
@@ -284,7 +287,7 @@ use super::*;
             BpfInsn::new(BPF_JMP | BPF_EXIT, 0, 0, 0, 0),
         ];
         
-        let mut insn_aux = HashMap::new();
+        let mut insn_aux = BTreeMap::new();
         insn_aux.insert(1, InsnAuxData {
             fastcall_spills_num: 1,
             ..Default::default()
@@ -315,7 +318,7 @@ use super::*;
             BpfInsn::new(BPF_JMP | BPF_EXIT, 0, 0, 0, 0),
         ];
         
-        let mut insn_aux = HashMap::new();
+        let mut insn_aux = BTreeMap::new();
         insn_aux.insert(2, InsnAuxData {
             fastcall_spills_num: 2,
             ..Default::default()
@@ -345,7 +348,7 @@ use super::*;
             BpfInsn::new(BPF_JMP | BPF_EXIT, 0, 0, 0, 0),
         ];
         
-        let mut insn_aux = HashMap::new();
+        let mut insn_aux = BTreeMap::new();
         insn_aux.insert(1, InsnAuxData {
             fastcall_spills_num: 1,
             ..Default::default()
@@ -444,7 +447,7 @@ use super::*;
             BpfInsn::new(BPF_JMP | BPF_EXIT, 0, 0, 0, 0),
         ];
         
-        let mut insn_aux = HashMap::new();
+        let mut insn_aux = BTreeMap::new();
         let mut subprogs = vec![SubprogFastcallInfo {
             start: 0,
             end: 4,
@@ -474,7 +477,7 @@ use super::*;
             BpfInsn::new(BPF_JMP | BPF_EXIT, 0, 0, 0, 0),
         ];
         
-        let mut insn_aux = HashMap::new();
+        let mut insn_aux = BTreeMap::new();
         let mut subprogs = vec![SubprogFastcallInfo {
             start: 0,
             end: 6,
@@ -504,7 +507,7 @@ use super::*;
             BpfInsn::new(BPF_JMP | BPF_EXIT, 0, 0, 0, 0),
         ];
         
-        let mut insn_aux = HashMap::new();
+        let mut insn_aux = BTreeMap::new();
         let mut subprogs = vec![SubprogFastcallInfo {
             start: 0,
             end: 4,
@@ -530,7 +533,7 @@ use super::*;
             BpfInsn::new(BPF_JMP | BPF_EXIT, 0, 0, 0, 0),
         ];
         
-        let mut insn_aux = HashMap::new();
+        let mut insn_aux = BTreeMap::new();
         let mut subprogs = vec![SubprogFastcallInfo {
             start: 0,
             end: 4,
@@ -554,7 +557,7 @@ use super::*;
             BpfInsn::new(BPF_JMP | BPF_EXIT, 0, 0, 0, 0),
         ];
         
-        let mut insn_aux = HashMap::new();
+        let mut insn_aux = BTreeMap::new();
         let mut subprogs = vec![SubprogFastcallInfo {
             start: 0,
             end: 4,

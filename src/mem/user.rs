@@ -1119,7 +1119,7 @@ pub struct UserMemTaintTracker {
     /// Number of tainted loads
     tainted_load_count: u32,
     /// Number of sanitization points
-    sanitize_count: u32,
+    pub sanitize_count: u32,
 }
 
 impl UserMemTaintTracker {
@@ -1260,7 +1260,7 @@ pub fn check_user_mem_alignment(
         _ => 1, // Non-standard size, no alignment requirement
     };
 
-    if strict && (actual_off as u32) % alignment != 0 {
+    if strict && !(actual_off as u32).is_multiple_of(alignment) {
         return Err(VerifierError::InvalidMemoryAccess(format!(
             "misaligned user memory access: offset {} not aligned to {} bytes",
             actual_off, alignment
@@ -1271,9 +1271,9 @@ pub fn check_user_mem_alignment(
     if !reg.var_off.is_const() {
         // Variable offset should preserve alignment
         if reg.var_off.mask & (alignment as u64 - 1) != 0 {
-            return Err(VerifierError::InvalidMemoryAccess(format!(
-                "variable offset may cause misaligned user memory access"
-            )));
+            return Err(VerifierError::InvalidMemoryAccess(
+                "variable offset may cause misaligned user memory access".into(),
+            ));
         }
     }
 
@@ -1340,6 +1340,7 @@ pub fn validate_fault_behavior(behavior: UserMemFaultBehavior, ctx: &UserMemCont
 // ============================================================================
 
 /// Complete validation of user memory access
+#[allow(clippy::too_many_arguments)]
 pub fn validate_user_mem_access_complete(
     src_reg: &BpfRegState,
     dst_reg: Option<&BpfRegState>,

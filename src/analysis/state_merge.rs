@@ -26,7 +26,7 @@ use crate::state::verifier_state::{BpfFuncState, BpfVerifierState};
 #[derive(Debug, Clone)]
 pub enum MergeResult {
     /// States were successfully merged.
-    Merged(BpfVerifierState),
+    Merged(Box<BpfVerifierState>),
     /// States are incompatible and cannot be merged.
     Incompatible,
     /// First state already subsumes second (no merge needed).
@@ -78,7 +78,7 @@ pub fn merge_states(state1: &BpfVerifierState, state2: &BpfVerifierState) -> Mer
         }
     }
 
-    MergeResult::Merged(merged)
+    MergeResult::Merged(Box::new(merged))
 }
 
 /// Check if state1 subsumes state2 (state1 is more permissive).
@@ -118,7 +118,7 @@ fn func_subsumes(func1: &BpfFuncState, func2: &BpfFuncState) -> bool {
 }
 
 /// Check if reg1 subsumes reg2 (reg1's range contains reg2's).
-fn reg_subsumes(reg1: &BpfRegState, reg2: &BpfRegState) -> bool {
+pub fn reg_subsumes(reg1: &BpfRegState, reg2: &BpfRegState) -> bool {
     // Uninitialized subsumes everything
     if reg1.reg_type == BpfRegType::NotInit {
         return true;
@@ -214,7 +214,7 @@ fn regs_exact(reg1: &BpfRegState, reg2: &BpfRegState) -> bool {
 /// Implements precision-preserving merge following the kernel's logic:
 /// - If either register is precise, or if they are exact, preserve precision
 /// - Otherwise, widen to unknown for scalars
-fn merge_regs(reg1: &BpfRegState, reg2: &BpfRegState) -> Option<BpfRegState> {
+pub fn merge_regs(reg1: &BpfRegState, reg2: &BpfRegState) -> Option<BpfRegState> {
     // If either is uninitialized, result is uninitialized
     if reg1.reg_type == BpfRegType::NotInit || reg2.reg_type == BpfRegType::NotInit {
         return Some(BpfRegState::new_not_init());
@@ -290,7 +290,7 @@ fn merge_regs(reg1: &BpfRegState, reg2: &BpfRegState) -> Option<BpfRegState> {
 }
 
 /// Check if two register types are compatible for merging.
-fn types_compatible(t1: BpfRegType, t2: BpfRegType) -> bool {
+pub fn types_compatible(t1: BpfRegType, t2: BpfRegType) -> bool {
     if t1 == t2 {
         return true;
     }
@@ -309,7 +309,7 @@ fn types_compatible(t1: BpfRegType, t2: BpfRegType) -> bool {
 }
 
 /// Merge two tnums, taking the widest range.
-fn merge_tnums(t1: Tnum, t2: Tnum) -> Tnum {
+pub fn merge_tnums(t1: Tnum, t2: Tnum) -> Tnum {
     // The merged tnum must represent all values from both
     // This is done by OR-ing the masks and combining values
     let combined_mask = t1.mask | t2.mask;
@@ -551,7 +551,7 @@ pub fn merge_states_with_config(
         merge_references(&mut merged, state1, state2);
     }
 
-    MergeResult::Merged(merged)
+    MergeResult::Merged(Box::new(merged))
 }
 
 /// Merge function states with configuration.
@@ -594,7 +594,7 @@ fn merge_func_states_with_config(
 }
 
 /// Merge registers with configuration.
-fn merge_regs_with_config(
+pub fn merge_regs_with_config(
     reg1: &BpfRegState,
     reg2: &BpfRegState,
     config: &MergeConfig,
@@ -785,7 +785,7 @@ pub fn merge_states_batch(
     // Merge in remaining states
     for state in batch.iter().skip(1) {
         match merge_states_with_config(&result, state, config) {
-            MergeResult::Merged(merged) => result = merged,
+            MergeResult::Merged(merged) => result = *merged,
             MergeResult::FirstSubsumes => continue,
             MergeResult::SecondSubsumes => result = (*state).clone(),
             MergeResult::Incompatible => return None,
@@ -831,7 +831,7 @@ fn widen_func_state(func: &mut BpfFuncState, iteration: u32) {
 ///
 /// After several iterations, we widen bounds to infinity to ensure
 /// the analysis terminates.
-fn widen_scalar_reg(reg: &mut BpfRegState, iteration: u32) {
+pub fn widen_scalar_reg(reg: &mut BpfRegState, iteration: u32) {
     // After 3 iterations, start widening
     if iteration < 3 {
         return;
@@ -918,7 +918,7 @@ pub fn merge_return_states(
     let mut merged_return = return_states[0].clone();
     for ret_state in return_states.iter().skip(1) {
         match merge_states_with_config(&merged_return, ret_state, config) {
-            MergeResult::Merged(m) => merged_return = m,
+            MergeResult::Merged(m) => merged_return = *m,
             MergeResult::FirstSubsumes => continue,
             MergeResult::SecondSubsumes => merged_return = ret_state.clone(),
             MergeResult::Incompatible => return None,
@@ -1004,7 +1004,7 @@ impl StateMergeCache {
         for existing in cached.iter_mut() {
             if let MergeResult::Merged(merged) = merge_states_with_config(existing, &state, config)
             {
-                *existing = merged;
+                *existing = *merged;
                 self.stats.merges += 1;
                 return;
             }

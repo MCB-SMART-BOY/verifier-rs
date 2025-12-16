@@ -1756,8 +1756,10 @@ pub fn check_helper_call_with_ctx(
     let proto = get_helper_proto(func_id)
         .ok_or_else(|| VerifierError::InvalidHelperCall(format!("unknown helper {:?}", func_id)))?;
 
-    let mut meta = HelperCallMeta::default();
-    meta.func_id = func_id;
+    let mut meta = HelperCallMeta {
+        func_id,
+        ..Default::default()
+    };
 
     // Check sleepable context compatibility
     // This validates that sleepable helpers are only called from sleepable programs
@@ -2180,13 +2182,12 @@ fn get_ptr_size(reg: &BpfRegState) -> i32 {
             // Stack grows downward: FP points to top, valid range is [FP-512, FP)
             // If reg.off = -16, we can access 16 bytes (from -16 to 0)
             let stack_off = reg.off;
-            if stack_off >= 0 {
-                0 // Invalid: above frame pointer
-            } else if stack_off < -(MAX_BPF_STACK as i32) {
-                0 // Invalid: below stack limit
+            // Invalid if above frame pointer or below stack limit
+            if stack_off >= 0 || stack_off < -(MAX_BPF_STACK as i32) {
+                0
             } else {
                 // Accessible size is from current offset to 0 (frame pointer)
-                (-stack_off) as i32
+                -stack_off
             }
         }
         BpfRegType::PtrToMapValue => {
@@ -2352,7 +2353,7 @@ fn check_mem_size_bounds(
 }
 
 /// Check memory argument type
-fn check_mem_arg(reg: &BpfRegState, expected: &str) -> Result<()> {
+pub fn check_mem_arg(reg: &BpfRegState, expected: &str) -> Result<()> {
     match reg.reg_type {
         BpfRegType::PtrToStack
         | BpfRegType::PtrToMapValue

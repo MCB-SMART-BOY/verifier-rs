@@ -392,11 +392,12 @@ pub fn create_slice_result_reg(
     let parent_id = dynptr_id(parent_reg, stack)?;
     let parent_type = dynptr_get_type(parent_reg, stack)?;
 
-    let mut result = BpfRegState::default();
-
     // Slice returns PTR_TO_MEM or NULL
-    result.reg_type = BpfRegType::PtrToMem;
-    result.mem_size = len;
+    let mut result = BpfRegState {
+        reg_type: BpfRegType::PtrToMem,
+        mem_size: len,
+        ..Default::default()
+    };
 
     // Mark as maybe null for SKB/XDP without buffer
     if matches!(parent_type, BpfDynptrType::Skb | BpfDynptrType::Xdp) && buffer_reg.is_none() {
@@ -546,10 +547,12 @@ pub fn validate_dynptr_data(
         _ => {}
     }
 
-    let mut result = BpfRegState::default();
-    result.reg_type = BpfRegType::PtrToMem;
-    result.mem_size = len;
-    result.off = offset as i32;
+    let mut result = BpfRegState {
+        reg_type: BpfRegType::PtrToMem,
+        mem_size: len,
+        off: offset as i32,
+        ..Default::default()
+    };
 
     if !rdwr {
         result.type_flags.insert(BpfTypeFlag::MEM_RDONLY);
@@ -563,9 +566,10 @@ pub fn validate_dynptr_data(
 // ============================================================================
 
 /// State of a dynptr in the state machine
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum DynptrState {
     /// Not initialized
+    #[default]
     Uninit,
     /// Initialized and valid
     Valid,
@@ -577,12 +581,6 @@ pub enum DynptrState {
     Released,
     /// Invalid (error state)
     Invalid,
-}
-
-impl Default for DynptrState {
-    fn default() -> Self {
-        DynptrState::Uninit
-    }
 }
 
 /// State transition for nested dynptr operations

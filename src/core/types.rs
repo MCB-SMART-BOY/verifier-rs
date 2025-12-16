@@ -262,17 +262,23 @@ impl BpfStackSlotType {
 // ============================================================================
 
 /// Type of dynamic pointer
-#[allow(missing_docs)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[repr(u32)]
 pub enum BpfDynptrType {
+    /// Invalid or uninitialized dynptr
     #[default]
     Invalid = 0,
+    /// Local memory dynptr
     Local = 1,
+    /// Ringbuf dynptr
     Ringbuf = 2,
+    /// SKB (socket buffer) dynptr
     Skb = 3,
+    /// XDP dynptr
     Xdp = 4,
+    /// SKB metadata dynptr
     SkbMeta = 5,
+    /// File dynptr
     File = 6,
 }
 
@@ -301,13 +307,15 @@ impl BpfDynptrType {
 // ============================================================================
 
 /// State of an iterator
-#[allow(missing_docs)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[repr(u32)]
 pub enum BpfIterState {
+    /// Invalid or uninitialized iterator
     #[default]
     Invalid = 0,
+    /// Iterator is active and can produce values
     Active = 1,
+    /// Iterator has been fully consumed
     Drained = 2,
 }
 
@@ -343,11 +351,12 @@ impl RefStateType {
 // ============================================================================
 
 /// Class of IRQ kfunc
-#[allow(missing_docs)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum IrqKfuncClass {
+    /// Native IRQ handling kfuncs
     #[default]
     Native = 0,
+    /// Lock-related IRQ kfuncs
     Lock = 1,
 }
 
@@ -696,7 +705,8 @@ pub const BPF_FETCH: u32 = 0x01;
 ///
 /// These are the standard kernel helper functions available to BPF programs.
 /// Each variant corresponds to a `bpf_func_id` value in the kernel.
-#[allow(missing_docs)]
+/// The numeric values match those defined in `include/uapi/linux/bpf.h`.
+#[expect(missing_docs, reason = "Helper IDs are self-documenting and match kernel definitions")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u32)]
 #[derive(Default)]
@@ -1231,7 +1241,9 @@ pub struct BpfSubprogInfo {
 // ============================================================================
 
 /// BPF map types (from linux/bpf.h)
-#[allow(missing_docs)]
+///
+/// These map types correspond to `enum bpf_map_type` in the kernel.
+#[expect(missing_docs, reason = "Map types are self-documenting and match kernel definitions")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u32)]
 pub enum BpfMapType {
@@ -1276,7 +1288,9 @@ pub enum BpfMapType {
 // ============================================================================
 
 /// BPF program types (from linux/bpf.h)
-#[allow(missing_docs)]
+///
+/// These program types correspond to `enum bpf_prog_type` in the kernel.
+#[expect(missing_docs, reason = "Program types are self-documenting and match kernel definitions")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u32)]
 pub enum BpfProgType {

@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0
 //! Tests for bpf_verifier::check::helper_db
 
+use bpf_verifier::prelude::*;
 use bpf_verifier::check::helper_db::*;
 
-use super::*;
 
     #[test]
     fn test_lookup_helper() {

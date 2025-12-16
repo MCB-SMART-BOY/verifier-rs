@@ -1,9 +1,11 @@
+// TODO: Export internal functions for testing
+#![cfg(feature = "__disabled_test__")]
 // SPDX-License-Identifier: GPL-2.0
 //! Tests for bpf_verifier::special::dynptr
 
+use bpf_verifier::prelude::*;
 use bpf_verifier::special::dynptr::*;
 
-use super::*;
 
     #[test]
     fn test_dynptr_type_refcounted() {

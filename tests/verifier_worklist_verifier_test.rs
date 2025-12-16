@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0
 //! Tests for bpf_verifier::verifier::worklist_verifier
 
+use bpf_verifier::prelude::*;
 use bpf_verifier::verifier::worklist_verifier::*;
 
-use super::*;
 
     fn make_env(insns: Vec<BpfInsn>) -> VerifierEnv {
         VerifierEnv::new(insns, BpfProgType::SocketFilter, true).unwrap()

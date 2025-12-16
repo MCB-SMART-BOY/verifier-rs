@@ -262,7 +262,7 @@ impl StateCache {
 
     /// Get a mutable cached state by its ID
     pub fn get_by_id_mut(&mut self, id: StateId) -> Option<&mut CachedState> {
-        let (insn_idx, state_idx) = self.id_to_location.get(&id)?.clone();
+        let &(insn_idx, state_idx) = self.id_to_location.get(&id)?;
         self.cache.get_mut(&insn_idx)?.states.get_mut(state_idx)
     }
 
@@ -324,7 +324,7 @@ impl StateCache {
         while let Some(id) = current_id {
             // Get the state's location
             let location = match self.id_to_location.get(&id) {
-                Some(loc) => loc.clone(),
+                Some(&loc) => loc,
                 None => break, // State not found (might have been freed)
             };
 
@@ -1448,7 +1448,7 @@ impl ExplorationMetrics {
         if self.paths_explored == 0 {
             0
         } else {
-            ((self.paths_pruned as u64 * 100) / self.paths_explored as u64) as u32
+            (self.paths_pruned * 100 / self.paths_explored) as u32
         }
     }
 
@@ -1458,7 +1458,7 @@ impl ExplorationMetrics {
         if total == 0 {
             0
         } else {
-            ((self.paths_completed as u64 * 100) / total as u64) as u32
+            (self.paths_completed * 100 / total) as u32
         }
     }
 }
@@ -1615,8 +1615,8 @@ pub fn regs_exact(
     }
 
     // For scalars, check all bounds
-    if rold.reg_type == BpfRegType::ScalarValue {
-        if rold.umin_value != rcur.umin_value
+    if rold.reg_type == BpfRegType::ScalarValue
+        && (rold.umin_value != rcur.umin_value
             || rold.umax_value != rcur.umax_value
             || rold.smin_value != rcur.smin_value
             || rold.smax_value != rcur.smax_value
@@ -1624,23 +1624,21 @@ pub fn regs_exact(
             || rold.u32_max_value != rcur.u32_max_value
             || rold.s32_min_value != rcur.s32_min_value
             || rold.s32_max_value != rcur.s32_max_value
-            || rold.var_off != rcur.var_off
-        {
-            return false;
-        }
+            || rold.var_off != rcur.var_off)
+    {
+        return false;
     }
 
     // For pointers, check offset and ID
-    if rold.is_pointer() {
-        if rold.off != rcur.off {
-            return false;
-        }
-        // Check ID mapping for nullable pointers
-        if rold.type_flags.contains(BpfTypeFlag::PTR_MAYBE_NULL) {
-            if !idmap.check_ids(rcur.id, rold.id) {
-                return false;
-            }
-        }
+    if rold.is_pointer() && rold.off != rcur.off {
+        return false;
+    }
+    // Check ID mapping for nullable pointers
+    if rold.is_pointer()
+        && rold.type_flags.contains(BpfTypeFlag::PTR_MAYBE_NULL)
+        && !idmap.check_ids(rcur.id, rold.id)
+    {
+        return false;
     }
 
     true
@@ -1826,10 +1824,10 @@ fn check_iter_active(state: &BpfVerifierState) -> bool {
         };
 
         for slot in &func.stack.stack {
-            if slot.slot_type[BPF_REG_SIZE - 1] == BpfStackSlotType::Iter {
-                if slot.spilled_ptr.iter.state == BpfIterState::Active {
-                    return true;
-                }
+            if slot.slot_type[BPF_REG_SIZE - 1] == BpfStackSlotType::Iter
+                && slot.spilled_ptr.iter.state == BpfIterState::Active
+            {
+                return true;
             }
         }
     }
@@ -2539,7 +2537,7 @@ impl Default for MemoryPressureManager {
 // ============================================================================
 
 /// Eviction policy for state cache
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum EvictionPolicy {
     /// Least Recently Used - evict states that haven't been hit recently
     LRU,
@@ -2550,6 +2548,7 @@ pub enum EvictionPolicy {
     /// Age-based - evict oldest states first
     Age,
     /// Combined heuristic - uses multiple factors
+    #[default]
     Combined,
 }
 
@@ -2645,11 +2644,7 @@ impl EvictionPolicy {
     }
 }
 
-impl Default for EvictionPolicy {
-    fn default() -> Self {
-        EvictionPolicy::Combined
-    }
-}
+
 
 // ============================================================================
 // Adaptive Pruning
@@ -2940,7 +2935,7 @@ impl PruningController {
         if total == 0 {
             0
         } else {
-            ((self.stats.cache_hits as u64 * 100) / total as u64) as u32
+            (self.stats.cache_hits * 100 / total) as u32
         }
     }
 
@@ -2949,7 +2944,7 @@ impl PruningController {
         if self.stats.states_added == 0 {
             0
         } else {
-            ((self.stats.states_pruned as u64 * 100) / self.stats.states_added as u64) as u32
+            (self.stats.states_pruned * 100 / self.stats.states_added) as u32
         }
     }
 }

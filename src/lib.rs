@@ -32,12 +32,13 @@
 #![no_std]
 #![warn(missing_docs)]
 #![warn(rust_2018_idioms)]
-#![allow(unsafe_code)]
+// Unsafe code is required for FFI with kernel and low-level memory operations
+#![expect(unsafe_code, reason = "Required for kernel FFI and MaybeUninit usage")]
 
 extern crate alloc;
 
 // Re-export alloc types for internal use
-#[allow(unused_imports)]
+#[expect(unused_imports, reason = "Not all imports used in all configurations")]
 pub(crate) mod stdlib {
     pub use alloc::boxed::Box;
     pub use alloc::string::{String, ToString};
@@ -80,16 +81,57 @@ pub mod opt;
 /// Main verifier
 pub mod verifier;
 
+/// Kernel integration layer
+#[cfg(feature = "kernel")]
+pub mod kernel;
+
 // ============================================================================
 // Prelude - commonly used re-exports
 // ============================================================================
 
 /// Commonly used types and traits
 pub mod prelude {
+    // Core types and errors
     pub use crate::core::error::{Result, VerifierError};
-    pub use crate::core::types::{BpfInsn, BpfProgType, BpfRegType};
+    pub use crate::core::types::{
+        BpfArgType, BpfFuncId, BpfInsn, BpfMapType, BpfProgType, BpfRegType,
+        BpfRetType, BpfRetvalRange, BpfTypeFlag,
+    };
+    pub use crate::core::types::{
+        BPF_ADD, BPF_ALU, BPF_ALU64, BPF_AND, BPF_ARSH, BPF_ATOMIC, BPF_B,
+        BPF_CALL, BPF_DIV, BPF_DW, BPF_END, BPF_EXIT, BPF_H, BPF_IMM, BPF_JA,
+        BPF_JEQ, BPF_JGE, BPF_JGT, BPF_JLE, BPF_JLT, BPF_JMP, BPF_JMP32,
+        BPF_JNE, BPF_JSET, BPF_JSGE, BPF_JSGT, BPF_JSLE, BPF_JSLT, BPF_K,
+        BPF_LD, BPF_LDX, BPF_LSH, BPF_MEM, BPF_MOD, BPF_MOV, BPF_MUL, BPF_NEG,
+        BPF_OR, BPF_PSEUDO_CALL, BPF_PSEUDO_KFUNC_CALL, BPF_PSEUDO_MAP_FD,
+        BPF_REG_0, BPF_REG_1, BPF_REG_2, BPF_REG_3, BPF_REG_4, BPF_REG_5,
+        BPF_REG_6, BPF_REG_7, BPF_REG_8, BPF_REG_9, BPF_REG_FP, BPF_REG_SIZE,
+        BPF_RSH, BPF_ST, BPF_STX, BPF_SUB, BPF_W, BPF_X, BPF_XOR,
+        MAX_BPF_REG, MAX_BPF_STACK,
+    };
+
+    // State types
     pub use crate::state::reg_state::BpfRegState;
+    pub use crate::state::stack_state::BpfStackState;
     pub use crate::state::verifier_state::BpfVerifierState;
+    pub use crate::state::reference::{BpfReferenceState, ReferenceManager};
+    pub use crate::core::types::RefStateType;
+    pub use crate::core::types::BpfStackSlotType;
+
+    // Bounds types
+    pub use crate::bounds::tnum::Tnum;
+    pub use crate::bounds::scalar::ScalarBounds;
+
+    // BTF types
+    pub use crate::btf::{Btf, BpfCoreReloKind};
+
+    // Special types
+    pub use crate::core::types::BpfDynptrType;
+
+    // Atomic constants
+    pub use crate::core::types::BPF_FETCH;
+
+    // Verifier
     pub use crate::verifier::{MainVerifier, VerifierEnv};
 }
 

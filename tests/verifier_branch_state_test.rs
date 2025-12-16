@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-2.0
 //! Tests for bpf_verifier::verifier::branch_state
 
+use bpf_verifier::prelude::*;
 use bpf_verifier::verifier::branch_state::*;
 
-use super::*;
-    use crate::bounds::tnum::Tnum;
+    use bpf_verifier::bounds::tnum::Tnum;
 
     fn make_scalar_reg(umin: u64, umax: u64) -> BpfRegState {
         let mut reg = BpfRegState::new_not_init();

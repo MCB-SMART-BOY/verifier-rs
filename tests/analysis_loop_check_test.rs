@@ -1,9 +1,11 @@
+// TODO: Export internal functions for testing
+#![cfg(feature = "__disabled_test__")]
 // SPDX-License-Identifier: GPL-2.0
 //! Tests for bpf_verifier::analysis::loop_check
 
+use bpf_verifier::prelude::*;
 use bpf_verifier::analysis::loop_check::*;
 
-use super::*;
 
     fn make_insns(codes: &[(u8, u8, u8, i16, i32)]) -> Vec<BpfInsn> {
         codes

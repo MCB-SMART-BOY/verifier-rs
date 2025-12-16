@@ -9,62 +9,126 @@ use core::fmt;
 pub type Result<T> = core::result::Result<T, VerifierError>;
 
 /// Errors that can occur during BPF program verification
-#[allow(missing_docs)]
 #[derive(Debug, Clone)]
 pub enum VerifierError {
+    /// Program contains no instructions
     EmptyProgram,
+    /// Program exceeds maximum instruction count
     ProgramTooLarge(usize),
+    /// Instruction index out of bounds
     InvalidInsnIdx(usize),
+    /// Jump target outside program bounds (target, prog_len)
     JumpOutOfRange(usize, usize),
+    /// Jump lands on invalid instruction boundary
     InvalidJumpTarget(usize),
+    /// Execution falls through exit instruction
     FallThroughExit,
+    /// Verification complexity limit exceeded
     VerificationLimitExceeded(String),
+    /// Invalid or malformed instruction
     InvalidInstruction(usize),
+    /// Register number out of range
     InvalidRegister(u8),
+    /// Register used before initialization
     UninitializedRegister(u8),
+    /// Invalid memory access (stack, map, context, etc.)
     InvalidMemoryAccess(String),
+    /// Stack access out of bounds
     StackOutOfBounds(i32),
+    /// Pointer offset exceeds valid range
     InvalidOffset(i64),
+    /// Resource reference not released before exit
     UnreleasedReference(u32),
+    /// Invalid pointer arithmetic operation
     InvalidPointerArithmetic(String),
+    /// Program logic too complex to verify
     TooComplex(String),
+    /// Jump destination is invalid
     InvalidJumpDestination(i32),
+    /// Unbounded loop detected (back edge)
     BackEdgeDetected,
+    /// Dead code detected
     UnreachableInstruction(usize),
+    /// Invalid helper function call
     InvalidHelperCall(String),
-    TypeMismatch { expected: String, got: String },
+    /// Type mismatch in operation
+    TypeMismatch {
+        /// Expected type
+        expected: String,
+        /// Actual type found
+        got: String,
+    },
+    /// Invalid pointer type or state
     InvalidPointer(String),
+    /// Operation not permitted for this program type
     PermissionDenied(String),
+    /// Invalid map access
     InvalidMapAccess(String),
+    /// Invalid context access
     InvalidContextAccess(String),
+    /// Pointer value may be leaked to user space
     PointerLeak,
+    /// Division or modulo by zero
     DivisionByZero,
+    /// Invalid dynptr operation
     InvalidDynptr(String),
+    /// Invalid iterator state or operation
     InvalidIterator(String),
+    /// Invalid lock state
     InvalidLock(String),
+    /// Invalid IRQ state
     InvalidIrq(String),
+    /// Resource limit exceeded
     ResourceLimitExceeded(String),
+    /// Complexity limit exceeded
     ComplexityLimitExceeded(String),
+    /// Internal verifier error
     Internal(String),
+    /// Memory allocation failed
     OutOfMemory,
+    /// Invalid BTF data
     InvalidBtf(String),
+    /// Invalid kfunc call
     InvalidKfunc(String),
+    /// Operation not allowed for program type
     InvalidProgramType(String),
+    /// Speculative execution safety violation
     SpeculativeViolation,
+    /// Bounds check failed
     BoundsCheckFailed(String),
+    /// Too many subprograms
     TooManySubprogs,
+    /// Function call stack too deep
     CallStackOverflow,
+    /// Stack usage exceeds limit
     StackOverflow(i32),
+    /// Invalid subprogram
     InvalidSubprog(String),
+    /// Expected pointer type in register
     ExpectedPointer(u8),
+    /// Invalid instruction encoding size
     InvalidInsnSize(usize),
+    /// Invalid atomic operation
     InvalidAtomicOp(u32),
+    /// Invalid verifier state
     InvalidState(String),
+    /// Invalid function call
     InvalidFunctionCall(String),
-    OutOfBounds { offset: i32, size: i32 },
+    /// Memory access out of bounds
+    OutOfBounds {
+        /// Access offset
+        offset: i32,
+        /// Access size
+        size: i32,
+    },
+    /// Infinite loop detected at instruction
     InfiniteLoop(usize),
+    /// Invalid pointer comparison
     InvalidPointerComparison(String),
+    /// Invalid return value
     InvalidReturnValue(String),
+    /// Program attach failed
+    AttachFailed(String),
 }
 
 impl fmt::Display for VerifierError {
@@ -147,6 +211,7 @@ impl fmt::Display for VerifierError {
                 write!(f, "invalid pointer comparison: {}", s)
             }
             VerifierError::InvalidReturnValue(s) => write!(f, "invalid return value: {}", s),
+            VerifierError::AttachFailed(s) => write!(f, "attach failed: {}", s),
         }
     }
 }

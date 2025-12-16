@@ -12,7 +12,7 @@ use alloc::{format, string::String, vec, vec::Vec};
 
 use alloc::collections::BTreeMap as HashMap;
 
-use crate::btf::btf::BtfFuncProto;
+use crate::btf::database::BtfFuncProto;
 use crate::check::sleepable::check_kfunc_sleepable_compat;
 use crate::core::error::{Result, VerifierError};
 use crate::core::types::*;
@@ -1332,7 +1332,7 @@ fn check_trusted_arg(
 }
 
 /// Check if argument index is a release argument for this kfunc
-fn is_release_arg(desc: &KfuncDesc, arg_idx: usize) -> bool {
+pub fn is_release_arg(desc: &KfuncDesc, arg_idx: usize) -> bool {
     // First argument of release kfuncs is typically the release arg
     desc.flags.is_release && arg_idx == 0
 }
@@ -1365,7 +1365,7 @@ fn check_release_arg(
 pub fn check_kfunc_arg_btf_type(
     reg: &crate::state::reg_state::BpfRegState,
     expected: &KfuncArgDesc,
-    btf: &crate::btf::btf::Btf,
+    btf: &crate::btf::database::Btf,
 ) -> Result<()> {
     match expected.arg_type {
         KfuncArgType::Scalar => {
@@ -1544,7 +1544,7 @@ pub fn check_kfunc_arg_btf_type(
 }
 
 /// Check if two BTF types are compatible
-fn btf_types_compatible(btf: &crate::btf::btf::Btf, got: u32, expected: u32) -> bool {
+pub fn btf_types_compatible(btf: &crate::btf::database::Btf, got: u32, expected: u32) -> bool {
     if got == expected {
         return true;
     }
@@ -2184,13 +2184,11 @@ pub fn check_kfunc_conditional_constraints(
 /// Check RCU protection for kfunc arguments
 pub fn check_kfunc_rcu_protection(state: &BpfVerifierState, desc: &KfuncDesc) -> Result<()> {
     // If kfunc requires RCU protection
-    if desc.flags.rcu_protected {
-        if state.refs.active_rcu_locks == 0 {
-            return Err(VerifierError::InvalidKfunc(format!(
-                "kfunc '{}' requires RCU read lock, but none held",
-                desc.name
-            )));
-        }
+    if desc.flags.rcu_protected && state.refs.active_rcu_locks == 0 {
+        return Err(VerifierError::InvalidKfunc(format!(
+            "kfunc '{}' requires RCU read lock, but none held",
+            desc.name
+        )));
     }
 
     // Check arguments that require RCU protection

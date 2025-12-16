@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0
 //! Tests for bpf_verifier::check::sdiv
 
+use bpf_verifier::prelude::*;
 use bpf_verifier::check::sdiv::*;
 
-use super::*;
 
     #[test]
     fn test_divisor_not_zero() {

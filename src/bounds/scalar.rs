@@ -256,8 +256,8 @@ impl ScalarBounds {
         Ok(result)
     }
 
-    /// Add operation
-    fn add(&self, other: &ScalarBounds, is_64: bool) -> Result<ScalarBounds> {
+    /// Add operation - computes bounds for `self + other`
+    pub fn add(&self, other: &ScalarBounds, is_64: bool) -> Result<ScalarBounds> {
         let mut result = ScalarBounds::unknown();
         result.var_off = self.var_off.add(other.var_off);
 
@@ -287,7 +287,7 @@ impl ScalarBounds {
     }
 
     /// Subtract operation
-    fn sub(&self, other: &ScalarBounds, is_64: bool) -> Result<ScalarBounds> {
+    pub fn sub(&self, other: &ScalarBounds, is_64: bool) -> Result<ScalarBounds> {
         let mut result = ScalarBounds::unknown();
         result.var_off = self.var_off.sub(other.var_off);
 
@@ -318,7 +318,7 @@ impl ScalarBounds {
     }
 
     /// Multiply operation
-    fn mul(&self, other: &ScalarBounds, is_64: bool) -> Result<ScalarBounds> {
+    pub fn mul(&self, other: &ScalarBounds, is_64: bool) -> Result<ScalarBounds> {
         let mut result = ScalarBounds::unknown();
 
         // For multiplication, if both are known constants
@@ -342,7 +342,7 @@ impl ScalarBounds {
     }
 
     /// Division operation
-    fn div(&self, other: &ScalarBounds, is_64: bool) -> Result<ScalarBounds> {
+    pub fn div(&self, other: &ScalarBounds, is_64: bool) -> Result<ScalarBounds> {
         // Check for division by zero
         if other.umax_value == 0 {
             return Err(VerifierError::DivisionByZero);
@@ -368,7 +368,7 @@ impl ScalarBounds {
     }
 
     /// OR operation
-    fn or(&self, other: &ScalarBounds) -> ScalarBounds {
+    pub fn or(&self, other: &ScalarBounds) -> ScalarBounds {
         let mut result = ScalarBounds::unknown();
         result.var_off = self.var_off.or(other.var_off);
 
@@ -379,7 +379,7 @@ impl ScalarBounds {
     }
 
     /// AND operation
-    fn and(&self, other: &ScalarBounds) -> ScalarBounds {
+    pub fn and(&self, other: &ScalarBounds) -> ScalarBounds {
         let mut result = ScalarBounds::unknown();
         result.var_off = self.var_off.and(other.var_off);
 
@@ -391,7 +391,7 @@ impl ScalarBounds {
     }
 
     /// Left shift operation
-    fn lsh(&self, other: &ScalarBounds, is_64: bool) -> Result<ScalarBounds> {
+    pub fn lsh(&self, other: &ScalarBounds, is_64: bool) -> Result<ScalarBounds> {
         let mut result = ScalarBounds::unknown();
         let max_shift = if is_64 { 63 } else { 31 };
 
@@ -418,7 +418,7 @@ impl ScalarBounds {
     }
 
     /// Right shift operation (logical)
-    fn rsh(&self, other: &ScalarBounds, is_64: bool) -> Result<ScalarBounds> {
+    pub fn rsh(&self, other: &ScalarBounds, is_64: bool) -> Result<ScalarBounds> {
         let mut result = ScalarBounds::unknown();
         let max_shift = if is_64 { 63 } else { 31 };
 
@@ -442,7 +442,7 @@ impl ScalarBounds {
     }
 
     /// Arithmetic right shift
-    fn arsh(&self, other: &ScalarBounds, is_64: bool) -> Result<ScalarBounds> {
+    pub fn arsh(&self, other: &ScalarBounds, is_64: bool) -> Result<ScalarBounds> {
         let mut result = ScalarBounds::unknown();
         let max_shift = if is_64 { 63 } else { 31 };
 
@@ -502,7 +502,7 @@ impl ScalarBounds {
     }
 
     /// XOR operation
-    fn xor(&self, other: &ScalarBounds) -> ScalarBounds {
+    pub fn xor(&self, other: &ScalarBounds) -> ScalarBounds {
         let mut result = ScalarBounds::unknown();
         result.var_off = self.var_off.xor(other.var_off);
 
@@ -515,7 +515,7 @@ impl ScalarBounds {
     }
 
     /// Truncate bounds to 32-bit
-    fn truncate_to_32(&mut self) {
+    pub fn truncate_to_32(&mut self) {
         // 64-bit bounds become 32-bit
         self.umin_value &= u32::MAX as u64;
         self.umax_value = (self.umax_value & u32::MAX as u64).min(u32::MAX as u64);

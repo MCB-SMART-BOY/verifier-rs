@@ -37,7 +37,7 @@ use crate::check::jump::{
 };
 use crate::check::kfunc::{check_kfunc_call, KfuncRegistry};
 use crate::mem::memory::check_mem_access_with_ctx;
-use crate::sanitize::sanitize::{
+use crate::sanitize::spectre::{
     sanitize_check_bounds, sanitize_mark_insn_seen, sanitize_needed, sanitize_ptr_alu,
     SanitizeState,
 };
@@ -508,7 +508,7 @@ impl<'a> MainVerifier<'a> {
             for j in (i + 1)..self.env.subprogs.len() {
                 let a = &self.env.subprogs[i];
                 let b = &self.env.subprogs[j];
-                if (a.start < b.end && a.end > b.start) || (b.start < a.end && b.end > a.start) {
+                if a.start < b.end && a.end > b.start {
                     return Err(VerifierError::InvalidSubprog(format!(
                         "subprogs {} and {} overlap",
                         i, j
@@ -2205,7 +2205,7 @@ pub fn verify_program(
     let mut env = VerifierEnv::new(insns, prog_type, allow_ptr_leaks)?;
 
     // Mark prune points
-    mark_prune_points(&mut env);
+    mark_prune_points_from_cfg(&mut env);
 
     let mut verifier = MainVerifier::new(&mut env);
     verifier.verify()
@@ -2218,7 +2218,7 @@ pub fn verify_program(
 /// - Back edges (loop headers)
 /// - Join points (targets of multiple branches)
 /// - After calls
-fn mark_prune_points(env: &mut VerifierEnv) {
+pub fn mark_prune_points_from_cfg(env: &mut VerifierEnv) {
     // Mark all jump targets as prune points
     for (idx, insn) in env.insns.iter().enumerate() {
         let class = insn.class();

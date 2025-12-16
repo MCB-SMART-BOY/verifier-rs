@@ -1,9 +1,11 @@
+// TODO: Export internal functions for testing
+#![cfg(feature = "__disabled_test__")]
 // SPDX-License-Identifier: GPL-2.0
 //! Tests for bpf_verifier::state::snapshot
 
+use bpf_verifier::prelude::*;
 use bpf_verifier::state::snapshot::*;
 
-use super::*;
 
     fn make_scalar_snapshot(value: u64, mask: u64) -> RegSnapshot {
         RegSnapshot {

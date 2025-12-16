@@ -428,7 +428,7 @@ impl StateCache {
         if total == 0 {
             0
         } else {
-            ((self.hits as u64 * 100) / total as u64) as u32
+            ((self.hits * 100) / total) as u32
         }
     }
 }

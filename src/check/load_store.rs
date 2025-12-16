@@ -17,6 +17,15 @@ use crate::state::reg_state::BpfRegState;
 use crate::state::spill_fill::{SpillFillTracker, StackReadResult};
 use crate::state::verifier_state::BpfVerifierState;
 
+/// Parameters for setting load result in destination register.
+struct LoadResultParams<'a> {
+    src: &'a BpfRegState,
+    off: i32,
+    size: u32,
+    loaded_type: BpfRegType,
+    is_ldsx: bool,
+}
+
 /// Check a memory load instruction (BPF_LDX)
 ///
 /// This verifies that:
@@ -72,16 +81,14 @@ pub fn check_load_mem(
     )?;
 
     // Set destination register based on loaded value
-    set_load_result(
-        state,
-        dst_reg,
-        &src,
-        insn.off as i32,
+    let params = LoadResultParams {
+        src: &src,
+        off: insn.off as i32,
         size,
         loaded_type,
         is_ldsx,
-        insn_idx,
-    )?;
+    };
+    set_load_result(state, dst_reg, &params)?;
 
     // Mark destination as written
     if let Some(dst) = state.reg_mut(dst_reg) {
@@ -232,18 +239,13 @@ pub fn check_store_imm(
 fn set_load_result(
     state: &mut BpfVerifierState,
     dst_reg: usize,
-    src: &BpfRegState,
-    off: i32,
-    size: u32,
-    loaded_type: BpfRegType,
-    is_ldsx: bool,
-    _insn_idx: usize,
+    params: &LoadResultParams<'_>,
 ) -> Result<()> {
     // For stack loads, we need to call fill_reg before borrowing dst mutably
     // to avoid borrow conflicts
-    let stack_fill_result = if loaded_type == BpfRegType::PtrToStack {
-        let stack_off = src.off + off;
-        Some(SpillFillTracker::fill_reg(state, stack_off, size as usize)?)
+    let stack_fill_result = if params.loaded_type == BpfRegType::PtrToStack {
+        let stack_off = params.src.off + params.off;
+        Some(SpillFillTracker::fill_reg(state, stack_off, params.size as usize)?)
     } else {
         None
     };
@@ -257,15 +259,15 @@ fn set_load_result(
     dst.id = 0;
     dst.off = 0;
 
-    match loaded_type {
+    match params.loaded_type {
         BpfRegType::ScalarValue => {
             // Loading a scalar - set bounds based on size
-            if is_ldsx {
+            if params.is_ldsx {
                 // Sign-extending load
-                set_signed_bounds_from_size(dst, size);
+                set_signed_bounds_from_size(dst, params.size);
             } else {
                 // Zero-extending load
-                set_unsigned_bounds_from_size(dst, size);
+                set_unsigned_bounds_from_size(dst, params.size);
             }
         }
         BpfRegType::PtrToStack => {
@@ -274,15 +276,15 @@ fn set_load_result(
                 Some(r) => r,
                 None => {
                     // Default to initialized scalar if no fill result
-                    if is_ldsx {
-                        set_signed_bounds_from_size(dst, size);
+                    if params.is_ldsx {
+                        set_signed_bounds_from_size(dst, params.size);
                     } else {
-                        set_unsigned_bounds_from_size(dst, size);
+                        set_unsigned_bounds_from_size(dst, params.size);
                     }
                     return Ok(());
                 }
             };
-            let stack_off = src.off + off;
+            let stack_off = params.src.off + params.off;
 
             match fill_result {
                 StackReadResult::SpilledReg(spilled) => {
@@ -294,16 +296,16 @@ fn set_load_result(
                 StackReadResult::Zero => {
                     // Stack slot contains zero
                     dst.mark_known(0);
-                    if size < 8 {
-                        set_unsigned_bounds_from_size(dst, size);
+                    if params.size < 8 {
+                        set_unsigned_bounds_from_size(dst, params.size);
                     }
                 }
                 StackReadResult::Initialized => {
                     // Initialized but not a full spill - unknown scalar with size bounds
-                    if is_ldsx {
-                        set_signed_bounds_from_size(dst, size);
+                    if params.is_ldsx {
+                        set_signed_bounds_from_size(dst, params.size);
                     } else {
-                        set_unsigned_bounds_from_size(dst, size);
+                        set_unsigned_bounds_from_size(dst, params.size);
                     }
                 }
                 StackReadResult::Uninitialized => {
@@ -324,7 +326,7 @@ fn set_load_result(
         BpfRegType::PtrToMapValue => {
             // Loading from map value - might be a kptr
             // For now, treat as scalar
-            set_unsigned_bounds_from_size(dst, size);
+            set_unsigned_bounds_from_size(dst, params.size);
         }
         _ => {
             // Default: unknown scalar

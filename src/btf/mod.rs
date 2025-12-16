@@ -12,14 +12,14 @@
 //! - **CO-RE**: Compile Once - Run Everywhere relocation support
 //! - **Verifier Integration**: BTF-aware verification with source mapping
 
-pub mod btf;
+pub mod database;
 pub mod core;
 pub mod func_info;
 pub mod integration;
 pub mod validation;
 
-// Re-export from btf module (core BTF database)
-pub use btf::Btf;
+// Re-export from database module (core BTF database)
+pub use database::Btf;
 
 // Re-export from core module (CO-RE support)
 pub use core::{

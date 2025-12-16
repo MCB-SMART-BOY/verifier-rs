@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0
 //! Tests for bpf_verifier::opt::dead_code
 
+use bpf_verifier::prelude::*;
 use bpf_verifier::opt::dead_code::*;
 
-use super::*;
 
     #[test]
     fn test_all_reachable() {

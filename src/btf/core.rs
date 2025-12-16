@@ -17,7 +17,7 @@ use alloc::{format, string::String, vec::Vec};
 
 use alloc::collections::BTreeMap as HashMap;
 
-use super::btf::{Btf, BtfKind, BtfMember, BtfType, MAX_RESOLVE_DEPTH};
+use super::database::{Btf, BtfKind, BtfMember, BtfType, MAX_RESOLVE_DEPTH};
 use super::func_info::{BpfCoreRelo, BpfCoreReloKind};
 use crate::core::error::{Result, VerifierError};
 use crate::core::types::*;
@@ -57,7 +57,7 @@ pub enum CoreAccessComponent {
 }
 
 /// Result of a CO-RE relocation
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct CoreReloResult {
     /// Whether relocation succeeded
     pub success: bool,
@@ -67,17 +67,6 @@ pub struct CoreReloResult {
     pub exists: bool,
     /// Error message if failed
     pub error: Option<String>,
-}
-
-impl Default for CoreReloResult {
-    fn default() -> Self {
-        Self {
-            success: false,
-            new_val: 0,
-            exists: false,
-            error: None,
-        }
-    }
 }
 
 /// CO-RE relocation context
@@ -112,7 +101,7 @@ impl<'a> CoreReloContext<'a> {
             .get_string(relo.access_str_off)
             .ok_or_else(|| VerifierError::InvalidBtf("invalid access string offset".into()))?;
 
-        let local_spec = self.parse_access_spec(self.local_btf, relo.type_id, &access_str)?;
+        let local_spec = self.parse_access_spec(self.local_btf, relo.type_id, access_str)?;
 
         // Find matching type in target BTF
         let target_type_id = self.find_target_type(relo.type_id)?;
@@ -428,7 +417,7 @@ impl<'a> CoreReloContext<'a> {
     }
 
     /// Relocate: field exists
-    fn relo_field_exists(
+    pub fn relo_field_exists(
         &self,
         local_spec: &CoreAccessSpec,
         target_type_id: Option<u32>,
@@ -544,7 +533,7 @@ impl<'a> CoreReloContext<'a> {
     ///
     /// For bitfields, calculates how many bits to left-shift to align the field
     /// to the MSB of the containing load size.
-    fn relo_field_lshift(
+    pub fn relo_field_lshift(
         &self,
         local_spec: &CoreAccessSpec,
         target_type_id: Option<u32>,
@@ -595,7 +584,7 @@ impl<'a> CoreReloContext<'a> {
     ///
     /// For bitfields, calculates how many bits to right-shift after left-shifting
     /// to extract the field value.
-    fn relo_field_rshift(
+    pub fn relo_field_rshift(
         &self,
         local_spec: &CoreAccessSpec,
         target_type_id: Option<u32>,
@@ -727,7 +716,7 @@ impl<'a> CoreReloContext<'a> {
     }
 
     /// Relocate: type exists
-    fn relo_type_exists(&mut self, local_type_id: u32) -> Result<CoreReloResult> {
+    pub fn relo_type_exists(&mut self, local_type_id: u32) -> Result<CoreReloResult> {
         let exists = self.find_target_type(local_type_id)?.is_some();
 
         Ok(CoreReloResult {
@@ -739,7 +728,7 @@ impl<'a> CoreReloContext<'a> {
     }
 
     /// Relocate: type size
-    fn relo_type_size(&mut self, local_type_id: u32) -> Result<CoreReloResult> {
+    pub fn relo_type_size(&mut self, local_type_id: u32) -> Result<CoreReloResult> {
         match self.find_target_type(local_type_id)? {
             Some(target_id) => {
                 let size = self.target_btf.type_size(target_id).unwrap_or(0);
@@ -760,7 +749,7 @@ impl<'a> CoreReloContext<'a> {
     }
 
     /// Relocate: type matches
-    fn relo_type_matches(
+    pub fn relo_type_matches(
         &mut self,
         local_type_id: u32,
         target_type_id: Option<u32>,
@@ -825,7 +814,7 @@ impl<'a> CoreReloContext<'a> {
     }
 
     /// Relocate: enum value exists
-    fn relo_enumval_exists(
+    pub fn relo_enumval_exists(
         &self,
         local_spec: &CoreAccessSpec,
         target_type_id: Option<u32>,

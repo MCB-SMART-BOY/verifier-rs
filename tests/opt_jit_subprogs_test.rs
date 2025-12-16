@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0
 //! Tests for bpf_verifier::opt::jit_subprogs
 
+use bpf_verifier::prelude::*;
 use bpf_verifier::opt::jit_subprogs::*;
 
-use super::*;
 
     fn make_call_insn(offset: i32) -> BpfInsn {
         BpfInsn::new(BPF_JMP | BPF_CALL, 0, BPF_PSEUDO_CALL, 0, offset)

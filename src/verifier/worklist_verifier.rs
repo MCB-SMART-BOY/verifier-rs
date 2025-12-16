@@ -5,6 +5,8 @@
 //! This module provides an advanced verifier that uses worklist-based
 //! exploration with integrated state merging and range refinement.
 
+use alloc::boxed::Box;
+
 use crate::core::error::{Result, VerifierError};
 use crate::core::insn::{check_alu_op, check_call, check_exit, check_ld_imm64};
 use crate::core::log::{log_branch, log_insn};
@@ -26,7 +28,7 @@ pub enum VerifyResult {
     /// Jump to a specific instruction.
     Jump(usize),
     /// Conditional branch with refined states.
-    Branch(BranchStateResult, usize, usize),
+    Branch(Box<BranchStateResult>, usize, usize),
     /// Program exits.
     Exit,
     /// Call to subprogram.
@@ -450,7 +452,7 @@ impl<'a> WorklistVerifier<'a> {
             handle_null_check(&mut fallthrough, insn, false);
         }
 
-        Ok(VerifyResult::Branch(branch_result, fall_through, target))
+        Ok(VerifyResult::Branch(Box::new(branch_result), fall_through, target))
     }
 
     /// Check jump target validity.

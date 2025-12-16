@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0
 //! Tests for bpf_verifier::analysis::state_merge
 
+use bpf_verifier::prelude::*;
 use bpf_verifier::analysis::state_merge::*;
 
-use super::*;
 
     fn make_scalar(umin: u64, umax: u64) -> BpfRegState {
         let mut reg = BpfRegState::new_not_init();
@@ -136,7 +136,7 @@ use super::*;
     fn test_merge_stats() {
         let mut stats = MergeStats::new();
 
-        stats.record(&MergeResult::Merged(BpfVerifierState::new()));
+        stats.record(&MergeResult::Merged(Box::new(BpfVerifierState::new())));
         stats.record(&MergeResult::Incompatible);
         stats.record(&MergeResult::FirstSubsumes);
         stats.record(&MergeResult::SecondSubsumes);

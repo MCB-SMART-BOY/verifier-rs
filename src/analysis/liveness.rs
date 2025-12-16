@@ -456,9 +456,9 @@ pub fn propagate_precision_liveness(
     // If destination is precise, source(s) must be precise too
     if let Some(dst) = effects.reg_written {
         if precise_regs[dst as usize] {
-            for r in 0..MAX_BPF_REG {
+            for (r, precise) in precise_regs.iter_mut().enumerate().take(MAX_BPF_REG) {
                 if effects.reads_reg(r as u8) {
-                    precise_regs[r] = true;
+                    *precise = true;
                 }
             }
         }

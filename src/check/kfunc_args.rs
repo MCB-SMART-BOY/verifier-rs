@@ -500,7 +500,7 @@ pub fn validate_arg(
     // Check alignment if required
     if constraint.aligned && constraint.alignment > 0 && reg.is_ptr() && reg.off != 0 {
         let off = reg.off.unsigned_abs();
-        if off % constraint.alignment != 0 {
+        if !off.is_multiple_of(constraint.alignment) {
             return ArgValidationResult::failure(
                 arg_idx,
                 format!(

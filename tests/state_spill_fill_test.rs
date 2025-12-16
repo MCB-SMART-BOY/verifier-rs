@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-2.0
 //! Tests for bpf_verifier::state::spill_fill
 
+use bpf_verifier::prelude::*;
 use bpf_verifier::state::spill_fill::*;
 
-use super::*;
-    use crate::bounds::tnum::Tnum;
+    use bpf_verifier::bounds::tnum::Tnum;
 
     fn make_state() -> BpfVerifierState {
         let mut state = BpfVerifierState::new();

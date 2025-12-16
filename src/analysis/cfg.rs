@@ -356,9 +356,7 @@ impl ControlFlowGraph {
             let successors = self.get_insn_successors(insns, idx);
             let mut found_unvisited = false;
 
-            for i in succ_idx..successors.len() {
-                let succ = successors[i];
-
+            for (i, &succ) in successors.iter().enumerate().skip(succ_idx) {
                 if in_stack.contains(&succ) {
                     // Back edge found - succ is a loop header
                     loop_headers.insert(succ);
@@ -726,7 +724,7 @@ impl Verifier {
             .cur_state
             .reg(src_reg)
             .ok_or(VerifierError::InvalidRegister(src_reg as u8))?;
-        if !src.is_pointer() && !(src.reg_type == BpfRegType::ScalarValue && src.is_const()) {
+        if !(src.is_pointer() || (src.reg_type == BpfRegType::ScalarValue && src.is_const())) {
             return Err(VerifierError::InvalidMemoryAccess(
                 "LDX source must be a pointer".into(),
             ));

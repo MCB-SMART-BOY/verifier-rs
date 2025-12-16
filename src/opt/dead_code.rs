@@ -520,7 +520,7 @@ fn adjust_jumps_after_removal(insns: &mut [BpfInsn], removed_idx: usize) {
                 }
 
                 // For CALL with BPF_PSEUDO_CALL, adjust the immediate (relative target)
-                if op == BPF_CALL && insn.src_reg == BPF_PSEUDO_CALL as u8 {
+                if op == BPF_CALL && insn.src_reg == BPF_PSEUDO_CALL {
                     let target = (idx as i64 + insn.imm as i64 + 1) as usize;
 
                     if idx < removed_idx && target > removed_idx {
@@ -534,7 +534,7 @@ fn adjust_jumps_after_removal(insns: &mut [BpfInsn], removed_idx: usize) {
                 }
 
                 // Regular jumps use offset field
-                if op == BPF_JA || (op >= BPF_JEQ && op <= BPF_JSLE) || op == BPF_JCOND {
+                if op == BPF_JA || (BPF_JEQ..=BPF_JSLE).contains(&op) || op == BPF_JCOND {
                     let target = (idx as i64 + insn.off as i64 + 1) as usize;
 
                     if idx < removed_idx && target > removed_idx {
@@ -550,15 +550,15 @@ fn adjust_jumps_after_removal(insns: &mut [BpfInsn], removed_idx: usize) {
             }
             BPF_LD => {
                 // LD_IMM64 pseudo instructions with BPF_PSEUDO_FUNC need adjustment
-                if insn.code == (BPF_LD | BPF_IMM | BPF_DW) {
-                    if insn.src_reg == BPF_PSEUDO_FUNC as u8 {
-                        let target = (idx as i64 + insn.imm as i64 + 1) as usize;
+                if insn.code == (BPF_LD | BPF_IMM | BPF_DW)
+                    && insn.src_reg == BPF_PSEUDO_FUNC
+                {
+                    let target = (idx as i64 + insn.imm as i64 + 1) as usize;
 
-                        if idx < removed_idx && target > removed_idx {
-                            insn.imm -= 1;
-                        } else if idx > removed_idx && target <= removed_idx {
-                            insn.imm += 1;
-                        }
+                    if idx < removed_idx && target > removed_idx {
+                        insn.imm -= 1;
+                    } else if idx > removed_idx && target <= removed_idx {
+                        insn.imm += 1;
                     }
                 }
             }

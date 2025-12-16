@@ -165,6 +165,7 @@ pub fn process_conditional_branch(state: &BpfVerifierState, insn: &BpfInsn) -> B
 }
 
 /// Apply range refinements to a state based on branch outcome.
+#[allow(clippy::too_many_arguments)]
 fn apply_refinements(
     state: &mut BpfVerifierState,
     dst_reg: usize,

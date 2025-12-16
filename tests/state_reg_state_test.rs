@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0
 //! Tests for bpf_verifier::state::reg_state
 
+use bpf_verifier::prelude::*;
 use bpf_verifier::state::reg_state::*;
 
-use super::*;
 
     #[test]
     fn test_new_not_init() {

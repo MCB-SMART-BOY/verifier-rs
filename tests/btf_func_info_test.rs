@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0
 //! Tests for bpf_verifier::btf::func_info
 
+use bpf_verifier::prelude::*;
 use bpf_verifier::btf::func_info::*;
 
-use super::*;
 
     #[test]
     fn test_func_info_basic() {

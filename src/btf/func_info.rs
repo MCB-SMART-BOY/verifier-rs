@@ -10,7 +10,7 @@ use alloc::{format, string::String, vec::Vec};
 
 use alloc::collections::BTreeMap as HashMap;
 
-use super::btf::{Btf, BtfKind};
+use super::database::{Btf, BtfKind};
 use crate::core::error::{Result, VerifierError};
 use crate::core::types::*;
 
@@ -414,13 +414,11 @@ impl<'a> BtfInfoVerifier<'a> {
                 .unwrap_or(0);
 
             // Line info must be ordered within each subprog
-            if subprog == prev_subprog {
-                if i > 0 && info.insn_off < prev_off {
-                    return Err(VerifierError::InvalidBtf(format!(
-                        "line_info[{}].insn_off {} < previous {} in same subprog",
-                        i, info.insn_off, prev_off
-                    )));
-                }
+            if subprog == prev_subprog && i > 0 && info.insn_off < prev_off {
+                return Err(VerifierError::InvalidBtf(format!(
+                    "line_info[{}].insn_off {} < previous {} in same subprog",
+                    i, info.insn_off, prev_off
+                )));
             }
 
             prev_off = info.insn_off;

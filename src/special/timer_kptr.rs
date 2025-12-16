@@ -204,7 +204,7 @@ pub fn check_timer_arg(reg: &BpfRegState, regno: u8) -> Result<(u32, u32)> {
     let timer_off = reg.off as u32;
 
     // Timer should be 8-byte aligned
-    if timer_off % 8 != 0 {
+    if !timer_off.is_multiple_of(8) {
         return Err(VerifierError::InvalidPointer(format!(
             "R{} timer offset {} is not 8-byte aligned",
             regno, timer_off
@@ -228,13 +228,14 @@ pub fn check_timer_init_map_arg(timer_reg: &BpfRegState, map_reg: &BpfRegState) 
     // This prevents:
     //   timer = bpf_map_lookup_elem(inner_map1);
     //   bpf_timer_init(timer, inner_map2);  // WRONG!
-    if timer_reg.map_uid != 0 && map_reg.map_uid != 0 {
-        if timer_reg.map_uid != map_reg.map_uid {
-            return Err(VerifierError::InvalidState(format!(
-                "timer map_uid={} doesn't match map argument map_uid={}",
-                timer_reg.map_uid, map_reg.map_uid
-            )));
-        }
+    if timer_reg.map_uid != 0
+        && map_reg.map_uid != 0
+        && timer_reg.map_uid != map_reg.map_uid
+    {
+        return Err(VerifierError::InvalidState(format!(
+            "timer map_uid={} doesn't match map argument map_uid={}",
+            timer_reg.map_uid, map_reg.map_uid
+        )));
     }
 
     Ok(())
@@ -382,13 +383,11 @@ pub fn check_special_field_overlap(
 /// Check callback registration for timer
 pub fn check_timer_callback_registration(timer_map_uid: u32, callback_map_uid: u32) -> Result<()> {
     // The callback's context (map) must match the timer's map
-    if timer_map_uid != 0 && callback_map_uid != 0 {
-        if timer_map_uid != callback_map_uid {
-            return Err(VerifierError::InvalidState(format!(
-                "timer callback map_uid={} doesn't match timer map_uid={}",
-                callback_map_uid, timer_map_uid
-            )));
-        }
+    if timer_map_uid != 0 && callback_map_uid != 0 && timer_map_uid != callback_map_uid {
+        return Err(VerifierError::InvalidState(format!(
+            "timer callback map_uid={} doesn't match timer map_uid={}",
+            callback_map_uid, timer_map_uid
+        )));
     }
     Ok(())
 }

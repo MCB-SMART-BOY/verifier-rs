@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0
 //! Tests for bpf_verifier::check::alu
 
+use bpf_verifier::prelude::*;
 use bpf_verifier::check::alu::*;
 
-use super::*;
 
     fn make_state_with_reg(regno: usize, val: u64) -> BpfVerifierState {
         let mut state = BpfVerifierState::new();

@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-2.0
 //! Tests for bpf_verifier::analysis::prune
 
+use bpf_verifier::prelude::*;
 use bpf_verifier::analysis::prune::*;
 
-use super::*;
-    use crate::bounds::tnum::Tnum;
+    use bpf_verifier::bounds::tnum::Tnum;
 
     /// Check if cur's scalar range is subsumed by old's (test helper)
     fn scalar_ranges_subsumed(cur: &BpfRegState, old: &BpfRegState) -> bool {
@@ -277,7 +277,7 @@ use super::*;
 
     #[test]
     fn test_regs_exact_scalars() {
-        use crate::analysis::states_equal::IdMap;
+        use bpf_verifier::analysis::states_equal::IdMap;
         
         let mut idmap = IdMap::new();
         
@@ -299,7 +299,7 @@ use super::*;
 
     #[test]
     fn test_maybe_widen_reg_precise() {
-        use crate::analysis::states_equal::IdMap;
+        use bpf_verifier::analysis::states_equal::IdMap;
         
         let mut idmap = IdMap::new();
         
@@ -319,7 +319,7 @@ use super::*;
 
     #[test]
     fn test_maybe_widen_reg_imprecise() {
-        use crate::analysis::states_equal::IdMap;
+        use bpf_verifier::analysis::states_equal::IdMap;
         
         let mut idmap = IdMap::new();
         
@@ -343,7 +343,7 @@ use super::*;
 
     #[test]
     fn test_maybe_widen_reg_exact_match() {
-        use crate::analysis::states_equal::IdMap;
+        use bpf_verifier::analysis::states_equal::IdMap;
         
         let mut idmap = IdMap::new();
         

@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0
 //! Tests for bpf_verifier::bounds::range_refine
 
+use bpf_verifier::prelude::*;
 use bpf_verifier::bounds::range_refine::*;
 
-use super::*;
 
     fn make_scalar(umin: u64, umax: u64) -> BpfRegState {
         let mut reg = BpfRegState::new_not_init();

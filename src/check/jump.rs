@@ -270,11 +270,7 @@ pub fn prove_condition_from_bounds(
         } else {
             imm as i64 as u64
         };
-        let sval = if is_jmp32 {
-            imm as i32 as i64
-        } else {
-            imm as i64
-        };
+        let sval = i64::from(imm);
         (val, val, sval, sval)
     };
 

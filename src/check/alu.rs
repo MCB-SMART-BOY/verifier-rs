@@ -418,23 +418,20 @@ fn adjust_ptr_min_max_vals(
     let off_reg = &scalar_state;
 
     // Check for potential overflow/underflow
-    let smin_ptr = ptr_reg.smin_value;
-    let smax_ptr = ptr_reg.smax_value;
-    let smin_off = off_reg.smin_value;
-    let smax_off = off_reg.smax_value;
-    let umin_off = off_reg.umin_value;
-    let umax_off = off_reg.umax_value;
+    let bounds = OffsetBounds {
+        smin_ptr: ptr_reg.smin_value,
+        smax_ptr: ptr_reg.smax_value,
+        smin_off: off_reg.smin_value,
+        smax_off: off_reg.smax_value,
+        umin_off: off_reg.umin_value,
+        umax_off: off_reg.umax_value,
+    };
 
     // Compute new bounds
     let (new_smin, new_smax, new_umin, new_umax, new_off, new_var_off) = if opcode == BPF_ADD {
-        compute_ptr_add_bounds(
-            ptr_reg, off_reg, smin_ptr, smax_ptr, smin_off, smax_off, umin_off, umax_off,
-        )
+        compute_ptr_add_bounds(ptr_reg, off_reg, &bounds)
     } else {
-        compute_ptr_sub_bounds(
-            ptr_reg, off_reg, smin_ptr, smax_ptr, smin_off, smax_off, umin_off, umax_off,
-            ptr_is_dst,
-        )
+        compute_ptr_sub_bounds(ptr_reg, off_reg, &bounds, ptr_is_dst)
     };
 
     // Update destination register
@@ -473,24 +470,23 @@ fn handle_ptr_sub_ptr(
     allow_ptr_leaks: bool,
 ) -> Result<()> {
     // Both pointers must be of the same type
-    if dst_state.reg_type != src_state.reg_type {
-        if !allow_ptr_leaks {
-            return Err(VerifierError::InvalidPointerArithmetic(
-                "pointer subtraction requires same pointer types".into(),
-            ));
-        }
+    if dst_state.reg_type != src_state.reg_type && !allow_ptr_leaks {
+        return Err(VerifierError::InvalidPointerArithmetic(
+            "pointer subtraction requires same pointer types".into(),
+        ));
     }
 
     // For packet pointers, they should have the same base
     if matches!(
         dst_state.reg_type,
         BpfRegType::PtrToPacket | BpfRegType::PtrToPacketMeta
-    ) {
-        if dst_state.id != src_state.id && dst_state.id != 0 && src_state.id != 0 {
-            return Err(VerifierError::InvalidPointerArithmetic(
-                "packet pointer subtraction requires same packet".into(),
-            ));
-        }
+    ) && dst_state.id != src_state.id
+        && dst_state.id != 0
+        && src_state.id != 0
+    {
+        return Err(VerifierError::InvalidPointerArithmetic(
+            "packet pointer subtraction requires same packet".into(),
+        ));
     }
 
     // Result is a scalar (the difference)
@@ -555,24 +551,29 @@ fn check_ptr_arith_allowed(ptr_reg: &BpfRegState, allow_ptr_leaks: bool) -> Resu
     Ok(())
 }
 
-/// Compute bounds for pointer + scalar
-fn compute_ptr_add_bounds(
-    ptr_reg: &BpfRegState,
-    off_reg: &BpfRegState,
+/// Offset bounds for pointer arithmetic
+struct OffsetBounds {
     smin_ptr: i64,
     smax_ptr: i64,
     smin_off: i64,
     smax_off: i64,
     umin_off: u64,
     umax_off: u64,
+}
+
+/// Compute bounds for pointer + scalar
+fn compute_ptr_add_bounds(
+    ptr_reg: &BpfRegState,
+    off_reg: &BpfRegState,
+    bounds: &OffsetBounds,
 ) -> (i64, i64, u64, u64, i32, Tnum) {
     // Check for constant offset
     if off_reg.is_const() {
         let off = off_reg.const_value() as i64;
         let new_off = ptr_reg.off.saturating_add(off as i32);
         return (
-            smin_ptr,
-            smax_ptr,
+            bounds.smin_ptr,
+            bounds.smax_ptr,
             ptr_reg.umin_value,
             ptr_reg.umax_value,
             new_off,
@@ -584,8 +585,8 @@ fn compute_ptr_add_bounds(
     let new_var_off = ptr_reg.var_off.add(off_reg.var_off);
 
     // Check for overflow in signed addition
-    let (new_smin, smin_of) = smin_ptr.overflowing_add(smin_off);
-    let (new_smax, smax_of) = smax_ptr.overflowing_add(smax_off);
+    let (new_smin, smin_of) = bounds.smin_ptr.overflowing_add(bounds.smin_off);
+    let (new_smax, smax_of) = bounds.smax_ptr.overflowing_add(bounds.smax_off);
 
     let (new_smin, new_smax) = if smin_of || smax_of {
         (i64::MIN, i64::MAX)
@@ -594,8 +595,8 @@ fn compute_ptr_add_bounds(
     };
 
     // Unsigned bounds
-    let (new_umin, umin_of) = ptr_reg.umin_value.overflowing_add(umin_off);
-    let (new_umax, umax_of) = ptr_reg.umax_value.overflowing_add(umax_off);
+    let (new_umin, umin_of) = ptr_reg.umin_value.overflowing_add(bounds.umin_off);
+    let (new_umax, umax_of) = ptr_reg.umax_value.overflowing_add(bounds.umax_off);
 
     let (new_umin, new_umax) = if umin_of || umax_of {
         (0, u64::MAX)
@@ -617,12 +618,7 @@ fn compute_ptr_add_bounds(
 fn compute_ptr_sub_bounds(
     ptr_reg: &BpfRegState,
     off_reg: &BpfRegState,
-    smin_ptr: i64,
-    smax_ptr: i64,
-    smin_off: i64,
-    smax_off: i64,
-    umin_off: u64,
-    umax_off: u64,
+    bounds: &OffsetBounds,
     ptr_is_dst: bool,
 ) -> (i64, i64, u64, u64, i32, Tnum) {
     if !ptr_is_dst {
@@ -635,8 +631,8 @@ fn compute_ptr_sub_bounds(
         let off = off_reg.const_value() as i64;
         let new_off = ptr_reg.off.saturating_sub(off as i32);
         return (
-            smin_ptr,
-            smax_ptr,
+            bounds.smin_ptr,
+            bounds.smax_ptr,
             ptr_reg.umin_value,
             ptr_reg.umax_value,
             new_off,
@@ -649,8 +645,8 @@ fn compute_ptr_sub_bounds(
 
     // Signed bounds: ptr - off
     // min = ptr_min - off_max, max = ptr_max - off_min
-    let (new_smin, smin_of) = smin_ptr.overflowing_sub(smax_off);
-    let (new_smax, smax_of) = smax_ptr.overflowing_sub(smin_off);
+    let (new_smin, smin_of) = bounds.smin_ptr.overflowing_sub(bounds.smax_off);
+    let (new_smax, smax_of) = bounds.smax_ptr.overflowing_sub(bounds.smin_off);
 
     let (new_smin, new_smax) = if smin_of || smax_of {
         (i64::MIN, i64::MAX)
@@ -659,13 +655,9 @@ fn compute_ptr_sub_bounds(
     };
 
     // Unsigned bounds
-    let new_umin = if ptr_reg.umin_value >= umax_off {
-        ptr_reg.umin_value - umax_off
-    } else {
-        0
-    };
-    let new_umax = if ptr_reg.umax_value >= umin_off && umin_off != 0 {
-        ptr_reg.umax_value - umin_off
+    let new_umin = ptr_reg.umin_value.saturating_sub(bounds.umax_off);
+    let new_umax = if ptr_reg.umax_value >= bounds.umin_off && bounds.umin_off != 0 {
+        ptr_reg.umax_value - bounds.umin_off
     } else {
         u64::MAX
     };

@@ -26,6 +26,8 @@ default = []
 verbose = []
 # Enable statistics collection
 stats = []
+# Enable kernel integration (for building as kernel module)
+kernel = []
 
 [profile.release]
 panic = "abort"

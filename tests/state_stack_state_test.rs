@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0
 //! Tests for bpf_verifier::state::stack_state
 
+use bpf_verifier::prelude::*;
 use bpf_verifier::state::stack_state::*;
 
-use super::*;
 
     #[test]
     fn test_offset_to_slot() {

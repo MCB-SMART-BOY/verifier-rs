@@ -274,8 +274,8 @@ impl Worklist {
             match result {
                 MergeResult::Merged(merged) => {
                     self.stats.items_merged += 1;
-                    *existing = merged.clone();
-                    return Some(merged);
+                    *existing = (*merged).clone();
+                    return Some(*merged);
                 }
                 MergeResult::FirstSubsumes => {
                     self.stats.items_merged += 1;

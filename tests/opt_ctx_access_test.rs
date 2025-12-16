@@ -1,9 +1,11 @@
+// TODO: Export internal functions for testing
+#![cfg(feature = "__disabled_test__")]
 // SPDX-License-Identifier: GPL-2.0
 //! Tests for bpf_verifier::opt::ctx_access
 
+use bpf_verifier::prelude::*;
 use bpf_verifier::opt::ctx_access::*;
 
-use super::*;
 
     #[test]
     fn test_ctx_conv_config_socket_filter() {

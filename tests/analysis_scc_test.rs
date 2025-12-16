@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0
 //! Tests for bpf_verifier::analysis::scc
 
+use bpf_verifier::prelude::*;
 use bpf_verifier::analysis::scc::*;
 
-use super::*;
 
     fn make_insns(codes: &[(u8, i16)]) -> Vec<BpfInsn> {
         codes.iter().map(|&(code, off)| {

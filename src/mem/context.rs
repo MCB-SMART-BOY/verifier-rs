@@ -307,7 +307,7 @@ pub fn check_ctx_access(
     let access_off = access_off as u32;
 
     // Check alignment
-    if !rules.allow_unaligned && access_off % size != 0 {
+    if !rules.allow_unaligned && !access_off.is_multiple_of(size) {
         return Err(VerifierError::InvalidContextAccess(format!(
             "unaligned context access at offset {}",
             access_off

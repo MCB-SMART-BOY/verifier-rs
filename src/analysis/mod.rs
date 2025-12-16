@@ -32,5 +32,6 @@ pub use race_detector::{
     MemoryLocation, RaceDetector, RaceSeverity,
 };
 pub use states_equal::{
-    states_equal, states_equal_with_config, states_equal_with_idmap, CompareConfig, IdMap,
+    states_equal, states_equal_with_config, states_equal_with_idmap, stackslot_safe,
+    CompareConfig, IdMap,
 };

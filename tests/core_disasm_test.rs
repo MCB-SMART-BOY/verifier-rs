@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0
 //! Tests for bpf_verifier::core::disasm
 
+use bpf_verifier::prelude::*;
 use bpf_verifier::core::disasm::*;
 
-use super::*;
 
     #[test]
     fn test_disasm_alu() {

@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0
 //! Tests for bpf_verifier::check::prog_type
 
+use bpf_verifier::prelude::*;
 use bpf_verifier::check::prog_type::*;
 
-use super::*;
 
     #[test]
     fn test_xdp_info() {

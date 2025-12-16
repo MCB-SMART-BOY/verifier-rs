@@ -10,7 +10,7 @@
 
 use alloc::vec::Vec;
 
-use crate::bounds::bounds::ScalarBounds;
+use crate::bounds::scalar::ScalarBounds;
 use crate::core::error::{Result, VerifierError};
 use crate::core::types::*;
 use crate::state::reg_state::BpfRegState;
@@ -69,7 +69,7 @@ pub fn check_sdiv32_safety(dividend: &BpfRegState, divisor: &BpfRegState) -> Sdi
 }
 
 /// Check if divisor might be zero
-fn divisor_might_be_zero(divisor: &BpfRegState) -> bool {
+pub fn divisor_might_be_zero(divisor: &BpfRegState) -> bool {
     if divisor.reg_type != BpfRegType::ScalarValue {
         return true; // Non-scalar, unknown
     }
@@ -110,7 +110,7 @@ fn divisor_might_be_zero_32(divisor: &BpfRegState) -> bool {
 }
 
 /// Check if 64-bit signed division might overflow (INT64_MIN / -1)
-fn might_overflow_sdiv64(dividend: &BpfRegState, divisor: &BpfRegState) -> bool {
+pub fn might_overflow_sdiv64(dividend: &BpfRegState, divisor: &BpfRegState) -> bool {
     if dividend.reg_type != BpfRegType::ScalarValue || divisor.reg_type != BpfRegType::ScalarValue {
         return true;
     }

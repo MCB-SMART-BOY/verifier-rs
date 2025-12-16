@@ -8,7 +8,7 @@
 
 #![allow(missing_docs)] // Sanitization internals
 
-use alloc::{format, string::String, vec::Vec};
+use alloc::{format, string::String, vec, vec::Vec};
 
 use crate::core::error::{Result, VerifierError};
 use crate::core::types::*;
@@ -400,7 +400,7 @@ pub fn analyze_spectre_v1(
 
     // Check if this is a conditional jump
     let opcode = insn.code & 0xf0;
-    if opcode < 0x50 || opcode > 0xd0 {
+    if !(0x50..=0xd0).contains(&opcode) {
         return None; // Not a conditional jump
     }
 
@@ -627,7 +627,7 @@ pub fn analyze_program_spectre(
         // Analyze for Spectre v1 in conditional jumps
         if config.mitigate_v1 {
             let opcode = insn.code & 0xf0;
-            if opcode >= 0x50 && opcode <= 0xd0 {
+            if (0x50..=0xd0).contains(&opcode) {
                 // This is a conditional jump - mark as potential Spectre v1 source
                 results.push(SpectreAnalysis {
                     variant: SpectreVariant::V1BoundsCheckBypass,
@@ -961,46 +961,17 @@ pub fn compute_array_mask(array_size: u64) -> u64 {
 /// Inserts instructions to mask a pointer after arithmetic to prevent
 /// speculative out-of-bounds access.
 pub fn generate_ptr_mask_insns(ptr_reg: u8, scratch_reg: u8, limit: u64) -> Vec<BpfInsn> {
-    let mut insns = Vec::new();
-
     // Strategy: Use arithmetic right shift to create a mask
     // if ptr > limit, mask becomes 0, otherwise ~0
-
-    // r_scratch = ptr - limit
-    insns.push(BpfInsn::new(
-        BPF_ALU64 | BPF_MOV | BPF_X,
-        scratch_reg,
-        ptr_reg,
-        0,
-        0,
-    ));
-    insns.push(BpfInsn::new(
-        BPF_ALU64 | BPF_SUB | BPF_K,
-        scratch_reg,
-        0,
-        0,
-        limit as i32,
-    ));
-
-    // r_scratch >>= 63 (arithmetic: fills with sign bit)
-    insns.push(BpfInsn::new(
-        BPF_ALU64 | BPF_ARSH | BPF_K,
-        scratch_reg,
-        0,
-        0,
-        63,
-    ));
-
-    // ptr &= r_scratch
-    insns.push(BpfInsn::new(
-        BPF_ALU64 | BPF_AND | BPF_X,
-        ptr_reg,
-        scratch_reg,
-        0,
-        0,
-    ));
-
-    insns
+    vec![
+        // r_scratch = ptr - limit
+        BpfInsn::new(BPF_ALU64 | BPF_MOV | BPF_X, scratch_reg, ptr_reg, 0, 0),
+        BpfInsn::new(BPF_ALU64 | BPF_SUB | BPF_K, scratch_reg, 0, 0, limit as i32),
+        // r_scratch >>= 63 (arithmetic: fills with sign bit)
+        BpfInsn::new(BPF_ALU64 | BPF_ARSH | BPF_K, scratch_reg, 0, 0, 63),
+        // ptr &= r_scratch
+        BpfInsn::new(BPF_ALU64 | BPF_AND | BPF_X, ptr_reg, scratch_reg, 0, 0),
+    ]
 }
 
 /// Check if JIT can bypass sanitization for this access
@@ -1193,7 +1164,7 @@ impl SpeculativePathTracker {
 
     /// Exit a branch (branch resolved)
     pub fn exit_branch(&mut self) {
-        if let Some(_) = self.branch_stack.pop() {
+        if self.branch_stack.pop().is_some() {
             self.speculation_depth = self.speculation_depth.saturating_sub(1);
         }
     }
@@ -1662,7 +1633,7 @@ pub fn analyze_program_spectre_v1(
         match class {
             0x05 | 0x06 => {
                 // JMP, JMP32
-                if opcode >= 0x10 && opcode <= 0xd0 && opcode != 0x00 {
+                if (0x10..=0xd0).contains(&opcode) && opcode != 0x00 {
                     // Conditional jump
                     analyzer.analyze_branch(state, insn, idx, true);
                 }
@@ -1671,7 +1642,7 @@ pub fn analyze_program_spectre_v1(
                 // ALU64, ALU
                 analyzer.analyze_alu(insn, idx);
             }
-            0x01 | 0x02 | 0x03 => {
+            0x01..=0x03 => {
                 // LDX, ST, STX
                 analyzer.analyze_memory_access(state, insn, idx);
             }

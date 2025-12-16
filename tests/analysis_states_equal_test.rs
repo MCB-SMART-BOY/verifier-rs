@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-2.0
 //! Tests for bpf_verifier::analysis::states_equal
 
+use bpf_verifier::prelude::*;
 use bpf_verifier::analysis::states_equal::*;
 
-use super::*;
-    use crate::bounds::tnum::Tnum;
+    use bpf_verifier::bounds::tnum::Tnum;
 
     #[test]
     fn test_idmap_basic() {

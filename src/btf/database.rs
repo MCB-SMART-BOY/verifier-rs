@@ -572,18 +572,15 @@ pub fn check_type_compat(btf: &Btf, src_id: u32, dst_id: u32) -> BtfTypeCompat {
                 let src_target = btf.resolve_type(src.type_ref);
                 let dst_target = btf.resolve_type(dst.type_ref);
 
-                match (src_target, dst_target) {
-                    (Some(s), Some(d)) => {
-                        // void* accepts any pointer
-                        if s.kind == BtfKind::Unknown || d.kind == BtfKind::Unknown {
-                            return BtfTypeCompat::Compatible;
-                        }
-                        // Same struct/union
-                        if s.kind == d.kind && s.name == d.name {
-                            return BtfTypeCompat::Exact;
-                        }
+                if let (Some(s), Some(d)) = (src_target, dst_target) {
+                    // void* accepts any pointer
+                    if s.kind == BtfKind::Unknown || d.kind == BtfKind::Unknown {
+                        return BtfTypeCompat::Compatible;
                     }
-                    _ => {}
+                    // Same struct/union
+                    if s.kind == d.kind && s.name == d.name {
+                        return BtfTypeCompat::Exact;
+                    }
                 }
             }
             BtfKind::Struct | BtfKind::Union => {
@@ -1219,10 +1216,10 @@ pub fn validate_enum_value(btf: &Btf, enum_id: u32, value: i64) -> Result<(), St
     }
 
     // For regular enum (32-bit signed)
-    if ty.kind == BtfKind::Enum {
-        if value < i32::MIN as i64 || value > i32::MAX as i64 {
-            return Err(format!("value {} out of range for 32-bit enum", value));
-        }
+    if ty.kind == BtfKind::Enum
+        && (value < i64::from(i32::MIN) || value > i64::from(i32::MAX))
+    {
+        return Err(format!("value {} out of range for 32-bit enum", value));
     }
 
     Ok(())

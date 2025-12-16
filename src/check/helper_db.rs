@@ -123,10 +123,18 @@ impl HelperDef {
     }
 
     /// Create helper with program type restrictions
-    #[allow(dead_code)]
     const fn for_progs(mut self, progs: &'static [BpfProgType]) -> Self {
         self.allowed_prog_types = progs;
+        self.flags.restricted = true;
         self
+    }
+
+    /// Check if this helper is allowed for a given program type
+    pub fn is_allowed_for(&self, prog_type: BpfProgType) -> bool {
+        if self.allowed_prog_types.is_empty() {
+            return true; // No restrictions
+        }
+        self.allowed_prog_types.contains(&prog_type)
     }
 
     /// Convert to HelperProto
@@ -184,7 +192,6 @@ const MAP_VAL_NULL: BpfRetType = BpfRetType::PtrToMapValueOrNull;
 const SOCK_NULL: BpfRetType = BpfRetType::PtrToSocketOrNull;
 const ALLOC_NULL: BpfRetType = BpfRetType::PtrToAllocMemOrNull;
 const MEM_NULL: BpfRetType = BpfRetType::PtrToMemOrNull;
-#[allow(dead_code)]
 const BTF_NULL: BpfRetType = BpfRetType::PtrToBtfIdOrNull;
 
 /// Complete database of BPF helper functions
@@ -681,25 +688,29 @@ pub static HELPER_DB: &[HelperDef] = &[
         "xdp_adjust_head",
         INT,
         args(CTX, ANY, NONE, NONE, NONE),
-    ),
+    )
+    .for_progs(&[BpfProgType::Xdp]),
     HelperDef::new(
         BpfFuncId::XdpAdjustTail,
         "xdp_adjust_tail",
         INT,
         args(CTX, ANY, NONE, NONE, NONE),
-    ),
+    )
+    .for_progs(&[BpfProgType::Xdp]),
     HelperDef::new(
         BpfFuncId::XdpAdjustMeta,
         "xdp_adjust_meta",
         INT,
         args(CTX, ANY, NONE, NONE, NONE),
-    ),
+    )
+    .for_progs(&[BpfProgType::Xdp]),
     HelperDef::new(
         BpfFuncId::XdpOutput,
         "xdp_output",
         INT,
         args(CTX, MAP, ANY, MEM, SIZE),
-    ),
+    )
+    .for_progs(&[BpfProgType::Xdp]),
     // =========== Socket Lookup ===========
     HelperDef::new(
         BpfFuncId::SkLookupTcp,
@@ -1341,11 +1352,11 @@ pub static HELPER_DB: &[HelperDef] = &[
         MEM_NULL,
         args(BTF, NONE, NONE, NONE, NONE),
     ),
-    // Current task BTF
+    // Current task BTF - returns pointer to task_struct BTF type
     HelperDef::new(
         BpfFuncId::GetCurrentTaskBtf,
         "get_current_task_btf",
-        MEM_NULL,
+        BTF_NULL,
         NO_ARGS,
     ),
     // Bprm opts
@@ -1370,11 +1381,11 @@ pub static HELPER_DB: &[HelperDef] = &[
         args(MEMRD, SIZE, ANY, ANY, NONE),
     )
     .with_flags(HelperFlags::sleepable()),
-    // Task pt_regs
+    // Task pt_regs - returns pointer to pt_regs BTF type
     HelperDef::new(
         BpfFuncId::TaskPtRegs,
         "task_pt_regs",
-        MEM_NULL,
+        BTF_NULL,
         args(BTF, NONE, NONE, NONE, NONE),
     ),
     // Trace vprintk

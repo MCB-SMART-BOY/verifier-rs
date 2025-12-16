@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0
 //! Tests for bpf_verifier::special::map_ops
 
+use bpf_verifier::prelude::*;
 use bpf_verifier::special::map_ops::*;
 
-use super::*;
 
     #[test]
     fn test_map_capabilities() {
@@ -101,7 +101,7 @@ use super::*;
 
     #[test]
     fn test_adjust_map_value_ptr() {
-        use crate::state::reg_state::MapInfo;
+        use bpf_verifier::state::reg_state::MapInfo;
         
         let mut reg = BpfRegState::new_not_init();
         reg.reg_type = BpfRegType::PtrToMapValue;
@@ -174,7 +174,7 @@ use super::*;
 
     #[test]
     fn test_propagate_map_ptr_info() {
-        use crate::state::reg_state::MapInfo;
+        use bpf_verifier::state::reg_state::MapInfo;
         
         let mut src = BpfRegState::new_not_init();
         src.reg_type = BpfRegType::PtrToMapValue;

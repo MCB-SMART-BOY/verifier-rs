@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: GPL-2.0
 //! Tests for bpf_verifier::special::map_type_check
 
+use bpf_verifier::prelude::*;
+use bpf_verifier::state::reg_state::MapInfo;
 use bpf_verifier::special::map_type_check::*;
 
-use super::*;
 
     fn make_map_info(map_type: BpfMapType, key_size: u32, value_size: u32) -> MapInfo {
         MapInfo {

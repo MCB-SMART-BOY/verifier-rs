@@ -10,7 +10,7 @@ use alloc::{format, vec, vec::Vec};
 
 use alloc::collections::{BTreeMap as HashMap, BTreeSet as HashSet};
 
-use crate::bounds::bounds::ScalarBounds;
+use crate::bounds::scalar::ScalarBounds;
 use crate::core::error::{Result, VerifierError};
 use crate::core::types::*;
 
@@ -117,9 +117,7 @@ impl LoopDetector {
             let successors = self.get_successors(insns, idx);
             let mut found_unvisited = false;
 
-            for i in succ_idx..successors.len() {
-                let succ = successors[i];
-
+            for (i, &succ) in successors.iter().enumerate().skip(succ_idx) {
                 if self.in_stack.contains(&succ) {
                     // Back edge found
                     self.back_edges.push((idx, succ));

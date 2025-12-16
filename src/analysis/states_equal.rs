@@ -56,21 +56,16 @@ impl IdMap {
 }
 
 /// Comparison mode for state equivalence
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum CompareMode {
     /// Not exact - allows subsumption (cur more restrictive than old)
+    #[default]
     NotExact,
     /// Exact match required (for loop detection)
     Exact,
     /// Range within - cur's ranges must be within old's ranges
     /// Used for iterator convergence detection, may_goto, and callback detection
     RangeWithin,
-}
-
-impl Default for CompareMode {
-    fn default() -> Self {
-        Self::NotExact
-    }
 }
 
 /// Configuration for state comparison
@@ -596,7 +591,7 @@ fn stacksafe(
 }
 
 /// Check if cur stack slot is safe relative to old
-fn stackslot_safe(
+pub fn stackslot_safe(
     cur: &BpfStackState,
     old: &BpfStackState,
     config: &CompareConfig,

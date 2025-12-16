@@ -260,9 +260,9 @@ pub fn check_max_stack_depth(subprogs: &SubprogManager, call_state: &CallState) 
     let mut stack_depth_arr = vec![0i32; subprogs.count()];
 
     // Calculate stack depth for each subprogram
-    for i in 0..subprogs.count() {
+    for (i, depth) in stack_depth_arr.iter_mut().enumerate().take(subprogs.count()) {
         if let Some(info) = subprogs.get(i) {
-            stack_depth_arr[i] = info.stack_depth;
+            *depth = info.stack_depth;
         }
     }
 

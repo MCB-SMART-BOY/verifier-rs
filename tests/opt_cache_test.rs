@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: GPL-2.0
 //! Tests for bpf_verifier::opt::cache
 
+use bpf_verifier::prelude::*;
 use bpf_verifier::opt::cache::*;
 
-use super::*;
 
     #[test]
     fn test_bloom_filter_basic() {
-        let mut bloom = BloomFilter::new(100, 0.01);
+        let mut bloom = BloomFilter::new(100, 10); // 10 permille = 1%
         
         bloom.insert(12345);
         bloom.insert(67890);
@@ -29,7 +29,7 @@ use super::*;
 
     #[test]
     fn test_bloom_filter_clear() {
-        let mut bloom = BloomFilter::new(100, 0.01);
+        let mut bloom = BloomFilter::new(100, 10);
         
         bloom.insert(12345);
         assert!(bloom.might_contain(12345));
@@ -79,8 +79,8 @@ use super::*;
         assert_eq!(stats.bloom_rejections, 1);
         assert_eq!(stats.full_comparisons, 1);
         assert_eq!(stats.hits, 1);
-        assert_eq!(stats.bloom_efficiency(), 0.5);
-        assert_eq!(stats.hit_rate(), 0.5);
+        assert_eq!(stats.bloom_efficiency_percent(), 50);
+        assert_eq!(stats.hit_rate_percent(), 50);
     }
 
     #[test]

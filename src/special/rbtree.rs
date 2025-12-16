@@ -230,8 +230,8 @@ pub fn set_rbtree_add_callback_state(
     ref_set_non_owning(&mut callee_regs[2]);
 
     // R3-R5 not used
-    for i in 3..=5 {
-        callee_regs[i].mark_not_init(false);
+    for reg in &mut callee_regs[3..=5] {
+        reg.mark_not_init(false);
     }
 
     Ok(())

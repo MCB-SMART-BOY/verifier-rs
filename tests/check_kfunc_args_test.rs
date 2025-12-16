@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0
 //! Tests for bpf_verifier::check::kfunc_args
 
+use bpf_verifier::prelude::*;
 use bpf_verifier::check::kfunc_args::*;
 
-use super::*;
 
     fn make_scalar_reg(val: u64) -> BpfRegState {
         let mut reg = BpfRegState::new_not_init();

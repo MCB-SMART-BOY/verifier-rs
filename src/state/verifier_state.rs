@@ -123,7 +123,9 @@ impl BpfFuncState {
         let mut uninit: Box<MaybeUninit<Self>> = Box::new_uninit();
         let ptr = uninit.as_mut_ptr();
 
-        // SAFETY: Writing to allocated but uninitialized memory
+        // SAFETY: Writing to allocated but uninitialized memory. All fields
+        // are initialized exactly once via ptr::write before assume_init().
+        // The memory layout is guaranteed by Box<MaybeUninit<Self>>.
         unsafe {
             let regs_ptr = core::ptr::addr_of_mut!((*ptr).regs);
             for i in 0..MAX_BPF_REG {

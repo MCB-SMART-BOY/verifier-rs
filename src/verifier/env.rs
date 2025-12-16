@@ -21,7 +21,7 @@ use crate::core::error::{Result, VerifierError};
 use crate::core::log::{LogLevel, VerifierLog};
 use crate::core::types::*;
 use crate::mem::user::UserMemContext;
-use crate::sanitize::sanitize::InsnAuxData as SanitizeAuxData;
+use crate::sanitize::spectre::InsnAuxData as SanitizeAuxData;
 use crate::special::struct_ops::StructOpsContext;
 use crate::state::reg_state::MapInfo;
 use crate::state::verifier_state::BpfVerifierState;
@@ -482,7 +482,7 @@ impl VerifierEnv {
     /// This function uses unsafe code internally to write fields directly
     /// to heap-allocated memory, avoiding stack allocation of the full struct.
     /// All fields are properly initialized before the struct is returned.
-    #[allow(unsafe_code)]
+    #[expect(unsafe_code, reason = "Required for in-place heap initialization to avoid stack overflow")]
     pub fn new_boxed(
         insns: Vec<BpfInsn>,
         prog_type: BpfProgType,
@@ -501,8 +501,9 @@ impl VerifierEnv {
         let mut boxed: Box<MaybeUninit<Self>> = Box::new(MaybeUninit::uninit());
         let env_ptr = boxed.as_mut_ptr();
 
-        // Safety: We're writing to heap-allocated memory through raw pointers.
+        // SAFETY: We're writing to heap-allocated memory through raw pointers.
         // Each field is initialized exactly once before we convert to Box<Self>.
+        // The memory layout is guaranteed by Box<MaybeUninit<Self>>.
         unsafe {
             // Initialize each field in place using ptr::write
             // This avoids creating the struct on the stack

@@ -19,7 +19,7 @@ use alloc::{
 
 use alloc::collections::BTreeMap as HashMap;
 
-use super::btf::{Btf, BtfKind, BtfPermissions, DeclTagStore};
+use super::database::{Btf, BtfKind, BtfPermissions, DeclTagStore};
 use super::core::{apply_core_relos, CoreReloStats};
 use super::func_info::{BpfCoreRelo, BpfFuncInfo, BpfLineInfo};
 use crate::core::error::{Result, VerifierError};
@@ -102,8 +102,7 @@ struct FuncInfoEntry {
     insn_off: usize,
     /// Function name
     name: String,
-    /// BTF type ID (reserved for future use)
-    #[allow(dead_code)]
+    /// BTF type ID for the function
     type_id: u32,
 }
 
@@ -233,6 +232,20 @@ impl LineInfoDb {
         self.find_func_for_insn(insn_idx)
             .and_then(|idx| self.func_info.get(idx))
             .map(|f| f.name.as_str())
+    }
+
+    /// Get BTF type ID for the function containing the given instruction
+    pub fn get_function_btf_id(&self, insn_idx: usize) -> Option<u32> {
+        self.find_func_for_insn(insn_idx)
+            .and_then(|idx| self.func_info.get(idx))
+            .map(|f| f.type_id)
+    }
+
+    /// Get function info (name and BTF type ID) for instruction
+    pub fn get_function_info(&self, insn_idx: usize) -> Option<(&str, u32)> {
+        self.find_func_for_insn(insn_idx)
+            .and_then(|idx| self.func_info.get(idx))
+            .map(|f| (f.name.as_str(), f.type_id))
     }
 
     /// Check if database has any entries

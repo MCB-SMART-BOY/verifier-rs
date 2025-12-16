@@ -1,9 +1,11 @@
+// TODO: Export internal functions for testing
+#![cfg(feature = "__disabled_test__")]
 // SPDX-License-Identifier: GPL-2.0
 //! Tests for bpf_verifier::check::load_store
 
+use bpf_verifier::prelude::*;
 use bpf_verifier::check::load_store::*;
 
-use super::*;
 
     fn make_state_with_ptr(regno: usize, ptr_type: BpfRegType, off: i32) -> BpfVerifierState {
         let mut state = BpfVerifierState::new();

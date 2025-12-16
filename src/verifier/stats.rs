@@ -493,7 +493,7 @@ impl StatsCollector {
     pub fn is_force_checkpoint(&self, idx: usize) -> bool {
         self.insn_stats
             .get(&idx)
-            .map_or(false, |s| s.is_force_checkpoint)
+            .is_some_and(|s| s.is_force_checkpoint)
     }
 
     /// Get hot instructions (most visited)

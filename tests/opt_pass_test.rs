@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0
 //! Tests for bpf_verifier::opt::pass
 
+use bpf_verifier::prelude::*;
 use bpf_verifier::opt::pass::*;
 
-use super::*;
 
     #[test]
     fn test_pass_stats_default() {

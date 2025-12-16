@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0
 //! Tests for bpf_verifier::analysis::race_detector
 
+use bpf_verifier::prelude::*;
 use bpf_verifier::analysis::race_detector::*;
 
-use super::*;
 
     #[test]
     fn test_access_type_can_race() {

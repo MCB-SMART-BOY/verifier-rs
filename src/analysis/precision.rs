@@ -260,7 +260,7 @@ pub fn backtrack_insn(
 }
 
 /// Handle ALU instruction backtracking
-fn backtrack_alu(
+pub fn backtrack_alu(
     bt: &mut BacktrackState,
     insn: &BpfInsn,
     dst_reg: usize,
@@ -541,11 +541,11 @@ fn __mark_chain_precision(
             // Mark registers as precise
             for r in 0..MAX_BPF_REG {
                 if (reg_mask & (1 << r)) != 0 {
-                    if func.regs[r].reg_type == BpfRegType::ScalarValue {
-                        if !func.regs[r].precise {
-                            func.regs[r].precise = true;
-                            changed = true;
-                        }
+                    if func.regs[r].reg_type == BpfRegType::ScalarValue
+                        && !func.regs[r].precise
+                    {
+                        func.regs[r].precise = true;
+                        changed = true;
                     }
                     bt.clear_reg(fr, r);
                 }
@@ -555,11 +555,9 @@ fn __mark_chain_precision(
             for spi in 0..64usize {
                 if (stack_mask & (1 << spi)) != 0 {
                     if let Some(slot) = func.stack.get_slot_mut_by_spi(spi) {
-                        if slot.is_spilled_scalar_reg() {
-                            if !slot.spilled_ptr.precise {
-                                slot.spilled_ptr.precise = true;
-                                changed = true;
-                            }
+                        if slot.is_spilled_scalar_reg() && !slot.spilled_ptr.precise {
+                            slot.spilled_ptr.precise = true;
+                            changed = true;
                         }
                     }
                     bt.clear_slot(fr, spi);

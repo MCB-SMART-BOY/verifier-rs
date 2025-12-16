@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0
 //! Tests for bpf_verifier::mem::arena
 
+use bpf_verifier::prelude::*;
 use bpf_verifier::mem::arena::*;
 
-use super::*;
 
     #[test]
     fn test_arena_state() {

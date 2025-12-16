@@ -234,7 +234,7 @@ pub fn jit_subprogs(env: &mut VerifierEnv, insns: &mut [BpfInsn]) -> Result<JitS
 }
 
 /// Calculate stack depth for each subprogram
-fn calculate_stack_depths(ctx: &mut JitSubprogContext, insns: &[BpfInsn]) -> Result<()> {
+pub fn calculate_stack_depths(ctx: &mut JitSubprogContext, insns: &[BpfInsn]) -> Result<()> {
     for sp in &mut ctx.subprogs {
         let mut max_depth: i32 = 0;
 
@@ -300,7 +300,7 @@ fn get_access_size(insn: &BpfInsn) -> u32 {
 }
 
 /// Check if the program uses tail calls
-fn check_tail_calls(insns: &[BpfInsn]) -> bool {
+pub fn check_tail_calls(insns: &[BpfInsn]) -> bool {
     for insn in insns {
         if insn.code == (BPF_JMP | BPF_CALL) && insn.imm == BPF_FUNC_TAIL_CALL as i32 {
             return true;
@@ -310,7 +310,7 @@ fn check_tail_calls(insns: &[BpfInsn]) -> bool {
 }
 
 /// Tail call helper function ID
-const BPF_FUNC_TAIL_CALL: u32 = 12;
+pub const BPF_FUNC_TAIL_CALL: u32 = 12;
 
 /// Validate that subprograms are compatible with tail calls
 fn validate_tail_call_subprogs(ctx: &JitSubprogContext) -> Result<()> {
@@ -343,7 +343,7 @@ fn patch_subprog_calls(ctx: &mut JitSubprogContext, insns: &mut [BpfInsn]) -> Re
             // Find the target subprogram
             let target_sp = ctx
                 .find_subprog(target)
-                .ok_or_else(|| VerifierError::InvalidJumpTarget(target))?;
+                .ok_or(VerifierError::InvalidJumpTarget(target))?;
 
             // Validate target is at subprogram start
             if let Some(sp) = ctx.get(target_sp) {
@@ -434,11 +434,8 @@ pub fn count_exentries(insns: &[BpfInsn], sp: &SubprogInfo) -> u32 {
             let mode = insn.code & 0xe0;
 
             // LDX with PROBE_MEM modes
-            if class == BPF_LDX {
-                match mode >> 5 {
-                    5 | 6 | 7 | 8 => count += 1, // PROBE_MEM variants
-                    _ => {}
-                }
+            if class == BPF_LDX && (5..=8).contains(&(mode >> 5)) {
+                count += 1; // PROBE_MEM variants
             }
 
             // STX with PROBE_ATOMIC
@@ -491,9 +488,9 @@ pub fn propagate_subprog_properties(ctx: &mut JitSubprogContext, insns: &[BpfIns
     let mut changed = true;
     while changed {
         changed = false;
-        for sp_idx in 0..n {
+        for (sp_idx, sp_calls) in calls.iter().enumerate().take(n) {
             if ctx.subprogs[sp_idx].tail_call_reachable {
-                for &callee in &calls[sp_idx] {
+                for &callee in sp_calls {
                     if !ctx.subprogs[callee].tail_call_reachable {
                         ctx.subprogs[callee].tail_call_reachable = true;
                         changed = true;
@@ -507,11 +504,11 @@ pub fn propagate_subprog_properties(ctx: &mut JitSubprogContext, insns: &[BpfIns
     changed = true;
     while changed {
         changed = false;
-        for sp_idx in 0..n {
+        for (sp_idx, sp_callers) in callers.iter().enumerate().take(n) {
             let pkt = ctx.subprogs[sp_idx].changes_pkt_data;
             let sleep = ctx.subprogs[sp_idx].might_sleep;
 
-            for &caller in &callers[sp_idx] {
+            for &caller in sp_callers {
                 if pkt && !ctx.subprogs[caller].changes_pkt_data {
                     ctx.subprogs[caller].changes_pkt_data = true;
                     changed = true;

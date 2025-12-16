@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0
 //! Tests for bpf_verifier::mem::user
 
+use bpf_verifier::prelude::*;
 use bpf_verifier::mem::user::*;
 
-use super::*;
 
     fn make_user_ptr_reg() -> BpfRegState {
         let mut reg = BpfRegState::default();
@@ -471,7 +471,7 @@ use super::*;
     // ========================================================================
 
     fn make_aligned_user_ptr_reg() -> BpfRegState {
-        use crate::bounds::Tnum;
+        use bpf_verifier::bounds::Tnum;
         let mut reg = make_user_ptr_reg();
         reg.off = 0;
         reg.var_off = Tnum::const_value(0); // Const var_off = aligned
@@ -677,7 +677,7 @@ use super::*;
 
     #[test]
     fn test_validate_user_mem_access_complete_with_bounds() {
-        use crate::bounds::Tnum;
+        use bpf_verifier::bounds::Tnum;
         let mut src_reg = make_user_ptr_reg();
         src_reg.off = 0;
         src_reg.var_off = Tnum::const_value(0); // Const var_off for bounds check

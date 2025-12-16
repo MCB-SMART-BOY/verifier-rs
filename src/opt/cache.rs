@@ -68,8 +68,8 @@ impl BloomFilter {
 
         let num_bits = (n * bits_per_item).max(64);
         // Optimal k = (m/n) * ln(2) ≈ bits_per_item * 0.693
-        let num_hashes = ((bits_per_item * 7) / 10).max(1).min(16);
-        let num_words = (num_bits + 63) / 64;
+        let num_hashes = ((bits_per_item * 7) / 10).clamp(1, 16);
+        let num_words = num_bits.div_ceil(64);
 
         Self {
             bits: vec![0u64; num_words],
@@ -81,11 +81,11 @@ impl BloomFilter {
 
     /// Create a bloom filter with explicit size
     pub fn with_size(num_bits: usize, num_hashes: usize) -> Self {
-        let num_words = (num_bits + 63) / 64;
+        let num_words = num_bits.div_ceil(64);
         Self {
             bits: vec![0u64; num_words],
             num_bits,
-            num_hashes: num_hashes.max(1).min(16),
+            num_hashes: num_hashes.clamp(1, 16),
             count: 0,
         }
     }
@@ -344,10 +344,12 @@ impl CompressedRegState {
 
     /// Decompress to a full register state
     pub fn decompress(&self) -> BpfRegState {
-        let mut reg = BpfRegState::default();
-        reg.reg_type = self.reg_type;
-        reg.type_flags = BpfTypeFlag::from_bits_truncate(self.type_flags as u32);
-        reg.off = self.off as i32;
+        let mut reg = BpfRegState {
+            reg_type: self.reg_type,
+            type_flags: BpfTypeFlag::from_bits_truncate(u32::from(self.type_flags)),
+            off: i32::from(self.off),
+            ..Default::default()
+        };
 
         match self.bounds {
             CompressedBounds::Unknown => {
@@ -630,7 +632,7 @@ impl Default for OptimizedStateCache {
 #[derive(Debug)]
 pub struct StatePool {
     /// Pool of available states
-    available: Vec<Box<BpfVerifierState>>,
+    available: Vec<BpfVerifierState>,
     /// Maximum pool size
     max_size: usize,
     /// Statistics
@@ -655,9 +657,9 @@ impl StatePool {
     pub fn get(&mut self) -> Box<BpfVerifierState> {
         if let Some(mut state) = self.available.pop() {
             // Reset the state before reuse
-            *state = BpfVerifierState::new();
+            state = BpfVerifierState::new();
             self.reuses += 1;
-            state
+            Box::new(state)
         } else {
             self.allocations += 1;
             Box::new(BpfVerifierState::new())
@@ -668,7 +670,7 @@ impl StatePool {
     pub fn put(&mut self, state: Box<BpfVerifierState>) {
         self.returns += 1;
         if self.available.len() < self.max_size {
-            self.available.push(state);
+            self.available.push(*state);
         }
         // Otherwise, state is dropped
     }
@@ -684,7 +686,7 @@ impl StatePool {
         if total == 0 {
             0
         } else {
-            ((self.reuses as u64 * 100) / total as u64) as u32
+            (self.reuses * 100 / total) as u32
         }
     }
 

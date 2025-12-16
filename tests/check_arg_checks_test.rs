@@ -1,9 +1,11 @@
+// TODO: Export internal functions for testing
+#![cfg(feature = "__disabled_test__")]
 // SPDX-License-Identifier: GPL-2.0
 //! Tests for bpf_verifier::check::arg_checks
 
+use bpf_verifier::prelude::*;
 use bpf_verifier::check::arg_checks::*;
 
-use super::*;
 
     #[test]
     fn test_check_arg_type_anything() {

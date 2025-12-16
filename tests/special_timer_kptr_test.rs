@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0
 //! Tests for bpf_verifier::special::timer_kptr
 
+use bpf_verifier::prelude::*;
 use bpf_verifier::special::timer_kptr::*;
 
-use super::*;
 
     #[test]
     fn test_kptr_type() {

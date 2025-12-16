@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0
 //! Tests for bpf_verifier::special::struct_ops
 
+use bpf_verifier::prelude::*;
 use bpf_verifier::special::struct_ops::*;
 
-use super::*;
 
     #[test]
     fn test_struct_ops_type_sleepable() {

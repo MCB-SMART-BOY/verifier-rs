@@ -409,13 +409,11 @@ pub fn helper_might_sleep(helper_id: u32) -> bool {
 /// Validate synchronization state for a helper call
 pub fn validate_sync_for_helper(sync: &SyncState, helper_id: u32) -> Result<()> {
     // Check spin lock restrictions
-    if sync.lock.has_locks() {
-        if helper_might_sleep(helper_id) {
-            return Err(VerifierError::InvalidLock(format!(
-                "helper {} might sleep while holding spin lock",
-                helper_id
-            )));
-        }
+    if sync.lock.has_locks() && helper_might_sleep(helper_id) {
+        return Err(VerifierError::InvalidLock(format!(
+            "helper {} might sleep while holding spin lock",
+            helper_id
+        )));
     }
 
     // Spin lock/unlock helpers have special handling

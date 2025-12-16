@@ -10,7 +10,7 @@
 //! - `overflow`: Pointer overflow check patches for JIT
 
 pub mod overflow;
-pub mod sanitize;
+pub mod spectre;
 
 pub use overflow::*;
-pub use sanitize::*;
+pub use spectre::*;
