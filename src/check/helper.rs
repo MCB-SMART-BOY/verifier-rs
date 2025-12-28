@@ -2535,3 +2535,90 @@ pub fn check_map_func_compatibility(map_type: BpfMapType, func_id: BpfFuncId) ->
 
     Ok(())
 }
+
+// ============================================================================
+// Fastcall Support (Linux 6.13+)
+// ============================================================================
+
+/// Check if a helper function supports fastcall optimization
+///
+/// Fastcall helpers use an optimized calling convention that
+/// reduces overhead for frequently called helpers.
+pub fn is_fastcall_helper(func_id: BpfFuncId) -> bool {
+    // These helpers are marked with bpf_fastcall attribute
+    matches!(
+        func_id,
+        BpfFuncId::MapLookupElem
+            | BpfFuncId::MapUpdateElem
+            | BpfFuncId::MapDeleteElem
+            | BpfFuncId::GetPrandomU32
+            | BpfFuncId::GetSmpProcessorId
+            | BpfFuncId::KtimeGetNs
+            | BpfFuncId::KtimeGetBootNs
+    )
+}
+
+/// Check fastcall stack contract
+///
+/// Fastcall helpers have a contract with the verifier about stack usage.
+/// The verifier must ensure that the stack state meets the fastcall requirements.
+pub fn check_fastcall_stack_contract(
+    state: &BpfVerifierState,
+    func_id: BpfFuncId,
+) -> Result<()> {
+    if !is_fastcall_helper(func_id) {
+        return Ok(()); // Not a fastcall, no contract to check
+    }
+
+    // Fastcall contract requirements:
+    // 1. Stack must be properly aligned
+    // 2. No uninitialized stack slots that might be read
+    // 3. Caller-saved registers must be properly saved
+
+    // Get current frame
+    let frame = state.current_frame();
+
+    // Check stack alignment
+    // Fastcall requires 8-byte alignment
+    if frame.allocated_stack % 8 != 0 {
+        return Err(VerifierError::InvalidState(
+            "fastcall requires 8-byte stack alignment".into(),
+        ));
+    }
+
+    // For now, we trust that the verifier has properly tracked stack state
+    // In a full implementation, we would verify:
+    // - All accessed stack slots are initialized
+    // - Stack pointer offset is valid
+    // - Register state is consistent
+
+    Ok(())
+}
+
+/// Get fastcall optimization level
+///
+/// Returns the optimization level for a fastcall helper:
+/// - 0: No optimization (regular call)
+/// - 1: Basic fastcall (reduced overhead)
+/// - 2: Advanced fastcall (inline-like)
+pub fn get_fastcall_opt_level(func_id: BpfFuncId, prog_type: BpfProgType) -> u8 {
+    if !is_fastcall_helper(func_id) {
+        return 0;
+    }
+
+    // Some program types benefit more from fastcall
+    match prog_type {
+        BpfProgType::Xdp | BpfProgType::SchedCls | BpfProgType::SchedAct => {
+            // High-performance networking programs get level 2
+            2
+        }
+        BpfProgType::SocketFilter | BpfProgType::SkSkb => {
+            // Regular networking programs get level 1
+            1
+        }
+        _ => {
+            // Other programs get basic fastcall
+            1
+        }
+    }
+}

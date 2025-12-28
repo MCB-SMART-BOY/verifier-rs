@@ -21,6 +21,18 @@ use crate::state::verifier_state::{BpfFuncState, BpfVerifierState};
 /// Maximum call stack depth
 pub const MAX_CALL_FRAMES: usize = MAX_BPF_STACK_FRAMES;
 
+/// Private stack mode for subprogram (Linux 6.13+)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum PrivStackMode {
+    /// No private stack
+    #[default]
+    NoPrivStack,
+    /// Private stack mode unknown (needs determination)
+    Unknown,
+    /// Adaptive private stack (enabled based on stack depth)
+    Adaptive,
+}
+
 /// Information about a subprogram
 #[derive(Debug, Clone, Default)]
 pub struct SubprogInfo {
@@ -55,6 +67,8 @@ pub struct SubprogInfo {
     pub returns_scalar: bool,
     /// Whether this subprogram has refcounted arguments
     pub has_refcounted_args: bool,
+    /// Private stack mode (Linux 6.13+)
+    pub priv_stack_mode: PrivStackMode,
 }
 
 /// Subprogram manager
@@ -862,4 +876,101 @@ pub fn verify_tail_call(state: &BpfVerifierState, subprogs: &SubprogManager) -> 
     check_tail_call_compat(state, subprogs)?;
     check_tail_call_resources(state)?;
     Ok(())
+}
+
+// ============================================================================
+// Private Stack Support (Linux 6.13+)
+// ============================================================================
+
+/// Check if JIT supports private stack
+///
+/// This would query the JIT backend, but for now we assume support is available
+/// if the feature is enabled.
+pub fn jit_supports_private_stack() -> bool {
+    // In a real implementation, this would check:
+    // - JIT architecture capabilities
+    // - Kernel configuration
+    // - Platform support
+    //
+    // For now, return true if BPF_PRIV_STACK_MIN_SIZE is defined
+    true
+}
+
+/// Determine private stack mode for a subprogram
+///
+/// This analyzes the subprogram's characteristics and decides whether
+/// it should use a private stack.
+pub fn determine_priv_stack_mode(
+    subprog: &SubprogInfo,
+    has_tail_calls: bool,
+) -> PrivStackMode {
+    // Can't use private stack with tail calls
+    if has_tail_calls || subprog.tail_call_reachable {
+        return PrivStackMode::NoPrivStack;
+    }
+
+    // Main subprog (index 0) can't use private stack
+    if subprog.start == 0 {
+        return PrivStackMode::NoPrivStack;
+    }
+
+    // Check if JIT supports private stack
+    if !jit_supports_private_stack() {
+        return PrivStackMode::NoPrivStack;
+    }
+
+    // Request private stack only if stack depth is significant
+    // This is the BPF_PRIV_STACK_MIN_SIZE threshold (64 bytes)
+    if subprog.stack_depth >= BPF_PRIV_STACK_MIN_SIZE as i32 {
+        PrivStackMode::Adaptive
+    } else {
+        PrivStackMode::NoPrivStack
+    }
+}
+
+/// Update private stack modes for all subprograms
+///
+/// This should be called after stack depth calculation is complete.
+pub fn update_priv_stack_modes(subprogs: &mut SubprogManager) -> Result<()> {
+    let count = subprogs.count();
+
+    // Check if any subprogram has tail calls
+    let has_tail_calls = (0..count)
+        .any(|i| subprogs.get(i).map(|s| s.has_tail_call).unwrap_or(false));
+
+    // Update each subprogram's private stack mode
+    for i in 0..count {
+        if let Some(subprog) = subprogs.get_mut(i) {
+            let mode = determine_priv_stack_mode(subprog, has_tail_calls);
+            subprog.priv_stack_mode = mode;
+        }
+    }
+
+    Ok(())
+}
+
+/// Get the total stack depth considering private stack
+///
+/// Returns (shared_stack_depth, private_stack_depth)
+pub fn get_stack_depths(subprogs: &SubprogManager, subprog_idx: usize) -> (i32, i32) {
+    if let Some(subprog) = subprogs.get(subprog_idx) {
+        match subprog.priv_stack_mode {
+            PrivStackMode::Adaptive => {
+                // With private stack, all stack is private
+                (0, subprog.stack_depth)
+            }
+            _ => {
+                // Without private stack, all stack is shared
+                (subprog.stack_depth, 0)
+            }
+        }
+    } else {
+        (0, 0)
+    }
+}
+
+/// Round up stack size to required alignment (32 bytes)
+pub fn round_stack_size(size: i32) -> i32 {
+    // Round up to 32-byte granularity
+    ((size.max(1) + 31) / 32) * 32
 }
