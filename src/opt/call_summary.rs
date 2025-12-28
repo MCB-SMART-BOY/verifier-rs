@@ -86,8 +86,8 @@ impl CallSummary {
         }
         // For now, use a simple structural comparison
         // In a full implementation, would use more sophisticated state equivalence
-        for i in 0..self.input_regs.len() {
-            if self.input_regs[i].reg_type != regs[i].reg_type {
+        for (input_reg, reg) in self.input_regs.iter().zip(regs.iter()) {
+            if input_reg.reg_type != reg.reg_type {
                 return false;
             }
         }
@@ -230,7 +230,7 @@ impl CallSummaryManager {
 
     /// Get or create cache for a subprogram
     pub fn get_cache(&mut self, subprog_idx: usize) -> &mut CallSummaryCache {
-        self.caches.entry(subprog_idx).or_insert_with(CallSummaryCache::new)
+        self.caches.entry(subprog_idx).or_default()
     }
 
     /// Clear all caches

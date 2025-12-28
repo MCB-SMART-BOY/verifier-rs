@@ -148,7 +148,7 @@ pub fn analyze_jump(insn: &BpfInsn, insn_idx: usize, insn_count: usize) -> Resul
                     always_taken: None,
                 })
             } else {
-                return Err(VerifierError::InvalidInstruction(insn_idx));
+                Err(VerifierError::InvalidInstruction(insn_idx))
             }
         }
         _ => {

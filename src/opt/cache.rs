@@ -655,9 +655,9 @@ impl StatePool {
 
     /// Get a state from the pool or allocate a new one
     pub fn get(&mut self) -> Box<BpfVerifierState> {
-        if let Some(mut state) = self.available.pop() {
+        if self.available.pop().is_some() {
             // Reset the state before reuse
-            state = BpfVerifierState::new();
+            let state = BpfVerifierState::new();
             self.reuses += 1;
             Box::new(state)
         } else {
