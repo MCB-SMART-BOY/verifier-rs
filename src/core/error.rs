@@ -129,6 +129,12 @@ pub enum VerifierError {
     InvalidReturnValue(String),
     /// Program attach failed
     AttachFailed(String),
+    /// Too many linked registers
+    TooManyLinkedRegisters,
+    /// Invalid value
+    InvalidValue(String),
+    /// Program too complex
+    ProgramTooComplex,
 }
 
 impl fmt::Display for VerifierError {
@@ -212,6 +218,9 @@ impl fmt::Display for VerifierError {
             }
             VerifierError::InvalidReturnValue(s) => write!(f, "invalid return value: {}", s),
             VerifierError::AttachFailed(s) => write!(f, "attach failed: {}", s),
+            VerifierError::TooManyLinkedRegisters => write!(f, "too many linked registers"),
+            VerifierError::InvalidValue(s) => write!(f, "invalid value: {}", s),
+            VerifierError::ProgramTooComplex => write!(f, "program too complex to verify"),
         }
     }
 }

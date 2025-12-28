@@ -358,23 +358,25 @@ pub fn validate_dynptr_slice(
         BpfDynptrType::Ringbuf => {
             // Ringbuf supports slice
         }
-        BpfDynptrType::Skb | BpfDynptrType::Xdp => {
-            // SKB/XDP support slice, may need to copy to buffer
+        BpfDynptrType::Skb | BpfDynptrType::Xdp | BpfDynptrType::SkbMeta => {
+            // SKB/XDP/SKB-Meta support slice, may need to copy to buffer
+        }
+        BpfDynptrType::File => {
+            // File dynptr supports slice operations
         }
         BpfDynptrType::Invalid => {
             return Err(VerifierError::InvalidDynptr("invalid dynptr type".into()));
-        }
-        _ => {
-            // Other types may or may not support slice
         }
     }
 
     // rdwr slice requires read-write access
     let is_rdonly = !rdwr;
 
-    // For SKB/XDP, may need to return pointer to user buffer (can be null if buffer not provided)
-    let may_return_null =
-        matches!(dynptr_type, BpfDynptrType::Skb | BpfDynptrType::Xdp) && !buffer_provided;
+    // For SKB/XDP/SKB-Meta, may need to return pointer to user buffer (can be null if buffer not provided)
+    let may_return_null = matches!(
+        dynptr_type,
+        BpfDynptrType::Skb | BpfDynptrType::Xdp | BpfDynptrType::SkbMeta
+    ) && !buffer_provided;
 
     // Return size is the requested length
     Ok((is_rdonly, may_return_null, len))
@@ -400,7 +402,11 @@ pub fn create_slice_result_reg(
     };
 
     // Mark as maybe null for SKB/XDP without buffer
-    if matches!(parent_type, BpfDynptrType::Skb | BpfDynptrType::Xdp) && buffer_reg.is_none() {
+    if matches!(
+        parent_type,
+        BpfDynptrType::Skb | BpfDynptrType::Xdp | BpfDynptrType::SkbMeta
+    ) && buffer_reg.is_none()
+    {
         result.type_flags.insert(BpfTypeFlag::PTR_MAYBE_NULL);
     }
 
@@ -538,7 +544,7 @@ pub fn validate_dynptr_data(
         BpfDynptrType::Local | BpfDynptrType::Ringbuf => {
             // Direct access allowed
         }
-        BpfDynptrType::Skb | BpfDynptrType::Xdp => {
+        BpfDynptrType::Skb | BpfDynptrType::Xdp | BpfDynptrType::SkbMeta => {
             // Need to use slice for these
             return Err(VerifierError::InvalidDynptr(
                 "use bpf_dynptr_slice for SKB/XDP".into(),

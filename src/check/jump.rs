@@ -17,8 +17,11 @@ use crate::core::error::{Result, VerifierError};
 /// Maximum jump offset
 pub const MAX_JMP_OFFSET: i32 = 0x7FFF;
 
-/// Minimum jump offset  
+/// Minimum jump offset
 pub const MIN_JMP_OFFSET: i32 = -0x8000;
+
+/// Maximum may_goto iterations (for bounding loops)
+pub const MAX_MAY_GOTO_ITERATIONS: u32 = 8192;
 
 /// Jump type classification
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -126,6 +129,27 @@ pub fn analyze_jump(insn: &BpfInsn, insn_idx: usize, insn_count: usize) -> Resul
         BPF_CALL => {
             let is_pseudo = insn.src_reg == BPF_PSEUDO_CALL;
             Ok(JumpInfo::call(insn_idx, is_pseudo))
+        }
+        BPF_JCOND => {
+            // may_goto instruction
+            if insn.is_may_goto() {
+                let target = compute_jump_target(insn_idx, insn.off as i32, insn_count)?;
+                let fallthrough = insn_idx + 1;
+
+                if fallthrough >= insn_count {
+                    return Err(VerifierError::InvalidInstruction(insn_idx));
+                }
+
+                Ok(JumpInfo {
+                    jump_type: JumpType::MayGoto,
+                    src_idx: insn_idx,
+                    target_idx: Some(target),
+                    fallthrough_idx: Some(fallthrough),
+                    always_taken: None,
+                })
+            } else {
+                return Err(VerifierError::InvalidInstruction(insn_idx));
+            }
         }
         _ => {
             // Conditional jump
@@ -1012,5 +1036,88 @@ impl NospecMark {
             needs_barrier,
             alu_state: 0,
         }
+    }
+}
+
+// ============================================================================
+// may_goto Instruction Support
+// ============================================================================
+
+/// Validate may_goto instruction
+///
+/// may_goto is a bounded loop construct introduced in Linux 6.13.
+/// It allows conditional backward jumps with guaranteed termination.
+pub fn check_may_goto(insn: &BpfInsn, insn_idx: usize) -> Result<()> {
+    // Verify it's actually a may_goto instruction
+    if !insn.is_may_goto() {
+        return Err(VerifierError::InvalidInstruction(insn_idx));
+    }
+
+    // Validate the immediate value (loop bound)
+    // imm field contains the maximum number of iterations
+    // A value of 0 means use default (MAX_MAY_GOTO_ITERATIONS)
+    if insn.imm < 0 {
+        return Err(VerifierError::InvalidValue(format!(
+            "may_goto: invalid iteration count: {}",
+            insn.imm
+        )));
+    }
+
+    // Check iteration bound is reasonable
+    let max_iters = if insn.imm == 0 {
+        MAX_MAY_GOTO_ITERATIONS
+    } else {
+        insn.imm as u32
+    };
+
+    if max_iters > MAX_MAY_GOTO_ITERATIONS {
+        return Err(VerifierError::InvalidValue(format!(
+            "may_goto: iteration count {} exceeds maximum {}",
+            max_iters, MAX_MAY_GOTO_ITERATIONS
+        )));
+    }
+
+    // Offset should be negative (backward jump for loop)
+    if insn.off >= 0 {
+        return Err(VerifierError::InvalidJumpDestination(insn.off as i32));
+    }
+
+    Ok(())
+}
+
+/// Check if may_goto forms a valid loop structure
+///
+/// This validates that the may_goto instruction is part of a proper
+/// bounded loop and doesn't create problematic control flow.
+pub fn validate_may_goto_loop(
+    insn: &BpfInsn,
+    insn_idx: usize,
+    insn_count: usize,
+) -> Result<usize> {
+    // Compute loop header (backward jump target)
+    let target = compute_jump_target(insn_idx, insn.off as i32, insn_count)?;
+
+    // Target must be before current instruction (backward jump)
+    if target >= insn_idx {
+        return Err(VerifierError::InvalidValue(
+            "may_goto: must be backward jump".into(),
+        ));
+    }
+
+    // Validate loop size is reasonable
+    let loop_size = insn_idx - target;
+    if loop_size > BPF_COMPLEXITY_LIMIT_JMP_SEQ {
+        return Err(VerifierError::ProgramTooComplex);
+    }
+
+    Ok(target)
+}
+
+/// Get the iteration limit from may_goto instruction
+pub fn may_goto_iteration_limit(insn: &BpfInsn) -> u32 {
+    if insn.imm == 0 {
+        MAX_MAY_GOTO_ITERATIONS
+    } else {
+        insn.imm as u32
     }
 }

@@ -1384,3 +1384,58 @@ impl BpfProgType {
         )
     }
 }
+
+// ============================================================================
+// BPF Features (Linux 6.13+)
+// ============================================================================
+
+bitflags! {
+    /// BPF feature flags
+    ///
+    /// These flags indicate which optional BPF features are enabled
+    /// in the verifier environment.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+    pub struct BpfFeatures: u32 {
+        /// Support readonly cast to void
+        ///
+        /// Allows casting read-only pointers to void for compatibility
+        const RDONLY_CAST_TO_VOID = 1 << 0;
+
+        /// Streams support
+        ///
+        /// Enable BPF streams feature (new in Linux 6.13)
+        const STREAMS = 1 << 1;
+    }
+}
+
+impl BpfFeatures {
+    /// Create a new features set with all features enabled
+    pub fn all() -> Self {
+        BpfFeatures::RDONLY_CAST_TO_VOID | BpfFeatures::STREAMS
+    }
+
+    /// Create a new features set with no features enabled
+    pub fn none() -> Self {
+        BpfFeatures::empty()
+    }
+
+    /// Create a default feature set (all features enabled)
+    pub fn default_features() -> Self {
+        Self::all()
+    }
+
+    /// Check if a specific feature is enabled
+    pub fn has_feature(&self, feature: BpfFeatures) -> bool {
+        self.contains(feature)
+    }
+
+    /// Enable a specific feature
+    pub fn enable(&mut self, feature: BpfFeatures) {
+        self.insert(feature);
+    }
+
+    /// Disable a specific feature
+    pub fn disable(&mut self, feature: BpfFeatures) {
+        self.remove(feature);
+    }
+}

@@ -12,6 +12,20 @@ use crate::bounds::tnum::Tnum;
 use crate::core::error::{Result, VerifierError};
 use crate::core::types::*;
 
+// ============================================================================
+// Linked Register Constants
+// ============================================================================
+
+/// Upper bit of ID marks linked registers with constant delta
+///
+/// Example:
+///   r1 = r2;        both have r1->id == r2->id == N
+///   r1 += 10;       r1->id == N | BPF_ADD_CONST and r1->off == 10
+pub const BPF_ADD_CONST: u32 = 1 << 31;
+
+/// Maximum number of linked registers to track
+pub const MAX_LINKED_REGS: usize = MAX_BPF_REG;
+
 /// State of a single BPF register
 #[derive(Debug, Clone)]
 pub struct BpfRegState {
@@ -770,6 +784,60 @@ impl BpfRegState {
 
         Ok(())
     }
+
+    // ========================================================================
+    // Linked Register Support (Linux 6.13+)
+    // ========================================================================
+
+    /// Check if this register is linked (has BPF_ADD_CONST bit set)
+    ///
+    /// A linked register has a constant offset from another register.
+    /// Example: r1 = r2; r1 += 10; -> r1 is linked to r2 with offset 10
+    pub fn is_linked(&self) -> bool {
+        (self.id & BPF_ADD_CONST) != 0
+    }
+
+    /// Get the base ID (without BPF_ADD_CONST bit)
+    ///
+    /// This returns the ID of the register this one is linked to.
+    pub fn base_id(&self) -> u32 {
+        self.id & !BPF_ADD_CONST
+    }
+
+    /// Mark this register as linked to another register
+    ///
+    /// Sets the BPF_ADD_CONST bit in the ID to indicate this register
+    /// has a constant offset from another register with the same base_id.
+    pub fn mark_linked(&mut self, base_id: u32) {
+        self.id = base_id | BPF_ADD_CONST;
+    }
+
+    /// Clear the linked register status
+    pub fn clear_linked(&mut self) {
+        if self.is_linked() {
+            self.id = self.base_id();
+        }
+    }
+
+    /// Check if two registers are linked to the same base
+    pub fn linked_to_same_base(&self, other: &BpfRegState) -> bool {
+        if !self.is_linked() || !other.is_linked() {
+            return false;
+        }
+        self.base_id() == other.base_id()
+    }
+
+    /// Get the constant delta between linked registers
+    ///
+    /// If both registers are linked to the same base, returns the difference
+    /// in their offsets. Otherwise returns None.
+    pub fn linked_delta(&self, other: &BpfRegState) -> Option<i32> {
+        if self.linked_to_same_base(other) {
+            Some(self.off.wrapping_sub(other.off))
+        } else {
+            None
+        }
+    }
 }
 
 /// Check if a value would be a pointer in unprivileged context
@@ -778,4 +846,86 @@ pub fn is_pointer_value(allow_ptr_leaks: bool, reg: &BpfRegState) -> bool {
         return false;
     }
     reg.is_pointer()
+}
+
+// ============================================================================
+// Linked Register Tracking
+// ============================================================================
+
+/// Represents a single linked register
+#[derive(Debug, Clone, Copy)]
+pub struct LinkedReg {
+    /// Register number
+    pub reg: u8,
+    /// Subreg flag (for 32-bit operations)
+    pub subreg: bool,
+}
+
+/// Tracks a set of linked registers that share the same base ID
+///
+/// This structure is used to efficiently track which registers are linked
+/// together and propagate bounds information between them.
+#[derive(Debug, Clone)]
+pub struct LinkedRegs {
+    /// Number of linked registers in this set
+    pub cnt: u8,
+    /// Array of linked registers
+    pub regs: [LinkedReg; MAX_LINKED_REGS],
+}
+
+impl Default for LinkedRegs {
+    fn default() -> Self {
+        Self {
+            cnt: 0,
+            regs: [LinkedReg {
+                reg: 0,
+                subreg: false,
+            }; MAX_LINKED_REGS],
+        }
+    }
+}
+
+impl LinkedRegs {
+    /// Create a new empty linked register set
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Add a register to the linked set
+    pub fn add(&mut self, reg: u8, subreg: bool) -> Result<()> {
+        if self.cnt >= MAX_LINKED_REGS as u8 {
+            return Err(VerifierError::TooManyLinkedRegisters);
+        }
+
+        // Check if already present
+        for i in 0..self.cnt as usize {
+            if self.regs[i].reg == reg && self.regs[i].subreg == subreg {
+                return Ok(()); // Already in set
+            }
+        }
+
+        self.regs[self.cnt as usize] = LinkedReg { reg, subreg };
+        self.cnt += 1;
+        Ok(())
+    }
+
+    /// Check if a register is in the linked set
+    pub fn contains(&self, reg: u8) -> bool {
+        for i in 0..self.cnt as usize {
+            if self.regs[i].reg == reg {
+                return true;
+            }
+        }
+        false
+    }
+
+    /// Clear the linked register set
+    pub fn clear(&mut self) {
+        self.cnt = 0;
+    }
+
+    /// Iterate over linked registers
+    pub fn iter(&self) -> impl Iterator<Item = &LinkedReg> {
+        self.regs[0..self.cnt as usize].iter()
+    }
 }

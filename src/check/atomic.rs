@@ -39,6 +39,11 @@ pub fn is_atomic_load(insn: &BpfInsn) -> bool {
     (insn.code & 0xe0) == BPF_ATOMIC && (insn.imm as u32 & BPF_FETCH) != 0
 }
 
+/// Check if instruction is load-acquire (BPF_LOAD_ACQ)
+pub fn is_load_acquire(insn: &BpfInsn) -> bool {
+    insn.code == (BPF_LDX | BPF_ATOMIC) && insn.imm == BPF_LOAD_ACQ as i32
+}
+
 /// Check if instruction is atomic store
 pub fn is_atomic_store(insn: &BpfInsn) -> bool {
     let class = insn.class();
@@ -47,6 +52,11 @@ pub fn is_atomic_store(insn: &BpfInsn) -> bool {
     }
     // Atomic store has ATOMIC mode but no FETCH flag
     (insn.code & 0xe0) == BPF_ATOMIC && (insn.imm as u32 & BPF_FETCH) == 0
+}
+
+/// Check if instruction is store-release (BPF_STORE_REL)
+pub fn is_store_release(insn: &BpfInsn) -> bool {
+    insn.code == (BPF_STX | BPF_ATOMIC) && insn.imm == BPF_STORE_REL as i32
 }
 
 /// Check if this is a compare-and-exchange instruction
@@ -224,9 +234,104 @@ pub fn check_atomic_store(
     Ok(())
 }
 
+/// Check a load-acquire instruction
+pub fn check_load_acquire(
+    state: &mut BpfVerifierState,
+    insn: &BpfInsn,
+    insn_idx: usize,
+) -> Result<()> {
+    let dst_reg = insn.dst_reg as usize;
+    let src_reg = insn.src_reg as usize;
+
+    // Get size from instruction code
+    let size = match insn.code & 0x18 {
+        x if x == BPF_W => 4,
+        x if x == BPF_DW => 8,
+        _ => return Err(VerifierError::InvalidInsnSize(insn_idx)),
+    };
+
+    // Check source register (pointer to memory)
+    let src = state
+        .reg(src_reg)
+        .ok_or(VerifierError::InvalidRegister(src_reg as u8))?
+        .clone();
+
+    if !src.is_pointer() {
+        return Err(VerifierError::ExpectedPointer(src_reg as u8));
+    }
+
+    // Verify pointer type supports atomic operations
+    if !atomic_ptr_type_ok(src.reg_type, size) {
+        return Err(VerifierError::InvalidMemoryAccess(
+            "load-acquire not supported for this pointer type".into(),
+        ));
+    }
+
+    // Check memory access (read with acquire semantics)
+    check_mem_access(state, &src, insn.off as i32, size, false, false)?;
+
+    // Set destination register to unknown scalar (loaded value)
+    if let Some(dst) = state.reg_mut(dst_reg) {
+        dst.mark_unknown(size == 4);
+    }
+
+    Ok(())
+}
+
+/// Check a store-release instruction
+pub fn check_store_release(
+    state: &mut BpfVerifierState,
+    insn: &BpfInsn,
+    insn_idx: usize,
+) -> Result<()> {
+    let dst_reg = insn.dst_reg as usize;
+    let src_reg = insn.src_reg as usize;
+
+    // Get size from instruction code
+    let size = match insn.code & 0x18 {
+        x if x == BPF_W => 4,
+        x if x == BPF_DW => 8,
+        _ => return Err(VerifierError::InvalidInsnSize(insn_idx)),
+    };
+
+    // Check source register is initialized (value to store)
+    let src = state
+        .reg(src_reg)
+        .ok_or(VerifierError::InvalidRegister(src_reg as u8))?;
+    if src.reg_type == BpfRegType::NotInit {
+        return Err(VerifierError::UninitializedRegister(src_reg as u8));
+    }
+
+    // Check destination register (pointer to memory)
+    let dst = state
+        .reg(dst_reg)
+        .ok_or(VerifierError::InvalidRegister(dst_reg as u8))?
+        .clone();
+
+    if !dst.is_pointer() {
+        return Err(VerifierError::ExpectedPointer(dst_reg as u8));
+    }
+
+    // Verify pointer type supports atomic operations
+    if !atomic_ptr_type_ok(dst.reg_type, size) {
+        return Err(VerifierError::InvalidMemoryAccess(
+            "store-release not supported for this pointer type".into(),
+        ));
+    }
+
+    // Check memory access (write with release semantics)
+    check_mem_access(state, &dst, insn.off as i32, size, true, false)?;
+
+    Ok(())
+}
+
 /// Check any atomic instruction
 pub fn check_atomic(state: &mut BpfVerifierState, insn: &BpfInsn, insn_idx: usize) -> Result<()> {
-    if is_atomic_load(insn) {
+    if is_load_acquire(insn) {
+        check_load_acquire(state, insn, insn_idx)
+    } else if is_store_release(insn) {
+        check_store_release(state, insn, insn_idx)
+    } else if is_atomic_load(insn) {
         check_atomic_load(state, insn, insn_idx)
     } else if is_atomic_store(insn) {
         check_atomic_store(state, insn, insn_idx)
@@ -258,6 +363,14 @@ pub fn atomic_ptr_type_ok(reg_type: BpfRegType, _size: u32) -> bool {
 
 /// Get the name of an atomic operation
 pub fn atomic_op_name(imm: u32) -> &'static str {
+    // Check for special acquire/release operations
+    if imm == BPF_LOAD_ACQ {
+        return "load_acquire";
+    }
+    if imm == BPF_STORE_REL {
+        return "store_release";
+    }
+
     let op = imm & !BPF_FETCH;
     let fetch = imm & BPF_FETCH != 0;
 
