@@ -8,9 +8,11 @@
 //! - Miscellaneous fixups (do_misc_fixups equivalent)
 //! - Context access conversion (convert_ctx_accesses equivalent)
 //! - Cache optimization (bloom filters, compression, pooling)
+//! - Call summary optimization (Linux 6.13+)
 //! - Unified pass framework with pass manager
 
 pub mod cache;
+pub mod call_summary;
 pub mod ctx_access;
 pub mod dead_code;
 pub mod jit_subprogs;
@@ -19,6 +21,7 @@ pub mod pass;
 pub mod patching;
 
 pub use cache::*;
+pub use call_summary::*;
 pub use ctx_access::*;
 pub use dead_code::*;
 pub use jit_subprogs::*;

@@ -1484,9 +1484,9 @@ pub struct SubprogFastcallInfo {
     pub keep_fastcall_stack: bool,
 }
 
-/// Call summary for fastcall pattern matching
+/// Function call pattern summary for fastcall optimization
 #[derive(Debug, Clone, Default)]
-pub struct CallSummary {
+pub struct FuncCallPattern {
     /// Number of parameters the function takes (0-5)
     pub num_params: u8,
     /// Whether the function returns void (no return value)
@@ -1510,8 +1510,8 @@ const ALL_CALLER_SAVED_REGS: u32 = 0b111111; // bits 0-5
 /// * `kfunc_descs` - Optional kfunc descriptors for kfunc calls
 ///
 /// # Returns
-/// Some(CallSummary) if this is a valid call, None otherwise
-pub fn get_call_summary(insn: &BpfInsn, kfunc_descs: &[KfuncFixupDesc]) -> Option<CallSummary> {
+/// Some(FuncCallPattern) if this is a valid call, None otherwise
+pub fn get_call_summary(insn: &BpfInsn, kfunc_descs: &[KfuncFixupDesc]) -> Option<FuncCallPattern> {
     if insn.code != (BPF_JMP | BPF_CALL) {
         return None;
     }
@@ -1524,7 +1524,7 @@ pub fn get_call_summary(insn: &BpfInsn, kfunc_descs: &[KfuncFixupDesc]) -> Optio
             if desc.func_id == btf_id {
                 // For kfuncs, we need BTF info to determine params
                 // Default to conservative: all params used, non-void
-                return Some(CallSummary {
+                return Some(FuncCallPattern {
                     num_params: 5,
                     is_void: false,
                     fastcall: false, // kfuncs don't support fastcall yet
@@ -1571,7 +1571,7 @@ pub fn get_call_summary(insn: &BpfInsn, kfunc_descs: &[KfuncFixupDesc]) -> Optio
         _ => (5, false, false), // Conservative default
     };
 
-    Some(CallSummary {
+    Some(FuncCallPattern {
         num_params,
         is_void,
         fastcall,

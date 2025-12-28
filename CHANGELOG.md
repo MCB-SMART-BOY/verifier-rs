@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added - Performance Optimization
+
+#### Call Summary Caching (Linux 6.13+)
+- **Call Summary Optimization** ([src/opt/call_summary.rs](src/opt/call_summary.rs))
+  - Caches verification results for repeated function calls with identical states
+  - Reduces verification time for programs with many subprogram calls
+  - LRU-based cache eviction (max 16 summaries per subprogram)
+  - Statistics tracking (hit rate, cache performance metrics)
+  - Functions: `try_apply_call_summary()`, `record_call_summary()`
+  - New types: `CallSummary`, `CallSummaryCache`, `CallSummaryManager`
+
+#### Helper Function Verification
+- Verified all 211 BPF helper functions are defined
+- Added helper verification script ([scripts/verify_helpers.sh](scripts/verify_helpers.sh))
+- Renamed `CallSummary` to `FuncCallPattern` in misc_fixups.rs to avoid naming conflict
+
 ### Added - Linux 6.13-6.18 Features
 
 #### Core Verification Features

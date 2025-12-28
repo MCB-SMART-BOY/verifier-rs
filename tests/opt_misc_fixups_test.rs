@@ -580,7 +580,7 @@ use bpf_verifier::opt::misc_fixups::*;
 
     #[test]
     fn test_call_summary_default() {
-        let cs = CallSummary::default();
+        let cs = FuncCallPattern::default();
         assert_eq!(cs.num_params, 0);
         assert!(!cs.is_void);
         assert!(!cs.fastcall);
