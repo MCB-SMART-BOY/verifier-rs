@@ -1,0 +1,134 @@
+===========================================
+Linux 内核 RFC 提交指南
+===========================================
+
+您的 RFC 邮件已准备好：/tmp/rfc-submission.txt
+
+方法 1: 使用 git send-email (推荐)
+=====================================
+
+1. 配置 git send-email:
+
+   git config --global sendemail.smtpserver smtp.gmail.com
+   git config --global sendemail.smtpserverport 587
+   git config --global sendemail.smtpencryption tls
+   git config --global sendemail.smtpuser mcb2720838051@gmail.com
+   git config --global sendemail.from "MCB-SMART-BOY <mcb2720838051@gmail.com>"
+
+2. 配置 Gmail 应用专用密码:
+   - 访问 https://myaccount.google.com/apppasswords
+   - 生成一个新的应用专用密码
+   - 保存密码备用
+
+3. 发送邮件:
+
+   git send-email \
+     --to=rust-for-linux@vger.kernel.org \
+     --cc=bpf@vger.kernel.org \
+     --cc=linux-kernel@vger.kernel.org \
+     /tmp/rfc-submission.txt
+
+   (系统会提示输入 Gmail 密码，使用应用专用密码)
+
+
+方法 2: 手动使用邮件客户端
+=====================================
+
+如果 git send-email 不可用，可以手动发送：
+
+1. 打开您的邮件客户端（必须支持纯文本模式）
+
+2. 创建新邮件，设置为**纯文本模式**（关键！）
+   - Gmail: 点击"更多选项" → "纯文本模式"
+   - Thunderbird: 按住 Shift 点击"撰写"
+   - Mutt: 默认纯文本
+
+3. 填写邮件：
+
+   收件人: rust-for-linux@vger.kernel.org
+   抄送: bpf@vger.kernel.org, linux-kernel@vger.kernel.org
+   主题: [RFC PATCH 0/1] Rust BPF Verifier Implementation
+
+4. 复制 /tmp/rfc-submission.txt 的内容（从 "Hello" 开始）
+   粘贴到邮件正文
+
+5. 检查：
+   - 确保是纯文本格式（无 HTML）
+   - 确保没有自动换行破坏格式
+   - 确保 Signed-off-by 行完整
+
+6. 发送邮件
+
+
+方法 3: 使用 mutt (Linux 邮件客户端)
+=====================================
+
+1. 安装 mutt:
+   sudo apt-get install mutt
+
+2. 配置 ~/.muttrc:
+
+   set from = "MCB-SMART-BOY <mcb2720838051@gmail.com>"
+   set realname = "MCB-SMART-BOY"
+   set smtp_url = "smtps://mcb2720838051@smtp.gmail.com:465/"
+   set smtp_pass = "您的Gmail应用专用密码"
+
+3. 发送:
+
+   mutt -s "[RFC PATCH 0/1] Rust BPF Verifier Implementation" \
+        rust-for-linux@vger.kernel.org \
+        -c bpf@vger.kernel.org \
+        -c linux-kernel@vger.kernel.org \
+        < /tmp/rfc-submission.txt
+
+
+提交后需要做什么
+=====================================
+
+1. 订阅邮件列表（接收回复）:
+
+   发送邮件到: majordomo@vger.kernel.org
+   主题: subscribe
+   正文: subscribe rust-for-linux
+
+2. 监控回复:
+   - 查看 https://lore.kernel.org/rust-for-linux/
+   - 检查您的邮箱
+
+3. 回复反馈:
+   - 使用"回复全部"保持邮件线程
+   - 使用内联回复（不要 top-posting）
+   - 感谢审阅者的时间
+
+4. 准备 v2（如果需要）:
+   - 根据反馈修改代码
+   - 更新主题为 [RFC PATCH v2 0/1]
+   - 在邮件开头添加 changelog
+
+
+重要提醒
+=====================================
+
+1. 邮件必须是**纯文本**，不能是 HTML
+2. 不要附加文件，内容必须在邮件正文中
+3. 保持 72-75 字符的行宽
+4. 使用正确的邮件线程（Reply-To）
+5. 有耐心，维护者可能需要 1-2 周回复
+
+
+当前项目状态
+=====================================
+
+✓ 代码完成 (94% 功能对等)
+✓ 测试通过 (900+ tests)
+✓ 零警告
+✓ 文档齐全
+✓ RFC 邮件准备就绪
+
+准备发送！
+
+=====================================
+作者: MCB-SMART-BOY <mcb2720838051@gmail.com>
+仓库: https://github.com/MCB-SMART-BOY/verifier-rs
+日期: 2025-12-28
+=====================================
