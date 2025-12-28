@@ -279,6 +279,11 @@ impl From<VerifierError> for KernelError {
             VerifierError::InvalidPointerComparison(_) => KernelError::EINVAL,
             VerifierError::InvalidReturnValue(_) => KernelError::EINVAL,
             VerifierError::AttachFailed(_) => KernelError::EINVAL,
+
+            // Linked register errors (Linux 6.13+)
+            VerifierError::TooManyLinkedRegisters => KernelError::E2BIG,
+            VerifierError::InvalidValue(_) => KernelError::EINVAL,
+            VerifierError::ProgramTooComplex => KernelError::E2BIG,
         }
     }
 }

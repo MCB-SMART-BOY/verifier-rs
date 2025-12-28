@@ -41,7 +41,7 @@ fn test_verifier_log_disabled() {
 
 #[test]
 fn test_log_level() {
-    let mut log = VerifierLog::with_level(1024, LogLevel::Warning);
+    let log = VerifierLog::with_level(1024, LogLevel::Warning);
 
     assert!(log.is_level_enabled(LogLevel::Error));
     assert!(log.is_level_enabled(LogLevel::Warning));

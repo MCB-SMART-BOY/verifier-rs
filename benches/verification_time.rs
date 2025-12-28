@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0
 //! Benchmarks for BPF verification time
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{criterion_group, criterion_main, Criterion};
+use std::hint::black_box;
 
 use bpf_verifier::core::types::{BpfInsn, BpfProgType};
 use bpf_verifier::prelude::*;
