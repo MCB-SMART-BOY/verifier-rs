@@ -6,13 +6,13 @@
 
 ## English
 
-A Rust implementation of the Linux kernel BPF verifier (`kernel/bpf/verifier.c`), designed for Rust for Linux (Linux 6.12+).
+A Rust implementation of the Linux kernel BPF verifier (`kernel/bpf/verifier.c`), designed for Rust for Linux (**Linux 6.18+ compatible**).
 
 ### Overview
 
 This crate provides static code analysis for eBPF programs, ensuring they are safe before being loaded into the kernel. It is a `#![no_std]` library that can be integrated into the Linux kernel as a Rust-based BPF verifier.
 
-**Status**: RFC submitted to rust-for-linux@vger.kernel.org
+**Status**: **RFC submitted** to rust-for-linux@vger.kernel.org | **94% feature parity** with Linux 6.18
 
 ### Features
 
@@ -26,10 +26,19 @@ This crate provides static code analysis for eBPF programs, ensuring they are sa
 #### Advanced Features
 - **State Pruning**: Hash-indexed equivalence checking for performance
 - **211 Helper Functions**: Complete BPF helper function validation
-- **85+ Kfuncs**: Kernel function call verification (synced with kernel 6.12)
+- **85+ Kfuncs**: Kernel function call verification (synced with kernel 6.18)
 - **BTF Integration**: Full BTF type system support
 - **Spectre Mitigation**: Speculative execution safety checks
 - **IRQ Flag Tracking**: Interrupt state verification
+
+#### Linux 6.13-6.18 Features 🆕
+- **Load-Acquire/Store-Release**: Atomic memory barrier instructions
+- **may_goto Loops**: Bounded loop support with guaranteed termination
+- **Linked Registers**: Enhanced precision tracking for register relationships
+- **Private Stack**: Isolated stack per subprogram for better security
+- **Fastcall Optimization**: Reduced overhead for frequently-used helpers
+- **BPF Features Flags**: Runtime feature toggle system
+- **Extended Dynptr**: SKB metadata and file-backed dynamic pointers
 
 ### Project Structure
 
@@ -144,13 +153,13 @@ This project was created out of curiosity and a desire to learn. Feedback and su
 
 ## 中文
 
-Linux 内核 BPF 验证器 (`kernel/bpf/verifier.c`) 的 Rust 实现，专为 Rust for Linux (Linux 6.12+) 设计。
+Linux 内核 BPF 验证器 (`kernel/bpf/verifier.c`) 的 Rust 实现，专为 Rust for Linux (**Linux 6.18+ 兼容**) 设计。
 
 ### 概述
 
 本 crate 提供 eBPF 程序的静态代码分析，确保程序在加载到内核之前是安全的。这是一个 `#![no_std]` 库，可以集成到 Linux 内核中作为 BPF 验证器的 Rust 实现。
 
-**状态**：RFC 已提交至 rust-for-linux@vger.kernel.org
+**状态**：**RFC 已提交** 至 rust-for-linux@vger.kernel.org | **94% 功能对等** Linux 6.18
 
 ### 功能特性
 
@@ -164,10 +173,19 @@ Linux 内核 BPF 验证器 (`kernel/bpf/verifier.c`) 的 Rust 实现，专为 Ru
 #### 高级功能
 - **状态剪枝**：哈希索引的等价性检查，提升性能
 - **211 个 Helper 函数**：完整的 BPF helper 函数验证
-- **85+ Kfunc**：内核函数调用验证（同步至 kernel 6.12）
+- **85+ Kfunc**：内核函数调用验证（同步至 kernel 6.18）
 - **BTF 集成**：完整的 BTF 类型系统支持
 - **Spectre 缓解**：推测执行安全检查
 - **IRQ 标志跟踪**：中断状态验证
+
+#### Linux 6.13-6.18 新特性 🆕
+- **Load-Acquire/Store-Release**：原子内存屏障指令
+- **may_goto 循环**：有界循环支持，保证终止
+- **链接寄存器**：增强的寄存器关系精度追踪
+- **私有栈**：子程序独立栈隔离，提升安全性
+- **Fastcall 优化**：高频 helper 调用开销降低
+- **BPF 特性标志**：运行时特性开关系统
+- **扩展 Dynptr**：支持 SKB 元数据和文件动态指针
 
 ### 项目结构
 

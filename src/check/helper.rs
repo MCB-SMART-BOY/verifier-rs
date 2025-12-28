@@ -2576,11 +2576,18 @@ pub fn check_fastcall_stack_contract(
     // 3. Caller-saved registers must be properly saved
 
     // Get current frame
-    let frame = state.current_frame();
+    if state.curframe >= state.frame.len() {
+        return Err(VerifierError::InvalidState(
+            "invalid frame index".into(),
+        ));
+    }
+
+    let frame = state.frame[state.curframe].as_ref()
+        .ok_or_else(|| VerifierError::InvalidState("no current frame".into()))?;
 
     // Check stack alignment
     // Fastcall requires 8-byte alignment
-    if frame.allocated_stack % 8 != 0 {
+    if frame.stack.allocated_stack % 8 != 0 {
         return Err(VerifierError::InvalidState(
             "fastcall requires 8-byte stack alignment".into(),
         ));

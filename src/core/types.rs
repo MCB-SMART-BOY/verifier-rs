@@ -690,10 +690,12 @@ pub const BPF_PSEUDO_MAP_IDX_VALUE: u8 = 6;
 
 /// BPF atomic: compare and exchange
 pub const BPF_CMPXCHG: u32 = 0xf1;
-/// BPF atomic: load-acquire
-pub const BPF_LOAD_ACQ: u32 = 0x01;
 /// BPF atomic: exchange
 pub const BPF_XCHG: u32 = 0xe1;
+/// BPF atomic: load-acquire (Linux 6.13+)
+pub const BPF_LOAD_ACQ: u32 = 0xc1;
+/// BPF atomic: store-release (Linux 6.13+)
+pub const BPF_STORE_REL: u32 = 0xc2;
 /// BPF atomic: fetch flag
 pub const BPF_FETCH: u32 = 0x01;
 
@@ -1409,16 +1411,6 @@ bitflags! {
 }
 
 impl BpfFeatures {
-    /// Create a new features set with all features enabled
-    pub fn all() -> Self {
-        BpfFeatures::RDONLY_CAST_TO_VOID | BpfFeatures::STREAMS
-    }
-
-    /// Create a new features set with no features enabled
-    pub fn none() -> Self {
-        BpfFeatures::empty()
-    }
-
     /// Create a default feature set (all features enabled)
     pub fn default_features() -> Self {
         Self::all()
