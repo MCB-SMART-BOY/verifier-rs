@@ -1,40 +1,38 @@
 # SPDX-License-Identifier: GPL-2.0
 
-[package]
-name = "bpf_verifier"
-version = "0.1.0"
+[workspace]
+resolver = "2"
+members = [
+    "crates/bpf-verifier-core",
+    "crates/bpf-verifier-linux",
+    "crates/bpf-verifier",
+]
+
+[workspace.package]
+version = "0.2.0"
 edition = "2021"
 authors = ["MCB-SMART-BOY <mcb2720838051@gmail.com>"]
-description = "A Rust implementation of the Linux kernel BPF verifier for Rust for Linux"
 license = "GPL-2.0-only"
 repository = "https://github.com/MCB-SMART-BOY/verifier-rs"
-readme = "README.md"
-keywords = ["bpf", "ebpf", "verifier", "linux", "kernel", "rust-for-linux"]
-categories = ["no-std", "os::linux-apis"]
+keywords = ["bpf", "ebpf", "verifier", "kernel"]
+categories = ["no-std", "os"]
 
-[lib]
-name = "bpf_verifier"
-path = "src/lib.rs"
-crate-type = ["rlib"]
+[workspace.dependencies]
+# Internal crates
+bpf-verifier-core = { path = "crates/bpf-verifier-core" }
+bpf-verifier-linux = { path = "crates/bpf-verifier-linux" }
 
-[dependencies]
+# External dependencies
 bitflags = { version = "2.10", default-features = false }
 
-[dev-dependencies]
-criterion = { version = "0.8", default-features = false }
+[workspace.lints.rust]
+unexpected_cfgs = { level = "allow", check-cfg = ['cfg(feature, values("__disabled_test__"))'] }
 
-[[bench]]
-name = "verification_time"
-harness = false
-
-[features]
-default = []
-# Enable verbose logging (for debugging)
-verbose = []
-# Enable statistics collection
-stats = []
-# Enable kernel integration (for building as kernel module)
-kernel = []
+[workspace.lints.clippy]
+field_reassign_with_default = "allow"
+unnecessary_cast = "allow"
+unnecessary_map_or = "allow"
+get_first = "allow"
 
 [profile.release]
 panic = "abort"
@@ -44,12 +42,3 @@ opt-level = 2
 
 [profile.dev]
 panic = "abort"
-
-[lints.rust]
-unexpected_cfgs = { level = "allow", check-cfg = ['cfg(feature, values("__disabled_test__"))'] }
-
-[lints.clippy]
-field_reassign_with_default = "allow"
-unnecessary_cast = "allow"
-unnecessary_map_or = "allow"
-get_first = "allow"

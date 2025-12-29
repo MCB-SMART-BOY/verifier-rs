@@ -51,6 +51,26 @@ pub enum VerifierError {
     UnreachableInstruction(usize),
     /// Invalid helper function call
     InvalidHelperCall(String),
+    /// Unknown helper function ID
+    UnknownHelper(u32),
+    /// Helper not allowed for program type
+    HelperNotAllowedForProgType {
+        /// Helper function ID
+        helper_id: u32,
+        /// Program type
+        prog_type: u32,
+    },
+    /// Unknown kfunc BTF ID
+    UnknownKfunc(u32),
+    /// Kfunc not allowed for program type
+    KfuncNotAllowedForProgType {
+        /// Kfunc BTF ID
+        kfunc_id: u32,
+        /// Program type
+        prog_type: u32,
+    },
+    /// Invalid map operation
+    InvalidMapOperation(String),
     /// Type mismatch in operation
     TypeMismatch {
         /// Expected type
@@ -172,6 +192,15 @@ impl fmt::Display for VerifierError {
                 write!(f, "unreachable instruction at index {}", i)
             }
             VerifierError::InvalidHelperCall(s) => write!(f, "invalid helper call: {}", s),
+            VerifierError::UnknownHelper(id) => write!(f, "unknown helper function {}", id),
+            VerifierError::HelperNotAllowedForProgType { helper_id, prog_type } => {
+                write!(f, "helper {} not allowed for program type {}", helper_id, prog_type)
+            }
+            VerifierError::UnknownKfunc(id) => write!(f, "unknown kfunc BTF ID {}", id),
+            VerifierError::KfuncNotAllowedForProgType { kfunc_id, prog_type } => {
+                write!(f, "kfunc {} not allowed for program type {}", kfunc_id, prog_type)
+            }
+            VerifierError::InvalidMapOperation(s) => write!(f, "invalid map operation: {}", s),
             VerifierError::TypeMismatch { expected, got } => {
                 write!(f, "type mismatch: expected {}, got {}", expected, got)
             }

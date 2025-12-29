@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0
 
-//! # BPF Verifier for Rust for Linux
+//! # BPF Verifier Core
 //!
-//! A Rust implementation of the Linux kernel BPF verifier (`kernel/bpf/verifier.c`).
+//! Platform-agnostic BPF verifier implementation.
 //!
 //! This crate provides static code analysis for eBPF programs to ensure safety
 //! before they are loaded into the kernel.
@@ -28,6 +28,18 @@
 //! - [`sanitize`]: Pointer arithmetic sanitization for Spectre mitigation
 //! - [`opt`]: Optimization passes (dead code elimination, instruction patching)
 //! - [`verifier`]: Main verification loop and environment
+//! - [`platform`]: Platform abstraction layer for cross-OS support
+//!
+//! ## Platform Abstraction
+//!
+//! The verifier uses a trait-based platform abstraction layer that separates
+//! core verification logic from OS-specific definitions. This allows:
+//!
+//! - Running the same verifier on different operating systems
+//! - Easy testing with mock platforms
+//! - Custom BPF implementations with their own helper/map definitions
+//!
+//! See the [`platform`] module for details on implementing custom platforms.
 
 #![no_std]
 #![warn(missing_docs)]
@@ -81,9 +93,8 @@ pub mod opt;
 /// Main verifier
 pub mod verifier;
 
-/// Kernel integration layer
-#[cfg(feature = "kernel")]
-pub mod kernel;
+/// Platform abstraction layer
+pub mod platform;
 
 // ============================================================================
 // Prelude - commonly used re-exports
@@ -133,6 +144,12 @@ pub mod prelude {
 
     // Verifier
     pub use crate::verifier::{MainVerifier, VerifierEnv};
+
+    // Platform abstraction
+    pub use crate::platform::{
+        PlatformSpec, HelperProvider, ProgTypeProvider, KfuncProvider,
+        MapProvider, ContextProvider,
+    };
 }
 
 // Re-export error types at crate root for convenience

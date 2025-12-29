@@ -1,0 +1,34 @@
+# SPDX-License-Identifier: GPL-2.0
+
+[package]
+name = "bpf-verifier"
+description = "BPF verifier - convenience crate that re-exports core and Linux platform"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+keywords = ["bpf", "ebpf", "verifier", "linux"]
+categories = ["no-std", "os::linux-apis"]
+readme = "../../README.md"
+
+[lib]
+name = "bpf_verifier"
+crate-type = ["rlib"]
+
+[dependencies]
+bpf-verifier-core.workspace = true
+bpf-verifier-linux.workspace = true
+
+[features]
+default = ["linux"]
+# Include Linux platform (default)
+linux = []
+# Enable Linux kernel integration
+kernel = ["bpf-verifier-linux/kernel"]
+# Forward feature flags
+verbose = ["bpf-verifier-core/verbose", "bpf-verifier-linux/verbose"]
+stats = ["bpf-verifier-core/stats", "bpf-verifier-linux/stats"]
+
+[lints]
+workspace = true

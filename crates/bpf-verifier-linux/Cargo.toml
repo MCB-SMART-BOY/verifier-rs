@@ -1,0 +1,32 @@
+# SPDX-License-Identifier: GPL-2.0
+
+[package]
+name = "bpf-verifier-linux"
+description = "Linux platform implementation for BPF verifier - helpers, program types, kfuncs, and kernel integration"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+keywords = ["bpf", "ebpf", "linux", "kernel"]
+categories = ["no-std", "os::linux-apis"]
+readme = "README.md"
+
+[lib]
+name = "bpf_verifier_linux"
+crate-type = ["rlib"]
+
+[dependencies]
+bpf-verifier-core.workspace = true
+bitflags.workspace = true
+
+[features]
+default = []
+# Enable Linux kernel integration (for building as kernel module)
+kernel = []
+# Forward feature flags to core
+verbose = ["bpf-verifier-core/verbose"]
+stats = ["bpf-verifier-core/stats"]
+
+[lints]
+workspace = true

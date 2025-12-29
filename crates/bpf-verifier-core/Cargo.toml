@@ -1,0 +1,30 @@
+# SPDX-License-Identifier: GPL-2.0
+
+[package]
+name = "bpf-verifier-core"
+description = "Platform-agnostic BPF verifier core - verification algorithms and platform abstraction traits"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+keywords = ["bpf", "ebpf", "verifier", "no-std"]
+categories = ["no-std", "development-tools"]
+readme = "README.md"
+
+[lib]
+name = "bpf_verifier_core"
+crate-type = ["rlib"]
+
+[dependencies]
+bitflags.workspace = true
+
+[features]
+default = []
+# Enable verbose logging (for debugging)
+verbose = []
+# Enable statistics collection
+stats = []
+
+[lints]
+workspace = true

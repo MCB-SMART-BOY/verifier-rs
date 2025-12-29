@@ -1,363 +1,385 @@
-# Rust BPF Verifier
+```
+ ____  ____  _____  __     __        _  __ _           
+| __ )|  _ \|  ___| \ \   / /__ _ __(_)/ _(_) ___ _ __ 
+|  _ \| |_) | |_     \ \ / / _ \ '__| | |_| |/ _ \ '__|
+| |_) |  __/|  _|     \ V /  __/ |  | |  _| |  __/ |   
+|____/|_|   |_|        \_/ \___|_|  |_|_| |_|\___|_|   
+```
+
+<div align="center">
 
 [![License: GPL-2.0](https://img.shields.io/badge/License-GPL%202.0-blue.svg)](https://www.gnu.org/licenses/gpl-2.0)
-[![Rust Version](https://img.shields.io/badge/rust-1.92.0%2B-orange.svg)](https://www.rust-lang.org/)
-[![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)](https://github.com/MCB-SMART-BOY/verifier-rs)
-[![Tests](https://img.shields.io/badge/tests-900%2B%20passing-success.svg)](https://github.com/MCB-SMART-BOY/verifier-rs)
-[![Feature Parity](https://img.shields.io/badge/feature%20parity-94%25-green.svg)](https://github.com/MCB-SMART-BOY/verifier-rs)
-[![RFC Status](https://img.shields.io/badge/RFC-submitted-yellow.svg)](https://lore.kernel.org/all/20251228190455.176910-1-mcb2720838051@gmail.com/)
+[![Rust Version](https://img.shields.io/badge/rust-1.82.0%2B-orange.svg)](https://www.rust-lang.org/)
+[![no_std](https://img.shields.io/badge/no__std-yes-green.svg)]()
 
-[English](#english) | [中文](#中文)
+**🔒 Memory-Safe | 🌍 Platform-Agnostic | ⚡ Zero-Cost Abstractions**
+
+[English](#-english) | [中文](#-中文)
+
+</div>
 
 ---
 
-## English
+#📘 English
 
-A **memory-safe** Rust implementation of the Linux kernel BPF verifier (`kernel/bpf/verifier.c`), designed for **Rust for Linux** (Linux 6.18+ compatible).
+## 👋 Hey there, fellow hacker!
 
-### 🎯 Overview
+Ever wondered what it takes to verify that a piece of eBPF code won't crash your kernel? Well, you're looking at it!
 
-This crate provides static code analysis for eBPF programs, ensuring they are safe before being loaded into the kernel. It is a `#![no_std]` library that can be integrated into the Linux kernel as a Rust-based BPF verifier.
+This is a **from-scratch Rust implementation** of the BPF verifier - the gatekeeper that decides whether your eBPF programs are safe enough to run in kernel space. No C code, no FFI nightmares, just pure Rust goodness with `#![no_std]` compatibility.
 
-**Status**:
-- ✅ **RFC submitted** to [rust-for-linux@vger.kernel.org](https://lore.kernel.org/all/20251228190455.176910-1-mcb2720838051@gmail.com/)
-- ✅ **94% feature parity** with Linux 6.18
-- ✅ **900+ tests passing** (zero warnings)
-- ✅ **Production-ready** code quality
+### 🤔 Why does this exist?
 
-### ⚡ Quick Start
+Because I was curious. And because Rust makes systems programming *fun* again.
 
-```bash
-# Clone the repository
-git clone https://github.com/MCB-SMART-BOY/verifier-rs
-cd verifier-rs
+The Linux kernel's BPF verifier is a ~30,000 line C beast. I thought: "What if I could have all that power, but with Rust's safety guarantees?" So here it is.
 
-# Build and test
-cargo build --release
-cargo test --all-features
-cargo clippy --all-targets --all-features
+### ✨ What makes this special?
 
-# Run benchmarks
-cargo bench
+```
+┌─────────────────────────────────────────────────────────────┐
+│                  🎭 The Magic Architecture                  │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│   ┌─────────────────┐         ┌─────────────────────────┐  │
+│   │  Your Platform  │────────▶│   bpf-verifier-core    │  │
+│   │   (Linux, Your  │ traits  │   (the brain 🧠)       │  │
+│   │    own OS, etc) │         │                         │  │
+│   └─────────────────┘         └─────────────────────────┘  │
+│                                                             │
+│   Want to run BPF on your own OS? Just implement the       │
+│   PlatformSpec trait. That's it. No kidding.               │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-### 💡 Why Rust for BPF Verifier?
+### 📦 The Crates
 
-| Aspect | C Implementation | Rust Implementation |
-|--------|------------------|---------------------|
-| **Memory Safety** | Manual management, prone to use-after-free | Guaranteed by ownership system |
-| **Null Safety** | Runtime checks, potential crashes | Compile-time prevention with `Option<T>` |
-| **Data Races** | Possible in concurrent code | Eliminated by borrow checker |
-| **Buffer Overflows** | Possible without careful bounds checking | Prevented by slice bounds checking |
-| **Type Safety** | Weak typing, easy to misuse | Strong typing with algebraic data types |
-| **Error Handling** | Error codes, easy to ignore | `Result<T, E>` forces explicit handling |
-| **Maintainability** | Complex macro-heavy code | Clear type system, better tooling |
-| **Performance** | Manual optimizations | Zero-cost abstractions, same speed |
+| Crate | What it does | Vibe |
+|-------|--------------|------|
+| `bpf-verifier-core` | The platform-agnostic brain | 🧠 Pure logic |
+| `bpf-verifier-linux` | Linux-specific stuff | 🐧 Penguin approved |
+| `bpf-verifier` | Convenience re-exports | 🎁 Easy mode |
 
-**Benefits**:
-- 🛡️ **Memory safety** without runtime overhead
-- 🔒 **Thread safety** guaranteed at compile time
-- 🐛 **Fewer bugs** through stronger type system
-- 📚 **Better documentation** with rustdoc
-- 🔧 **Modern tooling** (cargo, clippy, rustfmt)
+### 🚀 Quick Start
 
-### ✨ Features
+```bash
+# Clone it
+git clone https://github.com/anthropics/verifier-rs
+cd verifier-rs
 
-#### Core Verification
-- **Register State Tracking**: Complete 11-register state with type and bounds tracking
-- **Memory Safety**: Validates all memory accesses (stack, map, packet, context, arena)
-- **Control Flow Analysis**: Explores all possible execution paths
-- **Reference Tracking**: Ensures acquired resources (locks, refs, RCU) are properly released
-- **Bounds Analysis**: Uses Tnum (tracked numbers) for precise numeric bounds
+# Build it
+cargo build --release
 
-#### Advanced Features
-- **State Pruning**: Hash-indexed equivalence checking for performance
-- **211 Helper Functions**: Complete BPF helper function validation
-- **85+ Kfuncs**: Kernel function call verification (synced with kernel 6.18)
-- **BTF Integration**: Full BTF type system support
-- **Spectre Mitigation**: Speculative execution safety checks
-- **IRQ Flag Tracking**: Interrupt state verification
+# Test it (I have tests, lots of them)
+cargo test --workspace
 
-#### Linux 6.13-6.18 Features 🆕
-- **Load-Acquire/Store-Release**: Atomic memory barrier instructions
-- **may_goto Loops**: Bounded loop support with guaranteed termination
-- **Linked Registers**: Enhanced precision tracking for register relationships
-- **Private Stack**: Isolated stack per subprogram for better security
-- **Fastcall Optimization**: Reduced overhead for frequently-used helpers
-- **BPF Features Flags**: Runtime feature toggle system
-- **Extended Dynptr**: SKB metadata and file-backed dynamic pointers
+# Feeling fancy? Check for lint
+cargo clippy --workspace
+```
 
-### 📂 Project Structure
+### 💻 Show me the code!
+
+**Using with Linux:**
+
+```rust
+use bpf_verifier_core::verifier::{GenericVerifierEnv, GenericMainVerifier};
+use bpf_verifier_linux::LinuxSpec;
+
+// Create the platform - Linux in this case
+let platform = LinuxSpec::new();
+
+// Your BPF program (the instructions you want to verify)
+let insns = vec![/* your BPF instructions here */];
+
+// Set up the verifier environment
+let mut env = GenericVerifierEnv::new(
+    platform,
+    insns,
+    6,      // program type (XDP in this case)
+    false,  // allow_ptr_leaks (usually false unless you're privileged)
+)?;
+
+// Let's verify! 🎉
+let mut verifier = GenericMainVerifier::new(&mut env);
+verifier.verify()?;
+
+println!("✅ Your program is safe!");
+```
+
+**Building your own platform:**
+
+```rust
+use bpf_verifier_core::platform::*;
+
+// Your custom platform - maybe for your own OS?
+#[derive(Clone)]
+struct MyAwesomeOS {
+    helper: MyHelperProvider,
+    // ... other providers
+}
+
+impl PlatformSpec for MyAwesomeOS {
+    type Helper = MyHelperProvider;
+    type ProgType = MyProgTypeProvider;
+    type Kfunc = MyKfuncProvider;
+    type Map = MyMapProvider;
+    type Context = MyContextProvider;
+
+    fn name(&self) -> &'static str { "my-awesome-os" }
+    // implement the rest...
+}
+
+// Now use it!
+let platform = MyAwesomeOS::new();
+let mut env = GenericVerifierEnv::new(platform, insns, prog_type, false)?;
+```
+
+### 🧩 Platform Traits
+
+The secret sauce that makes this all work:
+
+| Trait | What it's for | Example |
+|-------|---------------|---------|
+| `PlatformSpec` | The main combo trait | Ties everything together |
+| `HelperProvider` | BPF helper functions | `bpf_map_lookup_elem`, etc. |
+| `ProgTypeProvider` | Program types | XDP, kprobe, tracepoint... |
+| `KfuncProvider` | Kernel functions | The new hotness |
+| `MapProvider` | Map types | HashMap, Array, RingBuf... |
+| `ContextProvider` | Context structures | What's in R1 when you start |
+
+### 🔥 Features that'll make you smile
+
+- **Register tracking**: All 11 registers, with types and bounds. I know *exactly* what's in each one.
+- **Memory safety**: Stack, maps, packets, context - I check 'em all.
+- **Control flow**: Every path explored. No shortcuts.
+- **Reference tracking**: Acquired a lock? I'll make sure you release it.
+- **State pruning**: Smart equivalence checking so I don't explore the same state twice.
+
+### 📁 Project Layout
 
 ```
 verifier-rs/
-├── src/
-│   ├── core/       - Core types, instruction definitions, error handling
-│   ├── state/      - Register/stack/verifier state management
-│   ├── bounds/     - Tnum arithmetic, scalar bounds tracking
-│   ├── analysis/   - CFG, SCC, precision tracking, state pruning
-│   ├── check/      - ALU, jump, helper, kfunc verification
-│   ├── mem/        - Memory access verification
-│   ├── special/    - Dynptr, iterator, exception handling
-│   ├── btf/        - BTF type system integration
-│   ├── sanitize/   - Spectre mitigation passes
-│   ├── opt/        - Optimization passes (call summary, cache)
-│   ├── kernel/     - Kernel integration layer
-│   └── verifier/   - Main verification loop
-│
-├── benches/        - Criterion performance benchmarks
-├── tests/          - Integration tests (900+ tests)
-├── docs/           - Additional documentation
-│
-├── PERFORMANCE.md  - Detailed performance analysis
-├── CHANGELOG.md    - Version history and changes
-└── README.md       - This file
+├── crates/
+│   ├── bpf-verifier-core/    # 🧠 The brain
+│   ├── bpf-verifier-linux/   # 🐧 Linux specifics  
+│   └── bpf-verifier/         # 🎁 Easy imports
+├── docs/
+│   ├── CHANGELOG.md          # 📝 What's new
+│   ├── PERFORMANCE.md        # ⚡ Speed stuff
+│   └── UNSAFE_AUDIT.md       # 🔒 Safety report
+└── README.md                 # 👈 You are here
 ```
 
-### Build
+### 📚 Docs
 
-```bash
-# Build the library
-cargo build --release
+| Doc | What's inside |
+|-----|---------------|
+| [CHANGELOG](docs/CHANGELOG.md) | The journey so far |
+| [PERFORMANCE](docs/PERFORMANCE.md) | Numbers that go brrr |
+| [UNSAFE_AUDIT](docs/UNSAFE_AUDIT.md) | My unsafe code confessions |
 
-# Run tests
-cargo test
+### 📋 Requirements
 
-# Run benchmarks
-cargo bench
-```
+- **Rust 1.82.0+** (I use some nice features)
+- **`#![no_std]` compatible** (no OS needed!)
+- **`alloc` crate** (I do need some heap though)
 
-### 📊 Benchmark Results
+### 📜 License
 
-Performance benchmarks on Linux 6.8.0 (Azure), Rust 1.92.0:
+**GPL-2.0-only** - Because I believe in freedom.
 
-| Benchmark | Mean Time | Throughput |
-|-----------|-----------|------------|
-| Simple verification | 24.82 µs | ~40,000 programs/sec |
-| Medium verification | 45.09 µs | ~22,000 programs/sec |
-| Complex verification | 1.04 ms | ~960 programs/sec |
-| State creation | 181.36 ns | ~5.5M ops/sec |
-| Bounds operations | 8.61 ns | ~116M ops/sec |
+### 🤝 Contributing
 
-**Key Performance Characteristics**:
-- ✅ Sub-millisecond verification for typical programs
-- ✅ Nanosecond-level core operations
-- ✅ Linear scaling with program complexity
-- ✅ Zero GC pauses (predictable latency)
-- ✅ Efficient state pruning (50-90% reduction)
+Found a bug? Have an idea? PRs and issues are welcome!
 
-See [PERFORMANCE.md](PERFORMANCE.md) for detailed analysis and methodology.
-
-### Kernel Integration (Linux 6.12+)
-
-This library is designed for integration with Rust for Linux. The implementation uses pure Rust with no C glue code, following the modern kernel::Module pattern:
-
-```rust
-use kernel::prelude::*;
-
-module! {
-    type: RustBpfVerifier,
-    name: "rust_bpf_verifier",
-    license: "GPL",
-}
-
-impl kernel::Module for RustBpfVerifier {
-    fn init(_module: &'static ThisModule) -> Result<Self> {
-        pr_info!("Rust BPF verifier loaded\n");
-        Ok(Self { })
-    }
-}
-```
-
-#### Configuration
-
-```
-CONFIG_BPF_VERIFIER_RUST=y
-echo 1 > /proc/sys/kernel/bpf_rust_verifier
-```
-
-### Requirements
-
-- Rust (stable)
-- `#![no_std]` environment
-- `alloc` crate (for Vec, Box, etc.)
-- `bitflags` crate
-
-### License
-
-GPL-2.0-only (Linux kernel compatible)
-
-See [LICENSE](LICENSE) for details.
-
-### Contributing
-
-Contributions are welcome! Please feel free to submit issues and pull requests.
-
-### References
-
-- [Rust for Linux](https://rust-for-linux.com/)
-- [Rust for Linux Documentation](https://docs.kernel.org/rust/)
-- [Kernel Crate API](https://rust-for-linux.github.io/docs/kernel/)
-- [Linux kernel BPF verifier](https://github.com/torvalds/linux/blob/master/kernel/bpf/verifier.c)
-
-### Author
-
-MCB-SMART-BOY - A sophomore student passionate about BPF and Rust.
-
-This project was created out of curiosity and a desire to learn. Feedback and suggestions are always appreciated.
+This project was born from curiosity and a love for Rust. Every contribution, no matter how small, makes it better.
 
 ---
 
-## 中文
+**Built with 💜 and lots of ☕ by MCB-SMART-BOY**
 
-Linux 内核 BPF 验证器 (`kernel/bpf/verifier.c`) 的 Rust 实现，专为 Rust for Linux (**Linux 6.18+ 兼容**) 设计。
+*A sophomore student who just really likes BPF and Rust.*
 
-### 概述
+---
 
-本 crate 提供 eBPF 程序的静态代码分析，确保程序在加载到内核之前是安全的。这是一个 `#![no_std]` 库，可以集成到 Linux 内核中作为 BPF 验证器的 Rust 实现。
+# 📗 中文
 
-**状态**：**RFC 已提交** 至 rust-for-linux@vger.kernel.org | **94% 功能对等** Linux 6.18
+## 👋 嘿，折腾代码的朋友！
 
-### 功能特性
+有没有想过，怎样才能验证一段 eBPF 代码不会把内核搞崩？你现在看到的就是答案！
 
-#### 核心验证
-- **寄存器状态跟踪**：完整的 11 寄存器状态，包含类型和边界跟踪
-- **内存安全**：验证所有内存访问（栈、map、数据包、上下文、arena）
-- **控制流分析**：探索所有可能的执行路径
-- **引用跟踪**：确保获取的资源（锁、引用、RCU）被正确释放
-- **边界分析**：使用 Tnum（追踪数字）跟踪数值边界
+这是一个**从零开始用 Rust 写的** BPF 验证器——它负责决定你的 eBPF 程序是不是足够安全、能不能在内核里跑。没有 C 代码，没有 FFI 那些破事儿，就是纯纯的 Rust，而且还支持 `#![no_std]`。
 
-#### 高级功能
-- **状态剪枝**：哈希索引的等价性检查，提升性能
-- **211 个 Helper 函数**：完整的 BPF helper 函数验证
-- **85+ Kfunc**：内核函数调用验证（同步至 kernel 6.18）
-- **BTF 集成**：完整的 BTF 类型系统支持
-- **Spectre 缓解**：推测执行安全检查
-- **IRQ 标志跟踪**：中断状态验证
+### 🤔 为啥要搞这个？
 
-#### Linux 6.13-6.18 新特性 🆕
-- **Load-Acquire/Store-Release**：原子内存屏障指令
-- **may_goto 循环**：有界循环支持，保证终止
-- **链接寄存器**：增强的寄存器关系精度追踪
-- **私有栈**：子程序独立栈隔离，提升安全性
-- **Fastcall 优化**：高频 helper 调用开销降低
-- **BPF 特性标志**：运行时特性开关系统
-- **扩展 Dynptr**：支持 SKB 元数据和文件动态指针
+因为好奇呗。而且 Rust 让系统编程重新变得*有意思*了。
 
-### 项目结构
+Linux 内核的 BPF 验证器是个大约 30,000 行的 C 代码怪兽。我当时想："要是能把这些能力都拿过来，还能享受 Rust 的安全保证呢？" 于是就有了这玩意儿。
+
+### ✨ 有啥特别的？
 
 ```
-src/
-├── core/       - 核心类型、指令定义、错误处理
-├── state/      - 寄存器/栈/验证器状态
-├── bounds/     - Tnum 算术、标量边界
-├── analysis/   - CFG、SCC、精度跟踪、状态剪枝
-├── check/      - ALU、跳转、helper、kfunc 验证
-├── mem/        - 内存访问验证
-├── special/    - Dynptr、迭代器、异常处理
-├── btf/        - BTF 类型系统
-├── sanitize/   - Spectre 缓解
-├── opt/        - 优化 Pass
-└── verifier/   - 主验证循环
-
-kernel-integration/
-├── rust_bpf_verifier.rs  - 纯 Rust 内核模块（Linux 6.12+ 风格）
-├── Kconfig               - 内核配置选项
-└── Makefile              - 构建配置
-
-patches/                  - 内核集成补丁
-scripts/                  - 开发辅助脚本
-benches/                  - Criterion 基准测试
+┌─────────────────────────────────────────────────────────────┐
+│                  🎭 架构的魔法                               │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│   ┌─────────────────┐         ┌─────────────────────────┐  │
+│   │   你的平台       │────────▶│   bpf-verifier-core    │  │
+│   │  (Linux, 你自己  │ traits  │   (大脑 🧠)            │  │
+│   │   的OS, 随便啥)  │         │                         │  │
+│   └─────────────────┘         └─────────────────────────┘  │
+│                                                             │
+│   想在自己的操作系统上跑 BPF？实现一下 PlatformSpec        │
+│   trait 就行。就这么简单，没骗你。                          │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-### 构建
+### 📦 这几个 Crate
+
+| Crate | 干啥的 | 感觉 |
+|-------|-------|------|
+| `bpf-verifier-core` | 平台无关的大脑 | 🧠 纯逻辑 |
+| `bpf-verifier-linux` | Linux 专属的东西 | 🐧 企鹅认证 |
+| `bpf-verifier` | 方便导入的重导出 | 🎁 简单模式 |
+
+### 🚀 快速上手
 
 ```bash
-# 构建库
+# 克隆下来
+git clone https://github.com/anthropics/verifier-rs
+cd verifier-rs
+
+# 编译
 cargo build --release
 
-# 运行测试
-cargo test
+# 跑测试（我写了一堆测试）
+cargo test --workspace
 
-# 运行基准测试
-cargo bench
+# 想更专业点？跑个 lint
+cargo clippy --workspace
 ```
 
-### 📊 基准测试结果
+### 💻 上代码！
 
-在 Linux 6.8.0 (Azure)、Rust 1.92.0 上的性能基准测试：
-
-| 基准测试 | 平均时间 | 吞吐量 |
-|---------|---------|--------|
-| 简单验证 | 24.82 µs | ~40,000 程序/秒 |
-| 中等验证 | 45.09 µs | ~22,000 程序/秒 |
-| 复杂验证 | 1.04 ms | ~960 程序/秒 |
-| 状态创建 | 181.36 ns | ~550万 次/秒 |
-| 边界操作 | 8.61 ns | ~1.16亿 次/秒 |
-
-**关键性能特点**：
-- ✅ 典型程序验证时间小于 1 毫秒
-- ✅ 核心操作达纳秒级
-- ✅ 随程序复杂度线性扩展
-- ✅ 无 GC 暂停（延迟可预测）
-- ✅ 高效状态剪枝（减少 50-90%）
-
-详细分析和方法论见 [PERFORMANCE.md](PERFORMANCE.md)。
-
-### 内核集成（Linux 6.12+）
-
-本库设计用于与 Rust for Linux 集成。实现采用纯 Rust，无需 C 胶水代码，遵循现代 kernel::Module 模式：
+**用 Linux 平台：**
 
 ```rust
-use kernel::prelude::*;
+use bpf_verifier_core::verifier::{GenericVerifierEnv, GenericMainVerifier};
+use bpf_verifier_linux::LinuxSpec;
 
-module! {
-    type: RustBpfVerifier,
-    name: "rust_bpf_verifier",
-    license: "GPL",
+// 创建平台 - 这里用 Linux
+let platform = LinuxSpec::new();
+
+// 你的 BPF 程序（要验证的指令）
+let insns = vec![/* 你的 BPF 指令 */];
+
+// 设置验证器环境
+let mut env = GenericVerifierEnv::new(
+    platform,
+    insns,
+    6,      // 程序类型（这里是 XDP）
+    false,  // allow_ptr_leaks（除非你是特权用户，不然一般是 false）
+)?;
+
+// 开始验证！🎉
+let mut verifier = GenericMainVerifier::new(&mut env);
+verifier.verify()?;
+
+println!("✅ 你的程序是安全的！");
+```
+
+**搞个自己的平台：**
+
+```rust
+use bpf_verifier_core::platform::*;
+
+// 你的自定义平台 - 也许是给你自己的操作系统？
+#[derive(Clone)]
+struct MyAwesomeOS {
+    helper: MyHelperProvider,
+    // ... 其他 provider
 }
 
-impl kernel::Module for RustBpfVerifier {
-    fn init(_module: &'static ThisModule) -> Result<Self> {
-        pr_info!("Rust BPF verifier loaded\n");
-        Ok(Self { })
-    }
+impl PlatformSpec for MyAwesomeOS {
+    type Helper = MyHelperProvider;
+    type ProgType = MyProgTypeProvider;
+    type Kfunc = MyKfuncProvider;
+    type Map = MyMapProvider;
+    type Context = MyContextProvider;
+
+    fn name(&self) -> &'static str { "my-awesome-os" }
+    // 实现剩下的...
 }
+
+// 用起来！
+let platform = MyAwesomeOS::new();
+let mut env = GenericVerifierEnv::new(platform, insns, prog_type, false)?;
 ```
 
-#### 配置
+### 🧩 平台 Trait
+
+让这一切运转的秘密武器：
+
+| Trait | 干啥用的 | 举个例子 |
+|-------|---------|---------|
+| `PlatformSpec` | 主 trait，把所有东西串起来 | 组合器 |
+| `HelperProvider` | BPF helper 函数 | `bpf_map_lookup_elem` 之类的 |
+| `ProgTypeProvider` | 程序类型 | XDP, kprobe, tracepoint... |
+| `KfuncProvider` | 内核函数 | 新玩意儿 |
+| `MapProvider` | Map 类型 | HashMap, Array, RingBuf... |
+| `ContextProvider` | 上下文结构 | 启动时 R1 里装的啥 |
+
+### 🔥 这些功能你肯定喜欢
+
+- **寄存器追踪**：全部 11 个寄存器，带类型和边界。我*精确*知道每个里面是啥。
+- **内存安全**：栈、map、数据包、上下文——全都检查。
+- **控制流**：每条路径都走一遍。不偷懒。
+- **引用追踪**：拿了锁？我会确保你释放。
+- **状态剪枝**：智能的等价性检查，同样的状态不会走两遍。
+
+### 📁 项目结构
 
 ```
-CONFIG_BPF_VERIFIER_RUST=y
-echo 1 > /proc/sys/kernel/bpf_rust_verifier
+verifier-rs/
+├── crates/
+│   ├── bpf-verifier-core/    # 🧠 大脑
+│   ├── bpf-verifier-linux/   # 🐧 Linux 相关
+│   └── bpf-verifier/         # 🎁 方便导入
+├── docs/
+│   ├── CHANGELOG.md          # 📝 更新日志
+│   ├── PERFORMANCE.md        # ⚡ 性能数据
+│   └── UNSAFE_AUDIT.md       # 🔒 安全报告
+└── README.md                 # 👈 你在这儿
 ```
 
-### 依赖要求
+### 📚 文档
 
-- Rust（stable）
-- `#![no_std]` 环境
-- `alloc` crate（用于 Vec、Box 等）
-- `bitflags` crate
+| 文档 | 里面有啥 |
+|-----|---------|
+| [CHANGELOG](docs/CHANGELOG.md) | 一路走来的历程 |
+| [PERFORMANCE](docs/PERFORMANCE.md) | 跑分数据 |
+| [UNSAFE_AUDIT](docs/UNSAFE_AUDIT.md) | unsafe 代码的交代 |
 
-### 许可证
+### 📋 依赖要求
 
-GPL-2.0-only（与 Linux 内核兼容）
+- **Rust 1.82.0+**（用了一些新特性）
+- **`#![no_std]` 兼容**（不需要操作系统！）
+- **`alloc` crate**（但确实需要点堆内存）
 
-详见 [LICENSE](LICENSE)。
+### 📜 许可证
 
-### 贡献
+**GPL-2.0-only** - 因为我信自由。
 
-欢迎贡献！请随时提交 Issue 和 Pull Request。
+### 🤝 贡献
 
-### 参考资料
+发现 bug 了？有想法？欢迎提 PR 和 issue！
 
-- [Rust for Linux](https://rust-for-linux.com/)
-- [Rust for Linux 文档](https://docs.kernel.org/rust/)
-- [Kernel Crate API](https://rust-for-linux.github.io/docs/kernel/)
-- [Linux 内核 BPF 验证器](https://github.com/torvalds/linux/blob/master/kernel/bpf/verifier.c)
+这个项目源于好奇心和对 Rust 的热爱。每一份贡献，不管多小，都能让它变得更好。
 
-### 作者
+---
 
-MCB-SMART-BOY - 一名对 BPF 和 Rust 充满热情的大二学生。
+**用 💜 和一堆 ☕ 打造，作者 MCB-SMART-BOY**
 
-本项目出于好奇心和学习热情而创建。欢迎任何反馈和建议。
+*一个就是很喜欢 BPF 和 Rust 的大二学生。*
