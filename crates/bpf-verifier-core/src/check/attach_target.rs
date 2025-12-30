@@ -1,21 +1,26 @@
 // SPDX-License-Identifier: GPL-2.0
 
+//! 附加目标验证模块
+//!
 //! Attach target validation for BPF tracing and extension programs.
+//!
+//! 本模块实现了 `bpf_check_attach_target` 功能，验证 BPF 程序（tracing、LSM
+//! 或扩展程序）是否可以合法地附加到目标函数或程序。
 //!
 //! This module implements the `bpf_check_attach_target` functionality which
 //! validates that a BPF program (tracing, LSM, or extension) can legally
 //! attach to a target function or program.
 //!
-//! # Attach Types Supported
+//! # 支持的附加类型 / Attach Types Supported
 //!
-//! - `BPF_TRACE_FENTRY`: Attach to function entry
-//! - `BPF_TRACE_FEXIT`: Attach to function exit
-//! - `BPF_TRACE_RAW_TP`: Attach to raw tracepoint
-//! - `BPF_TRACE_ITER`: Attach to BPF iterator
-//! - `BPF_MODIFY_RETURN`: Modify function return value
-//! - `BPF_LSM_MAC`: LSM security hook
-//! - `BPF_LSM_CGROUP`: Cgroup LSM hook
-//! - Program extension (freplace)
+//! - `BPF_TRACE_FENTRY`: 附加到函数入口 / Attach to function entry
+//! - `BPF_TRACE_FEXIT`: 附加到函数出口 / Attach to function exit
+//! - `BPF_TRACE_RAW_TP`: 附加到原始追踪点 / Attach to raw tracepoint
+//! - `BPF_TRACE_ITER`: 附加到 BPF 迭代器 / Attach to BPF iterator
+//! - `BPF_MODIFY_RETURN`: 修改函数返回值 / Modify function return value
+//! - `BPF_LSM_MAC`: LSM 安全钩子 / LSM security hook
+//! - `BPF_LSM_CGROUP`: Cgroup LSM 钩子 / Cgroup LSM hook
+//! - 程序扩展 (freplace) / Program extension (freplace)
 
 use alloc::string::String;
 use alloc::vec::Vec;
@@ -596,8 +601,8 @@ pub fn check_ctx_type_match(
 
 /// Validate that fentry/fexit arguments are compatible.
 ///
-/// For fentry: args[0..n] = target function args
-/// For fexit: args[0..n] = target function args, args[n] = return value
+/// For fentry: `args[0..n]` = target function args
+/// For fexit: `args[0..n]` = target function args, `args[n]` = return value
 pub fn validate_tracing_args(
     target_info: &AttachTargetInfo,
     attach_type: BpfAttachType,

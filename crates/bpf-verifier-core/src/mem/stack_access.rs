@@ -1,16 +1,47 @@
 // SPDX-License-Identifier: GPL-2.0
 
+//! 栈访问检查模块
 //!
-
+//! Stack access checking module.
+//!
+//! 本模块实现了全面的栈访问检查，包括：
+//!
 //! This module implements comprehensive stack access checking including:
-
-//! - Fixed offset reads/writes
-
-//! - Variable offset reads/writes
-
-//! - Spill/fill tracking
-
-//! - Dynptr and iterator slot management
+//!
+//! - **固定偏移读写 / Fixed offset reads/writes**: 编译时已知的偏移访问
+//! - **可变偏移读写 / Variable offset reads/writes**: 运行时确定的偏移访问
+//! - **溢出/填充跟踪 / Spill/fill tracking**: 寄存器保存到栈和从栈恢复
+//! - **Dynptr 和迭代器槽管理 / Dynptr and iterator slot management**: 特殊对象的栈槽
+//!
+//! # 栈布局 / Stack Layout
+//!
+//! BPF 栈向下增长，偏移量为负值。最大栈大小为 512 字节。
+//!
+//! BPF stack grows downward with negative offsets. Maximum stack size is 512 bytes.
+//!
+//! ```text
+//! 帧指针 (FP) / Frame Pointer (FP)
+//! |
+//! v
+//! +--------+  offset = 0
+//! | slot 0 |  offset = -8
+//! +--------+
+//! | slot 1 |  offset = -16
+//! +--------+
+//! | ...    |
+//! +--------+
+//! | slot N |  offset = -512 (最大/max)
+//! +--------+
+//! ```
+//!
+//! # 槽类型 / Slot Types
+//!
+//! - `INVALID`: 未初始化 / Uninitialized
+//! - `SPILL`: 溢出的寄存器 / Spilled register
+//! - `MISC`: 已初始化的数据 / Initialized data
+//! - `ZERO`: 已知为零 / Known zero
+//! - `DYNPTR`: 动态指针 / Dynamic pointer
+//! - `ITER`: 迭代器 / Iterator
 
 use alloc::format;
 

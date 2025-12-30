@@ -1,9 +1,19 @@
 // SPDX-License-Identifier: GPL-2.0
 
-//! Verification result and error reporting
+//! 验证结果和错误报告模块
+//!
+//! Verification result and error reporting.
+//!
+//! 本模块提供结构化的验证结果，包含详细的错误信息、修复建议和综合报告。
 //!
 //! This module provides structured verification results with detailed
 //! error information, suggestions for fixes, and comprehensive reporting.
+//!
+//! # 结果类型 / Result Types
+//!
+//! - **成功 / Success**: 包含统计信息、警告和程序属性
+//! - **失败 / Failure**: 包含错误、上下文、修复建议
+//! - **中止 / Aborted**: 包含中止原因和进度信息
 
 use crate::core::error::VerifierError;
 use crate::core::types::*;

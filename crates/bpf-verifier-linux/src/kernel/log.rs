@@ -1,18 +1,29 @@
 // SPDX-License-Identifier: GPL-2.0
 
-//! Kernel logging facilities for the BPF verifier.
+//! BPF 验证器的内核日志设施模块
+//!
+//! Kernel Logging Facilities for the BPF Verifier.
+//!
+//! 本模块提供与内核日志基础设施集成的日志宏和函数。
+//! 在内核中，这些映射到 `pr_info!`、`pr_warn!`、`pr_err!` 等。
 //!
 //! This module provides logging macros and functions that integrate with
 //! the kernel's logging infrastructure. In the kernel, these map to
 //! `pr_info!`, `pr_warn!`, `pr_err!`, etc.
 //!
-//! # Verifier Log
+//! # 验证器日志 / Verifier Log
+//!
+//! BPF 验证器有自己的日志缓冲区，与内核的 printk 日志分开。
+//! 用于向用户空间提供验证失败的详细信息。
 //!
 //! The BPF verifier has its own log buffer that is separate from the
 //! kernel's printk log. This is used to provide detailed information
 //! about verification failures back to userspace.
 //!
-//! # Kernel Integration
+//! # 内核集成 / Kernel Integration
+//!
+//! 使用 `kernel` 特性编译时，日志宏与内核的 printk 系统集成。
+//! 在独立模式下，它们是空操作或写入缓冲区用于测试。
 //!
 //! When compiled with the `kernel` feature, the logging macros integrate
 //! with the kernel's printk system. In standalone mode, they are no-ops

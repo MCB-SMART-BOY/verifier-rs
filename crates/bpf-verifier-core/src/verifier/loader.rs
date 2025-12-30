@@ -1,16 +1,23 @@
 // SPDX-License-Identifier: GPL-2.0
 
-//! BPF Program Loading and Entry Point
+//! BPF 程序加载和入口点模块
+//!
+//! BPF Program Loading and Entry Point.
+//!
+//! 本模块实现 BPF 程序验证的主入口点（`bpf_check`）及相关加载功能。
 //!
 //! This module implements the main entry point for BPF program verification
 //! (`bpf_check`) and related loading functionality.
 //!
-//! The loading process involves:
-//! 1. Parsing and validating program instructions
-//! 2. Resolving map FD references (LD_IMM64 with pseudo src)
-//! 3. Resolving subprogram calls
-//! 4. Running the verifier
-//! 5. Applying post-verification fixups
+//! # 加载过程 / Loading Process
+//!
+//! 1. 解析和验证程序指令 / Parsing and validating program instructions
+//! 2. 解析 map FD 引用 / Resolving map FD references (LD_IMM64 with pseudo src)
+//! 3. 解析子程序调用 / Resolving subprogram calls
+//! 4. 运行验证器 / Running the verifier
+//! 5. 应用验证后修复 / Applying post-verification fixups
+//!
+//! 对应内核 verifier.c 中的 `bpf_check()` 函数。
 //!
 //! This corresponds to the kernel's `bpf_check()` function in verifier.c.
 

@@ -1,18 +1,26 @@
 // SPDX-License-Identifier: GPL-2.0
 
 //! State pruning for BPF verifier
+//! BPF 验证器的状态剪枝
 //!
 //! This module implements state pruning optimization. When exploring
 //! different paths through a BPF program, if we reach a program point
 //! with a state that is "equivalent to or more restrictive than" a
 //! previously seen state, we can skip further exploration.
 //!
+//! 本模块实现状态剪枝优化。当探索 BPF 程序的不同路径时，如果我们到达一个
+//! 程序点，其状态"等价于或比"先前看到的状态"更受限制"，则可以跳过进一步探索。
+//!
 //! The key insight is that if state A is more restrictive than state B,
 //! and we've already verified that B leads to a safe exit, then A
 //! must also lead to a safe exit.
 //!
+//! 关键洞察是：如果状态 A 比状态 B 更受限制，且我们已经验证 B 导向安全退出，
+//! 那么 A 也必然导向安全退出。
+//!
 //! This implements the `is_state_visited()` and related functions from
 //! the kernel verifier.
+//! 这实现了内核验证器中的 `is_state_visited()` 及相关函数。
 
 use crate::analysis::precision::mark_all_scalars_precise;
 use crate::analysis::states_equal::{states_equal_with_config, CompareConfig, CompareMode};
@@ -26,20 +34,26 @@ use alloc::vec::Vec;
 use alloc::collections::BTreeMap as HashMap;
 
 /// Range comparison mode for state comparison
+/// 状态比较的范围比较模式
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RangeMode {
     /// Exact match required
+    /// 需要精确匹配
     Exact,
     /// Current state must be within old state's ranges
+    /// 当前状态必须在旧状态的范围内
     RangeWithin,
     /// Not exact - allow subsumption
+    /// 非精确 - 允许包含关系
     NotExact,
 }
 
 /// State cache entry for pruning
+/// 用于剪枝的状态缓存条目
 #[derive(Debug, Clone)]
 pub struct StateListHead {
     /// List of states seen at this instruction
+    /// 在此指令处看到的状态列表
     pub states: Vec<CachedState>,
 }
 
@@ -51,41 +65,55 @@ impl Default for StateListHead {
 
 impl StateListHead {
     /// Create a new empty state list
+    /// 创建新的空状态列表
     pub fn new() -> Self {
         Self { states: Vec::new() }
     }
 }
 
 /// Unique identifier for a cached state
+/// 缓存状态的唯一标识符
 pub type StateId = u64;
 
 /// A cached verifier state for pruning comparisons
+/// 用于剪枝比较的缓存验证器状态
 #[derive(Debug, Clone)]
 pub struct CachedState {
     /// Unique identifier for this cached state
+    /// 此缓存状态的唯一标识符
     pub id: StateId,
     /// The verifier state at this point
+    /// 此位置的验证器状态
     pub state: BpfVerifierState,
     /// Instruction index where this state was saved
+    /// 保存此状态的指令索引
     pub insn_idx: usize,
     /// Whether this state has been verified to be safe (all branches completed)
+    /// 此状态是否已验证为安全（所有分支已完成）
     pub verified: bool,
     /// Number of branches from this state that haven't completed
+    /// 从此状态派生的尚未完成的分支数量
     pub branches: u32,
     /// Hit count for statistics
+    /// 命中计数（用于统计）
     pub hit_cnt: u32,
     /// Miss count for eviction heuristics
+    /// 未命中计数（用于驱逐启发式）
     pub miss_cnt: u32,
     /// Whether all registers have been read from this state
+    /// 此状态的所有寄存器是否已被读取
     pub all_regs_read: bool,
     /// Parent state ID (if this state was derived from another cached state)
+    /// 父状态 ID（如果此状态派生自另一个缓存状态）
     pub parent_id: Option<StateId>,
     /// Whether this state is in the free list (pending removal)
+    /// 此状态是否在空闲列表中（待删除）
     pub in_free_list: bool,
 }
 
 impl CachedState {
     /// Create a new cached state with a unique ID
+    /// 创建具有唯一 ID 的新缓存状态
     pub fn new(id: StateId, state: BpfVerifierState, insn_idx: usize) -> Self {
         Self {
             id,
@@ -102,6 +130,7 @@ impl CachedState {
     }
 
     /// Create a new cached state with a parent reference
+    /// 创建具有父引用的新缓存状态
     pub fn new_with_parent(
         id: StateId,
         state: BpfVerifierState,
@@ -114,18 +143,22 @@ impl CachedState {
     }
 
     /// Mark this state as having completed exploration (no more branches)
+    /// 将此状态标记为已完成探索（没有更多分支）
     pub fn mark_verified(&mut self) {
         self.verified = true;
         self.branches = 0;
     }
 
     /// Add a branch from this state
+    /// 从此状态添加一个分支
     pub fn add_branch(&mut self) {
         self.branches += 1;
     }
 
     /// Complete a branch from this state
     /// Returns true if this was the last branch (state is now verified)
+    /// 完成从此状态派生的一个分支
+    /// 如果这是最后一个分支（状态现已验证），则返回 true
     pub fn complete_branch(&mut self) -> bool {
         if self.branches > 0 {
             self.branches -= 1;
@@ -140,30 +173,43 @@ impl CachedState {
 }
 
 /// State cache for all instructions
+/// 所有指令的状态缓存
 #[allow(missing_docs)]
 #[derive(Debug, Default)]
 pub struct StateCache {
     /// Map from instruction index to list of states
+    /// 从指令索引到状态列表的映射
     pub cache: HashMap<usize, StateListHead>,
     /// Hash-based index for faster state lookup
     /// Maps (insn_idx, state_hash) -> indices into states vector
+    /// 基于哈希的索引，用于更快的状态查找
+    /// 映射 (insn_idx, state_hash) -> 状态向量中的索引
     pub hash_index: HashMap<(usize, u64), Vec<usize>>,
     /// Map from state ID to (insn_idx, index in states vector)
     /// Used for fast parent lookup during update_branch_counts
+    /// 从状态 ID 到 (insn_idx, 状态向量中的索引) 的映射
+    /// 用于在 update_branch_counts 期间快速查找父状态
     pub id_to_location: HashMap<StateId, (usize, usize)>,
     /// Next state ID to assign
+    /// 要分配的下一个状态 ID
     pub next_state_id: StateId,
     /// Total number of states cached
+    /// 缓存的状态总数
     pub total_states: usize,
     /// Peak number of states (for statistics)
+    /// 状态峰值数量（用于统计）
     pub peak_states: usize,
     /// Number of pruning hits
+    /// 剪枝命中次数
     pub prune_hits: usize,
     /// Number of hash hits (subset of prune_hits)
+    /// 哈希命中次数（prune_hits 的子集）
     pub hash_hits: usize,
     /// Number of loop detections
+    /// 循环检测次数
     pub loop_detections: usize,
     /// Number of states freed
+    /// 已释放的状态数量
     pub states_freed: usize,
 }
 
@@ -174,6 +220,12 @@ pub struct StateCache {
 /// - Frame count and current frame index
 /// - Register types and key scalar bounds
 /// - Stack allocation state
+/// 计算验证器状态的哈希以进行快速比较
+///
+/// 此哈希用于在进行昂贵的完整比较之前快速过滤出明显不同的状态。哈希捕获：
+/// - 帧数和当前帧索引
+/// - 寄存器类型和关键标量边界
+/// - 栈分配状态
 pub fn hash_verifier_state(state: &BpfVerifierState) -> u64 {
     // Use a simple FNV-1a like hash
     const FNV_PRIME: u64 = 0x100000001b3;
@@ -217,6 +269,8 @@ pub fn hash_verifier_state(state: &BpfVerifierState) -> u64 {
 
 /// Compute a lightweight hash for quick filtering
 /// This is faster but less precise than full hash
+/// 计算轻量级哈希以进行快速过滤
+/// 这比完整哈希更快但精度较低
 pub fn hash_verifier_state_quick(state: &BpfVerifierState) -> u64 {
     let mut hash: u64 = state.curframe as u64;
 
@@ -233,11 +287,13 @@ pub fn hash_verifier_state_quick(state: &BpfVerifierState) -> u64 {
 
 impl StateCache {
     /// Create a new empty state cache
+    /// 创建新的空状态缓存
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Allocate a new unique state ID
+    /// 分配新的唯一状态 ID
     fn alloc_state_id(&mut self) -> StateId {
         let id = self.next_state_id;
         self.next_state_id += 1;
@@ -245,33 +301,39 @@ impl StateCache {
     }
 
     /// Get states at an instruction
+    /// 获取指令处的状态
     pub fn get(&self, insn_idx: usize) -> Option<&StateListHead> {
         self.cache.get(&insn_idx)
     }
 
     /// Get mutable states at an instruction
+    /// 获取指令处的可变状态
     pub fn get_mut(&mut self, insn_idx: usize) -> Option<&mut StateListHead> {
         self.cache.get_mut(&insn_idx)
     }
 
     /// Get a cached state by its ID
+    /// 通过 ID 获取缓存状态
     pub fn get_by_id(&self, id: StateId) -> Option<&CachedState> {
         let (insn_idx, state_idx) = self.id_to_location.get(&id)?;
         self.cache.get(insn_idx)?.states.get(*state_idx)
     }
 
     /// Get a mutable cached state by its ID
+    /// 通过 ID 获取可变缓存状态
     pub fn get_by_id_mut(&mut self, id: StateId) -> Option<&mut CachedState> {
         let &(insn_idx, state_idx) = self.id_to_location.get(&id)?;
         self.cache.get_mut(&insn_idx)?.states.get_mut(state_idx)
     }
 
     /// Add a state at an instruction, returns the assigned state ID
+    /// 在指令处添加状态，返回分配的状态 ID
     pub fn push_state(&mut self, insn_idx: usize, state: BpfVerifierState) -> StateId {
         self.push_state_with_parent(insn_idx, state, None)
     }
 
     /// Add a state at an instruction with a parent reference
+    /// 在指令处添加具有父引用的状态
     pub fn push_state_with_parent(
         &mut self,
         insn_idx: usize,
@@ -318,6 +380,13 @@ impl StateCache {
     /// fully verified and can be used for pruning.
     ///
     /// Returns Ok(()) on success, or an error if an inconsistency is detected.
+    /// 从状态开始更新分支计数，沿父链向上遍历
+    ///
+    /// 这实现了内核的 `update_branch_counts()` 函数。
+    /// 当路径完成（退出或剪枝）时，我们沿父链递减分支计数。
+    /// 当状态的分支计数达到 0 时，它已完全验证并可用于剪枝。
+    ///
+    /// 成功时返回 Ok(())，如果检测到不一致则返回错误。
     pub fn update_branch_counts(&mut self, start_id: StateId) -> Result<()> {
         let mut current_id = Some(start_id);
 
@@ -362,6 +431,7 @@ impl StateCache {
     }
 
     /// Mark a state as being in the free list (pending removal)
+    /// 将状态标记为在空闲列表中（待删除）
     pub fn mark_for_removal(&mut self, id: StateId) {
         if let Some(cached) = self.get_by_id_mut(id) {
             if !cached.in_free_list {
@@ -378,6 +448,10 @@ impl StateCache {
     ///
     /// States with high miss count relative to hit count are unlikely
     /// to be useful for pruning and can be evicted.
+    /// 基于未命中/命中启发式驱逐状态
+    ///
+    /// 相对于命中计数具有高未命中计数的状态不太可能
+    /// 对剪枝有用，可以被驱逐。
     pub fn maybe_evict_state(&mut self, id: StateId, is_force_checkpoint: bool) {
         if let Some(cached) = self.get_by_id_mut(id) {
             // Use bigger threshold for checkpoints to help iterator convergence
@@ -396,6 +470,9 @@ impl StateCache {
     /// Check if the current state can be pruned against cached states
     ///
     /// Uses hash-based lookup for faster matching when many states exist
+    /// 检查当前状态是否可以针对缓存状态进行剪枝
+    ///
+    /// 当存在许多状态时，使用基于哈希的查找来加快匹配
     pub fn check_prune(&mut self, insn_idx: usize, cur: &BpfVerifierState) -> bool {
         let cur_hash = hash_verifier_state(cur);
 
@@ -427,6 +504,7 @@ impl StateCache {
     }
 
     /// Check prune using only hash-based lookup (faster but may miss some matches)
+    /// 仅使用基于哈希的查找检查剪枝（更快但可能错过某些匹配）
     pub fn check_prune_fast(&mut self, insn_idx: usize, cur: &BpfVerifierState) -> bool {
         let cur_hash = hash_verifier_state(cur);
 
@@ -447,6 +525,7 @@ impl StateCache {
     }
 
     /// Mark all states at an instruction as verified
+    /// 将指令处的所有状态标记为已验证
     pub fn mark_verified(&mut self, insn_idx: usize) {
         if let Some(head) = self.cache.get_mut(&insn_idx) {
             for cached in &mut head.states {
@@ -456,6 +535,7 @@ impl StateCache {
     }
 
     /// Get hash efficiency as percentage (0-100)
+    /// 获取哈希效率百分比（0-100）
     pub fn hash_efficiency_percent(&self) -> u32 {
         if self.prune_hits == 0 {
             0
@@ -465,6 +545,7 @@ impl StateCache {
     }
 
     /// Clear all cached states
+    /// 清除所有缓存状态
     pub fn clear(&mut self) {
         self.cache.clear();
         self.hash_index.clear();
@@ -478,6 +559,7 @@ impl StateCache {
     }
 
     /// Increment miss count for a state
+    /// 增加状态的未命中计数
     pub fn increment_miss(&mut self, id: StateId) {
         if let Some(cached) = self.get_by_id_mut(id) {
             cached.miss_cnt += 1;
@@ -485,6 +567,7 @@ impl StateCache {
     }
 
     /// Increment hit count for a state
+    /// 增加状态的命中计数
     pub fn increment_hit(&mut self, id: StateId) {
         if let Some(cached) = self.get_by_id_mut(id) {
             cached.hit_cnt += 1;
@@ -493,54 +576,74 @@ impl StateCache {
 }
 
 /// Result of checking if a state was visited
+/// 检查状态是否已访问的结果
 #[allow(missing_docs)]
 #[derive(Debug, Clone)]
 pub enum StateVisitResult {
     /// State can be pruned - equivalent state already verified
     /// Contains the ID of the matching cached state for precision propagation
+    /// 状态可以被剪枝 - 等效状态已验证
+    /// 包含匹配的缓存状态的 ID 以进行精度传播
     Prune(StateId),
     /// Infinite loop detected
+    /// 检测到无限循环
     InfiniteLoop,
     /// State should be explored (new state added to cache)
     /// Contains the ID of the newly cached state
+    /// 应该探索状态（新状态已添加到缓存）
+    /// 包含新缓存状态的 ID
     Explore(StateId),
     /// State should be explored but don't add to cache
+    /// 应该探索状态但不添加到缓存
     ExploreNoCache,
 }
 
 /// Context for state visit checking
+/// 状态访问检查的上下文
 #[allow(missing_docs)]
 #[derive(Default)]
 pub struct StateVisitContext {
     /// Whether to force adding a new state
+    /// 是否强制添加新状态
     pub force_new_state: bool,
     /// Whether to add a new state based on heuristics
+    /// 是否基于启发式添加新状态
     pub add_new_state: bool,
     /// Number of jumps processed since last prune point
+    /// 自上次剪枝点以来处理的跳转数
     pub jmps_since_prune: u32,
     /// Number of instructions processed since last prune point
+    /// 自上次剪枝点以来处理的指令数
     pub insns_since_prune: u32,
     /// Jump history length for current state
+    /// 当前状态的跳转历史长度
     pub jmp_history_cnt: u32,
     /// Whether this is an iterator next instruction
+    /// 这是否是迭代器 next 指令
     pub is_iter_next: bool,
     /// Whether this is a may_goto instruction
+    /// 这是否是 may_goto 指令
     pub is_may_goto: bool,
     /// Whether this is a callback call
+    /// 这是否是回调调用
     pub is_callback_call: bool,
     /// Whether this is a force checkpoint (e.g., back edge)
+    /// 这是否是强制检查点（例如，回边）
     pub is_force_checkpoint: bool,
     /// Parent state ID for new states
+    /// 新状态的父状态 ID
     pub parent_state_id: Option<StateId>,
 }
 
 impl StateVisitContext {
     /// Create a new empty visit context
+    /// 创建新的空访问上下文
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Update heuristics for whether to add a new state
+    /// 更新是否添加新状态的启发式
     pub fn update_heuristics(&mut self) {
         // Avoid accumulating infinitely long jmp history
         if self.jmp_history_cnt > 40 {
@@ -555,6 +658,7 @@ impl StateVisitContext {
     }
 
     /// Check if we should skip adding state due to loop heuristics
+    /// 检查是否应该由于循环启发式而跳过添加状态
     pub fn should_skip_add_in_loop(&self) -> bool {
         // In a loop, avoid adding states too frequently
         !self.force_new_state && self.jmps_since_prune < 20 && self.insns_since_prune < 100
@@ -572,6 +676,16 @@ impl StateVisitContext {
 /// - `Ok(StateVisitResult::Explore(id))` if state should be explored (id = new cached state)
 /// - `Ok(StateVisitResult::ExploreNoCache)` if should explore without caching
 /// - `Err(_)` on error
+/// 检查状态是否已访问并相应处理
+///
+/// 这是状态剪枝的主入口点，实现内核的 `is_state_visited()` 函数。
+///
+/// 返回：
+/// - `Ok(StateVisitResult::Prune(id))` 如果状态可以被剪枝（id = 匹配的缓存状态）
+/// - `Ok(StateVisitResult::InfiniteLoop)` 如果检测到无限循环
+/// - `Ok(StateVisitResult::Explore(id))` 如果应该探索状态（id = 新缓存状态）
+/// - `Ok(StateVisitResult::ExploreNoCache)` 如果应该探索但不缓存
+/// - `Err(_)` 如果出错
 pub fn is_state_visited(
     cache: &mut StateCache,
     insn_idx: usize,
@@ -753,6 +867,10 @@ pub fn is_state_visited(
 ///
 /// State `cur` can be pruned if it's "at least as restrictive" as `old`.
 /// This means any property that holds for `old` also holds for `cur`.
+/// 检查两个状态是否等效以进行剪枝
+///
+/// 如果 `cur` "至少与" `old` "一样受限"，则可以剪枝状态 `cur`。
+/// 这意味着对于 `old` 成立的任何属性也对于 `cur` 成立。
 pub fn states_equal_for_pruning(cur: &BpfVerifierState, old: &BpfVerifierState) -> bool {
     let config = CompareConfig::for_pruning();
     states_equal_with_config(cur, old, &config)
@@ -763,6 +881,10 @@ pub fn states_equal_for_pruning(cur: &BpfVerifierState, old: &BpfVerifierState) 
 /// This is a fast check to see if two states *might* represent
 /// iterations of the same loop. If this returns false, they
 /// definitely aren't looping. If true, further checks are needed.
+/// 检查状态是否可能在循环中（快速启发式检查）
+///
+/// 这是一个快速检查，看两个状态是否*可能*代表同一循环的迭代。
+/// 如果返回 false，它们肯定不在循环中。如果为 true，需要进一步检查。
 pub fn states_maybe_looping(old: &BpfVerifierState, cur: &BpfVerifierState) -> bool {
     // Quick check: frame depth must match
     if cur.curframe != old.curframe {
@@ -795,6 +917,9 @@ pub fn states_maybe_looping(old: &BpfVerifierState, cur: &BpfVerifierState) -> b
 ///
 /// If iterator depths differ, the states represent different
 /// loop iterations and aren't truly equivalent.
+/// 检查状态之间的迭代器活动深度是否不同
+///
+/// 如果迭代器深度不同，状态代表不同的循环迭代，并不是真正等效的。
 pub fn iter_active_depths_differ(old: &BpfVerifierState, cur: &BpfVerifierState) -> bool {
     for i in 0..=cur.curframe.min(old.curframe) {
         let cur_func = match cur.frame.get(i).and_then(|f| f.as_ref()) {
@@ -831,6 +956,10 @@ pub fn iter_active_depths_differ(old: &BpfVerifierState, cur: &BpfVerifierState)
 /// has converged to a fixpoint. Returns true if the states are
 /// equivalent and contain an active iterator, indicating the
 /// loop can be safely terminated.
+/// 检查迭代器收敛
+///
+/// 对于开放编码的迭代器，我们需要检测循环何时收敛到不动点。
+/// 如果状态等效并包含活动迭代器，则返回 true，表示循环可以安全终止。
 pub fn check_iter_convergence(cur: &BpfVerifierState, old: &BpfVerifierState) -> bool {
     let config = CompareConfig::for_pruning();
     if !states_equal_with_config(cur, old, &config) {
@@ -860,6 +989,9 @@ pub fn check_iter_convergence(cur: &BpfVerifierState, old: &BpfVerifierState) ->
 ///
 /// If read marks are incomplete, we need exact matching
 /// to avoid missing required precision propagation.
+/// 检查状态是否有不完整的读取标记
+///
+/// 如果读取标记不完整，我们需要精确匹配以避免遗漏所需的精度传播。
 fn incomplete_read_marks(state: &BpfVerifierState) -> bool {
     // Check if any register or stack slot hasn't had its
     // liveness fully determined
@@ -886,6 +1018,7 @@ fn incomplete_read_marks(state: &BpfVerifierState) -> bool {
 }
 
 /// Clean up old states to manage memory
+/// 清理旧状态以管理内存
 pub fn clean_old_states(cache: &mut StateCache, cur_insn: usize, window: usize) {
     // Remove states from instructions far behind current position
     let threshold = cur_insn.saturating_sub(window);
@@ -896,6 +1029,9 @@ pub fn clean_old_states(cache: &mut StateCache, cur_insn: usize, window: usize) 
 ///
 /// This removes cached states that are no longer useful for pruning
 /// because they reference liveness information that has been superseded.
+/// 清理活动状态 - 删除陈旧的缓存状态
+///
+/// 这会删除不再对剪枝有用的缓存状态，因为它们引用的活性信息已被取代。
 pub fn clean_live_states(cache: &mut StateCache, insn_idx: usize, cur: &BpfVerifierState) {
     if let Some(head) = cache.get_mut(insn_idx) {
         head.states.retain(|cached| {
@@ -912,6 +1048,11 @@ pub fn clean_live_states(cache: &mut StateCache, insn_idx: usize, cur: &BpfVerif
 /// 1. A register was marked as not-live in cached state but is now live
 /// 2. The cached state's liveness info is from a different execution path
 ///    that doesn't apply to the current path
+/// 检查缓存状态是否有陈旧的活性信息
+///
+/// 缓存状态在以下情况下变得陈旧：
+/// 1. 寄存器在缓存状态中标记为非活动但现在是活动的
+/// 2. 缓存状态的活性信息来自不同的执行路径，不适用于当前路径
 fn has_stale_liveness(cached: &BpfVerifierState, cur: &BpfVerifierState) -> bool {
     // Compare frames to detect stale liveness
     for frame_idx in 0..=cached.curframe.min(cur.curframe) {
@@ -992,6 +1133,7 @@ fn has_stale_liveness(cached: &BpfVerifierState, cur: &BpfVerifierState) -> bool
 }
 
 /// Mark state as having a branch
+/// 将状态标记为有分支
 pub fn mark_branching(cache: &mut StateCache, insn_idx: usize) {
     if let Some(head) = cache.get_mut(insn_idx) {
         for cached in &mut head.states {
@@ -1001,6 +1143,7 @@ pub fn mark_branching(cache: &mut StateCache, insn_idx: usize) {
 }
 
 /// Mark that a branch from a cached state has completed
+/// 标记缓存状态的分支已完成
 pub fn complete_branch(cache: &mut StateCache, insn_idx: usize) {
     if let Some(head) = cache.get_mut(insn_idx) {
         for cached in &mut head.states {
@@ -1021,6 +1164,17 @@ pub fn complete_branch(cache: &mut StateCache, insn_idx: usize) {
 /// * `from_idx` - The instruction index where liveness was discovered
 /// * `to_idx` - The instruction index to propagate liveness to
 /// * `live_regs` - Bitmask of registers that are live (bit i = register i)
+/// 通过缓存状态向后传播活性
+///
+/// 当我们发现某些寄存器在稍后的点是活动的（被读取）时，
+/// 我们需要将此信息传播回较早的缓存状态。
+/// 这确保剪枝不会在稍后将读取寄存器时错误地假定其已死。
+///
+/// # 参数
+/// * `cache` - 包含缓存验证状态的状态缓存
+/// * `from_idx` - 发现活性的指令索引
+/// * `to_idx` - 要传播活性的指令索引
+/// * `live_regs` - 活动寄存器的位掩码（位 i = 寄存器 i）
 pub fn propagate_liveness(cache: &mut StateCache, from_idx: usize, to_idx: usize, live_regs: u16) {
     // Skip if no registers are live or indices are invalid
     if live_regs == 0 || from_idx <= to_idx {
@@ -1071,6 +1225,10 @@ pub fn propagate_liveness(cache: &mut StateCache, from_idx: usize, to_idx: usize
 /// When we prune a path because it matches a cached state,
 /// we need to propagate any precision requirements from the
 /// cached state's subsequent execution.
+/// 从剪枝状态向当前状态传播精度
+///
+/// 当我们因匹配缓存状态而剪枝路径时，
+/// 我们需要从缓存状态的后续执行传播任何精度要求。
 pub fn propagate_precision(cur: &mut BpfVerifierState, cached: &BpfVerifierState) -> Result<()> {
     // Propagate precision requirements from cached to current state
     // This ensures that registers marked as needing precision in the
@@ -1136,6 +1294,10 @@ pub fn propagate_precision(cur: &mut BpfVerifierState, cached: &BpfVerifierState
 ///
 /// When a register is marked as precise, we need to walk back through
 /// the parent chain to mark all contributing values as precise.
+/// 向父状态向后传播精度
+///
+/// 当寄存器被标记为精确时，我们需要沿父链向后遍历，
+/// 将所有贡献值标记为精确。
 pub fn propagate_precision_to_parent(
     cur: &mut BpfVerifierState,
     parent: &mut BpfVerifierState,
@@ -1169,29 +1331,38 @@ pub fn propagate_precision_to_parent(
 }
 
 /// Jump history entry for tracking branch paths
+/// 用于跟踪分支路径的跳转历史条目
 #[derive(Debug, Clone)]
 pub struct JmpHistoryEntry {
     /// Instruction index of the jump
+    /// 跳转的指令索引
     pub insn_idx: usize,
     /// Previous instruction index
+    /// 先前的指令索引
     pub prev_idx: usize,
     /// Jump flags (e.g., whether branch was taken)
+    /// 跳转标志（例如，是否采用分支）
     pub flags: u32,
     /// Linked registers bitmap (for precision tracking)
+    /// 链接寄存器位图（用于精度跟踪）
     pub linked_regs: u64,
 }
 
 /// Jump history manager
+/// 跳转历史管理器
 #[derive(Debug, Clone, Default)]
 pub struct JmpHistory {
     /// History entries
+    /// 历史条目
     pub entries: Vec<JmpHistoryEntry>,
     /// Maximum history length
+    /// 最大历史长度
     pub max_len: usize,
 }
 
 impl JmpHistory {
     /// Create a new jump history with the specified maximum length
+    /// 创建具有指定最大长度的新跳转历史
     pub fn new(max_len: usize) -> Self {
         Self {
             entries: Vec::new(),
@@ -1200,6 +1371,7 @@ impl JmpHistory {
     }
 
     /// Push a new jump history entry
+    /// 推送新的跳转历史条目
     pub fn push(&mut self, insn_idx: usize, prev_idx: usize, flags: u32, linked_regs: u64) -> bool {
         if self.entries.len() >= self.max_len {
             return false;
@@ -1214,16 +1386,19 @@ impl JmpHistory {
     }
 
     /// Get the current history length
+    /// 获取当前历史长度
     pub fn len(&self) -> usize {
         self.entries.len()
     }
 
     /// Check if history is empty
+    /// 检查历史是否为空
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
     }
 
     /// Clear the history
+    /// 清除历史
     pub fn clear(&mut self) {
         self.entries.clear();
     }
@@ -1233,24 +1408,35 @@ impl JmpHistory {
 ///
 /// Checkpoints allow the verifier to save its state at a particular point
 /// and roll back if a path proves invalid or too complex.
+/// 验证期间用于状态回滚的检查点
+///
+/// 检查点允许验证器在特定点保存其状态，
+/// 如果路径被证明无效或过于复杂，则可以回滚。
 #[derive(Debug, Clone)]
 pub struct StateCheckpoint {
     /// Instruction index where checkpoint was taken
+    /// 获取检查点的指令索引
     pub insn_idx: usize,
     /// Saved verifier state
+    /// 保存的验证器状态
     pub state: BpfVerifierState,
     /// Number of states in cache when checkpoint was taken
+    /// 获取检查点时缓存中的状态数
     pub cache_size: usize,
     /// Instructions processed at checkpoint time
+    /// 检查点时处理的指令数
     pub insns_processed: u64,
     /// States created at checkpoint time
+    /// 检查点时创建的状态数
     pub states_created: u64,
     /// Branch depth when checkpoint was taken
+    /// 获取检查点时的分支深度
     pub branch_depth: u32,
 }
 
 impl StateCheckpoint {
     /// Create a new checkpoint
+    /// 创建新检查点
     pub fn new(
         insn_idx: usize,
         state: BpfVerifierState,
@@ -1271,20 +1457,26 @@ impl StateCheckpoint {
 }
 
 /// Checkpoint manager for state rollback
+/// 用于状态回滚的检查点管理器
 #[derive(Debug, Default)]
 pub struct CheckpointManager {
     /// Stack of checkpoints
+    /// 检查点栈
     checkpoints: Vec<StateCheckpoint>,
     /// Maximum number of checkpoints to keep
+    /// 要保留的最大检查点数
     max_checkpoints: usize,
     /// Total checkpoints created
+    /// 创建的检查点总数
     pub total_created: u64,
     /// Total rollbacks performed
+    /// 执行的回滚总数
     pub total_rollbacks: u64,
 }
 
 impl CheckpointManager {
     /// Create a new checkpoint manager
+    /// 创建新的检查点管理器
     pub fn new(max_checkpoints: usize) -> Self {
         Self {
             checkpoints: Vec::new(),
@@ -1295,9 +1487,11 @@ impl CheckpointManager {
     }
 
     /// Save a checkpoint
+    /// 保存检查点
     pub fn save(&mut self, checkpoint: StateCheckpoint) -> bool {
         if self.checkpoints.len() >= self.max_checkpoints {
             // Remove oldest checkpoint
+            // 删除最旧的检查点
             self.checkpoints.remove(0);
         }
         self.checkpoints.push(checkpoint);
@@ -1306,6 +1500,7 @@ impl CheckpointManager {
     }
 
     /// Rollback to last checkpoint, returns the checkpoint if available
+    /// 回滚到上一个检查点，如果可用则返回该检查点
     pub fn rollback(&mut self) -> Option<StateCheckpoint> {
         let cp = self.checkpoints.pop();
         if cp.is_some() {
@@ -1315,8 +1510,10 @@ impl CheckpointManager {
     }
 
     /// Rollback to checkpoint at specific instruction
+    /// 回滚到特定指令处的检查点
     pub fn rollback_to(&mut self, insn_idx: usize) -> Option<StateCheckpoint> {
         // Find and remove all checkpoints after the target
+        // 查找并删除目标之后的所有检查点
         while let Some(cp) = self.checkpoints.last() {
             if cp.insn_idx <= insn_idx {
                 break;
@@ -1324,72 +1521,93 @@ impl CheckpointManager {
             self.checkpoints.pop();
         }
         // Return the checkpoint at or before target
+        // 返回目标处或之前的检查点
         self.rollback()
     }
 
     /// Get number of active checkpoints
+    /// 获取活动检查点的数量
     pub fn len(&self) -> usize {
         self.checkpoints.len()
     }
 
     /// Check if there are no checkpoints
+    /// 检查是否没有检查点
     pub fn is_empty(&self) -> bool {
         self.checkpoints.is_empty()
     }
 
     /// Clear all checkpoints
+    /// 清除所有检查点
     pub fn clear(&mut self) {
         self.checkpoints.clear();
     }
 
     /// Peek at the last checkpoint without removing it
+    /// 查看最后一个检查点但不删除它
     pub fn peek(&self) -> Option<&StateCheckpoint> {
         self.checkpoints.last()
     }
 }
 
 /// Complexity metrics for state exploration
+/// 状态探索的复杂度指标
 #[derive(Debug, Clone, Default)]
 pub struct ExplorationMetrics {
     /// Total paths explored
+    /// 探索的路径总数
     pub paths_explored: u64,
     /// Paths pruned by state equivalence
+    /// 通过状态等价性剪枝的路径数
     pub paths_pruned: u64,
     /// Paths terminated by exit instruction
+    /// 通过退出指令终止的路径数
     pub paths_completed: u64,
     /// Paths terminated by error
+    /// 因错误终止的路径数
     pub paths_errored: u64,
     /// Maximum path length seen
+    /// 观察到的最大路径长度
     pub max_path_length: u32,
     /// Current path length
+    /// 当前路径长度
     pub current_path_length: u32,
     /// Maximum branch depth seen
+    /// 观察到的最大分支深度
     pub max_branch_depth: u32,
     /// Current branch depth
+    /// 当前分支深度
     pub current_branch_depth: u32,
     /// States at peak memory
+    /// 内存峰值时的状态数
     pub peak_states_in_memory: usize,
     /// Current states in memory
+    /// 当前内存中的状态数
     pub current_states_in_memory: usize,
     /// Back edges detected (potential loops)
+    /// 检测到的回边数（潜在循环）
     pub back_edges_detected: u32,
     /// Widening operations performed
+    /// 执行的加宽操作次数
     pub widenings_performed: u32,
 }
 
 impl ExplorationMetrics {
     /// Create new metrics
+    /// 创建新的指标
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Record starting a new path
+    /// 记录开始新路径
     pub fn start_path(&mut self) {
         self.paths_explored += 1;
         self.current_path_length = 0;
     }
 
     /// Record an instruction in current path
+    /// 在当前路径中记录一条指令
     pub fn record_insn(&mut self) {
         self.current_path_length += 1;
         if self.current_path_length > self.max_path_length {
@@ -1398,6 +1616,7 @@ impl ExplorationMetrics {
     }
 
     /// Record entering a branch
+    /// 记录进入分支
     pub fn enter_branch(&mut self) {
         self.current_branch_depth += 1;
         if self.current_branch_depth > self.max_branch_depth {
@@ -1406,26 +1625,31 @@ impl ExplorationMetrics {
     }
 
     /// Record exiting a branch
+    /// 记录退出分支
     pub fn exit_branch(&mut self) {
         self.current_branch_depth = self.current_branch_depth.saturating_sub(1);
     }
 
     /// Record a pruned path
+    /// 记录剪枝的路径
     pub fn record_prune(&mut self) {
         self.paths_pruned += 1;
     }
 
     /// Record a completed path (reached exit)
+    /// 记录完成的路径（到达退出点）
     pub fn record_complete(&mut self) {
         self.paths_completed += 1;
     }
 
     /// Record an error path
+    /// 记录错误路径
     pub fn record_error(&mut self) {
         self.paths_errored += 1;
     }
 
     /// Update state memory tracking
+    /// 更新状态内存跟踪
     pub fn update_states(&mut self, current: usize) {
         self.current_states_in_memory = current;
         if current > self.peak_states_in_memory {
@@ -1434,16 +1658,19 @@ impl ExplorationMetrics {
     }
 
     /// Record a back edge (potential loop)
+    /// 记录回边（潜在循环）
     pub fn record_back_edge(&mut self) {
         self.back_edges_detected += 1;
     }
 
     /// Record a widening operation
+    /// 记录加宽操作
     pub fn record_widening(&mut self) {
         self.widenings_performed += 1;
     }
 
     /// Get pruning efficiency as percentage (0-100)
+    /// 获取剪枝效率百分比（0-100）
     pub fn pruning_efficiency_percent(&self) -> u32 {
         if self.paths_explored == 0 {
             0
@@ -1453,6 +1680,7 @@ impl ExplorationMetrics {
     }
 
     /// Get completion rate as percentage (0-100)
+    /// 获取完成率百分比（0-100）
     pub fn completion_rate_percent(&self) -> u32 {
         let total = self.paths_completed + self.paths_errored + self.paths_pruned;
         if total == 0 {
@@ -1492,9 +1720,11 @@ impl core::fmt::Display for ExplorationMetrics {
 }
 
 /// Widening operation for loop convergence
+/// 用于循环收敛的加宽操作
 ///
 /// When a loop iterates many times without converging, we can widen
 /// the bounds to force convergence at the cost of precision.
+/// 当循环迭代多次而没有收敛时，我们可以加宽边界以牺牲精度来强制收敛。
 pub fn widen_scalar_bounds(reg: &mut BpfRegState) {
     if reg.reg_type != BpfRegType::ScalarValue {
         return;
@@ -1527,6 +1757,7 @@ pub fn widen_scalar_bounds(reg: &mut BpfRegState) {
 }
 
 /// Selective widening - only widen registers that are changing in a loop
+/// 选择性加宽 - 只加宽在循环中变化的寄存器
 pub fn widen_loop_registers(
     cur: &mut BpfVerifierState,
     old: &BpfVerifierState,
@@ -1926,51 +2157,67 @@ pub fn detect_infinite_loop(old: &BpfVerifierState, cur: &BpfVerifierState) -> b
 // - Visit: Tracks entry state and accumulated backedges for an SCC callchain
 
 /// Maximum frames in a call chain (matches kernel's MAX_CALL_FRAMES)
+/// 调用链中的最大帧数（与内核的 MAX_CALL_FRAMES 匹配）
 pub const MAX_CALL_FRAMES: usize = 8;
 
 /// Maximum iterations for backedge propagation before falling back to mark_all_precise
+/// 回退到 mark_all_precise 之前回边传播的最大迭代次数
 pub const MAX_BACKEDGE_ITERS: usize = 64;
 
 /// Call chain identifier for SCC tracking
+/// 用于 SCC 跟踪的调用链标识符
 ///
 /// A callchain identifies a unique path through the call graph to an SCC.
 /// Different call paths to the same SCC are tracked separately because
 /// parent state relationships differ.
+/// 调用链标识通过调用图到 SCC 的唯一路径。
+/// 到同一 SCC 的不同调用路径被单独跟踪，因为父状态关系不同。
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
 pub struct SccCallchain {
     /// Call sites leading to the SCC (instruction indices)
+    /// 通向 SCC 的调用点（指令索引）
     pub callsites: [usize; MAX_CALL_FRAMES],
     /// The SCC identifier (0 = not in an SCC)
+    /// SCC 标识符（0 = 不在 SCC 中）
     pub scc: u32,
 }
 
 impl SccCallchain {
     /// Create a new empty callchain
+    /// 创建新的空调用链
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Check if this callchain represents being in an SCC
+    /// 检查此调用链是否表示在 SCC 中
     pub fn in_scc(&self) -> bool {
         self.scc != 0
     }
 }
 
 /// A backedge state for SCC precision propagation
+/// 用于 SCC 精度传播的回边状态
 ///
 /// When we detect a loop (state matches a cached state with pending branches),
 /// we save the current state as a backedge. Later, we propagate precision
 /// requirements from the matched cached state back through the backedge states.
+/// 当我们检测到循环（状态匹配具有待处理分支的缓存状态）时，
+/// 我们将当前状态保存为回边。稍后，我们从匹配的缓存状态
+/// 通过回边状态向后传播精度要求。
 #[derive(Debug, Clone)]
 pub struct SccBackedge {
     /// The state at the backedge point
+    /// 回边点处的状态
     pub state: BpfVerifierState,
     /// The ID of the cached state this backedge matched (equal_state in kernel)
+    /// 此回边匹配的缓存状态的 ID（内核中的 equal_state）
     pub equal_state_id: StateId,
 }
 
 impl SccBackedge {
     /// Create a new backedge
+    /// 创建新的回边
     pub fn new(state: BpfVerifierState, equal_state_id: StateId) -> Self {
         Self {
             state,
@@ -1980,22 +2227,29 @@ impl SccBackedge {
 }
 
 /// SCC visit tracking for a specific callchain
+/// 特定调用链的 SCC 访问跟踪
 ///
 /// Each unique callchain through an SCC gets its own visit instance.
 /// This tracks the entry state and accumulated backedges for precision
 /// propagation when the SCC exploration completes.
+/// 通过 SCC 的每个唯一调用链都有自己的访问实例。
+/// 这跟踪入口状态和累积的回边，用于在 SCC 探索完成时进行精度传播。
 #[derive(Debug, Clone)]
 pub struct SccVisit {
     /// The callchain this visit corresponds to
+    /// 此访问对应的调用链
     pub callchain: SccCallchain,
     /// The state that entered this SCC (first checkpoint in the SCC)
+    /// 进入此 SCC 的状态（SCC 中的第一个检查点）
     pub entry_state_id: Option<StateId>,
     /// Accumulated backedge states
+    /// 累积的回边状态
     pub backedges: Vec<SccBackedge>,
 }
 
 impl SccVisit {
     /// Create a new SCC visit
+    /// 创建新的 SCC 访问
     pub fn new(callchain: SccCallchain) -> Self {
         Self {
             callchain,
@@ -2005,50 +2259,62 @@ impl SccVisit {
     }
 
     /// Add a backedge to this visit
+    /// 向此访问添加回边
     pub fn add_backedge(&mut self, backedge: SccBackedge) {
         self.backedges.push(backedge);
     }
 
     /// Check if this visit has any backedges
+    /// 检查此访问是否有任何回边
     pub fn has_backedges(&self) -> bool {
         !self.backedges.is_empty()
     }
 
     /// Clear backedges after propagation
+    /// 传播后清除回边
     pub fn clear_backedges(&mut self) {
         self.backedges.clear();
     }
 }
 
 /// Runtime SCC visit info for a single SCC
+/// 单个 SCC 的运行时访问信息
 ///
 /// Contains all visit instances for different callchains to this SCC.
 /// This is different from `analysis::scc::SccInfo` which is for CFG analysis.
+/// 包含到此 SCC 的不同调用链的所有访问实例。
+/// 这与用于 CFG 分析的 `analysis::scc::SccInfo` 不同。
 #[derive(Debug, Clone, Default)]
 pub struct SccVisitInfo {
     /// Visit instances for this SCC (one per unique callchain)
+    /// 此 SCC 的访问实例（每个唯一调用链一个）
     pub visits: Vec<SccVisit>,
 }
 
 impl SccVisitInfo {
     /// Create new SCC visit info
+    /// 创建新的 SCC 访问信息
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Find a visit for the given callchain
+    /// 查找给定调用链的访问
     pub fn find_visit(&self, callchain: &SccCallchain) -> Option<&SccVisit> {
         self.visits.iter().find(|v| &v.callchain == callchain)
     }
 
     /// Find a mutable visit for the given callchain
+    /// 查找给定调用链的可变访问
     pub fn find_visit_mut(&mut self, callchain: &SccCallchain) -> Option<&mut SccVisit> {
         self.visits.iter_mut().find(|v| &v.callchain == callchain)
     }
 
     /// Get or create a visit for the given callchain
+    /// 获取或创建给定调用链的访问
     ///
     /// Returns None only in the unlikely case of internal inconsistency
+    /// 仅在不太可能发生内部不一致的情况下返回 None
     pub fn get_or_create_visit(&mut self, callchain: SccCallchain) -> Option<&mut SccVisit> {
         if self.find_visit(&callchain).is_none() {
             self.visits.push(SccVisit::new(callchain.clone()));
@@ -2058,32 +2324,42 @@ impl SccVisitInfo {
 }
 
 /// SCC tracking for the entire verification session
+/// 整个验证会话的 SCC 跟踪
 #[derive(Debug, Clone, Default)]
 pub struct SccTracker {
     /// SCC visit info indexed by SCC id
+    /// 按 SCC ID 索引的 SCC 访问信息
     pub scc_info: HashMap<u32, SccVisitInfo>,
     /// Temporary callchain buffer (avoid allocations)
+    /// 临时调用链缓冲区（避免分配）
     callchain_buf: SccCallchain,
     /// Statistics: total backedges recorded
+    /// 统计：记录的回边总数
     pub total_backedges: u64,
     /// Statistics: total propagation rounds
+    /// 统计：传播轮次总数
     pub total_propagation_rounds: u64,
     /// Statistics: times fell back to mark_all_precise
+    /// 统计：回退到 mark_all_precise 的次数
     pub fallback_count: u64,
 }
 
 impl SccTracker {
     /// Create a new SCC tracker
+    /// 创建新的 SCC 跟踪器
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Compute the callchain for a verifier state
+    /// 计算验证器状态的调用链
     ///
     /// Looks for the topmost frame with an instruction in an SCC and forms
     /// the callchain as the call sites leading to that frame.
+    /// 查找具有 SCC 中指令的最顶层帧，并将调用链形成为通向该帧的调用点。
     ///
     /// Returns true if state is in an SCC, false otherwise.
+    /// 如果状态在 SCC 中则返回 true，否则返回 false。
     pub fn compute_callchain(
         &mut self,
         state: &BpfVerifierState,
@@ -2119,13 +2395,16 @@ impl SccTracker {
     }
 
     /// Get the current callchain (after compute_callchain)
+    /// 获取当前调用链（在 compute_callchain 之后）
     pub fn current_callchain(&self) -> &SccCallchain {
         &self.callchain_buf
     }
 
     /// Enter an SCC - ensure visit exists and set entry state if empty
+    /// 进入 SCC - 确保访问存在，如果为空则设置入口状态
     ///
     /// Called from is_state_visited when we add a new state to the cache.
+    /// 当我们向缓存添加新状态时从 is_state_visited 调用。
     pub fn maybe_enter_scc(
         &mut self,
         state: &BpfVerifierState,
@@ -2149,9 +2428,12 @@ impl SccTracker {
     }
 
     /// Exit an SCC - propagate backedges and reset visit
+    /// 退出 SCC - 传播回边并重置访问
     ///
     /// Called from update_branch_counts when a state's branches reach 0.
+    /// 当状态的分支达到 0 时从 update_branch_counts 调用。
     /// Returns Ok(()) on success, Err on propagation failure.
+    /// 成功时返回 Ok(())，传播失败时返回 Err。
     pub fn maybe_exit_scc(
         &mut self,
         state: &BpfVerifierState,
@@ -2219,8 +2501,10 @@ impl SccTracker {
     }
 
     /// Add a backedge state
+    /// 添加回边状态
     ///
     /// Called when is_state_visited finds a loop (RANGE_WITHIN match).
+    /// 当 is_state_visited 找到循环（RANGE_WITHIN 匹配）时调用。
     pub fn add_backedge(
         &mut self,
         state: &BpfVerifierState,
@@ -2260,6 +2544,7 @@ impl SccTracker {
     }
 
     /// Check if a state has incomplete read marks (is in SCC with pending backedges)
+    /// 检查状态是否有不完整的读取标记（在具有待处理回边的 SCC 中）
     pub fn incomplete_read_marks(
         &mut self,
         state: &BpfVerifierState,
@@ -2282,12 +2567,16 @@ impl SccTracker {
     }
 
     /// Propagate precision from backedge states (standalone version)
+    /// 从回边状态传播精度（独立版本）
     ///
     /// Iteratively propagates precision marks from the equal_state (cached state
     /// that the backedge matched) to the backedge state and its parents,
     /// until a fixpoint is reached.
+    /// 迭代地将精度标记从 equal_state（回边匹配的缓存状态）
+    /// 传播到回边状态及其父状态，直到达到不动点。
     ///
     /// Returns (propagation_rounds, did_fallback) on success.
+    /// 成功时返回 (传播轮次, 是否回退)。
     fn propagate_backedges_standalone(
         mut backedges: Vec<SccBackedge>,
         cache: &mut StateCache,
@@ -2333,6 +2622,7 @@ impl SccTracker {
     }
 
     /// Clear all SCC tracking data
+    /// 清除所有 SCC 跟踪数据
     pub fn clear(&mut self) {
         self.scc_info.clear();
         self.callchain_buf = SccCallchain::default();
@@ -2340,9 +2630,12 @@ impl SccTracker {
 }
 
 /// Internal precision propagation from one state to another
+/// 从一个状态到另一个状态的内部精度传播
 ///
 /// Propagates precision marks from `from` state to `to` state.
+/// 将精度标记从 `from` 状态传播到 `to` 状态。
 /// Returns true if any changes were made.
+/// 如果进行了任何更改则返回 true。
 fn propagate_precision_internal(
     from: &BpfVerifierState,
     to: &mut BpfVerifierState,
@@ -2395,47 +2688,63 @@ fn propagate_precision_internal(
     Ok(changed)
 }
 // ============================================================================
-// Memory Pressure Management
+// Memory Pressure Management / 内存压力管理
 // ============================================================================
 
 /// Pressure levels for memory management
+/// 内存管理的压力级别
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PressureLevel {
     /// Normal operation - no memory pressure
+    /// 正常运行 - 无内存压力
     Normal,
     /// Elevated pressure - start being more aggressive with eviction
+    /// 压力升高 - 开始更积极地进行驱逐
     Elevated,
     /// High pressure - aggressively evict states
+    /// 高压力 - 积极驱逐状态
     High,
     /// Critical pressure - emergency eviction mode
+    /// 临界压力 - 紧急驱逐模式
     Critical,
 }
 
 /// Memory pressure manager for state cache
+/// 状态缓存的内存压力管理器
 ///
 /// Monitors the number of cached states and triggers eviction
 /// when memory pressure increases. This prevents the verifier
 /// from consuming too much memory on complex programs.
+/// 监控缓存状态的数量，并在内存压力增加时触发驱逐。
+/// 这可以防止验证器在复杂程序上消耗过多内存。
 #[derive(Debug, Clone)]
 pub struct MemoryPressureManager {
     /// Maximum number of states before critical pressure
+    /// 达到临界压力前的最大状态数
     max_states: usize,
     /// Current number of states
+    /// 当前状态数
     current_states: usize,
     /// Threshold for elevated pressure (percentage 0-100)
+    /// 压力升高的阈值（百分比 0-100）
     elevated_threshold_percent: u32,
     /// Threshold for high pressure (percentage 0-100)
+    /// 高压力的阈值（百分比 0-100）
     high_threshold_percent: u32,
     /// Threshold for critical pressure (percentage 0-100)
+    /// 临界压力的阈值（百分比 0-100）
     critical_threshold_percent: u32,
     /// Number of evictions performed
+    /// 执行的驱逐次数
     pub evictions_performed: u64,
     /// Number of times pressure level changed
+    /// 压力级别变化的次数
     pub pressure_changes: u64,
 }
 
 impl MemoryPressureManager {
     /// Create a new memory pressure manager
+    /// 创建新的内存压力管理器
     pub fn new(max_states: usize) -> Self {
         Self {
             max_states,
@@ -2449,6 +2758,7 @@ impl MemoryPressureManager {
     }
 
     /// Create with custom thresholds (percentages 0-100)
+    /// 使用自定义阈值创建（百分比 0-100）
     pub fn with_thresholds(
         max_states: usize,
         elevated_percent: u32,
@@ -2467,6 +2777,7 @@ impl MemoryPressureManager {
     }
 
     /// Update the current state count
+    /// 更新当前状态计数
     pub fn update_state_count(&mut self, count: usize) {
         let old_level = self.pressure_level();
         self.current_states = count;
@@ -2478,6 +2789,7 @@ impl MemoryPressureManager {
     }
 
     /// Get the current pressure level
+    /// 获取当前压力级别
     pub fn pressure_level(&self) -> PressureLevel {
         if self.max_states == 0 {
             return PressureLevel::Normal;
@@ -2498,6 +2810,7 @@ impl MemoryPressureManager {
     }
 
     /// Get the number of states to evict based on pressure level
+    /// 根据压力级别获取要驱逐的状态数量
     pub fn eviction_target(&self) -> usize {
         match self.pressure_level() {
             PressureLevel::Normal => 0,
@@ -2508,16 +2821,19 @@ impl MemoryPressureManager {
     }
 
     /// Record that evictions were performed
+    /// 记录已执行的驱逐
     pub fn record_evictions(&mut self, count: usize) {
         self.evictions_performed += count as u64;
     }
 
     /// Check if eviction is needed
+    /// 检查是否需要驱逐
     pub fn needs_eviction(&self) -> bool {
         self.pressure_level() != PressureLevel::Normal
     }
 
     /// Get remaining capacity before critical
+    /// 获取达到临界状态前的剩余容量
     pub fn remaining_capacity(&self) -> usize {
         let critical_count =
             (self.max_states as u64 * self.critical_threshold_percent as u64 / 100) as usize;
@@ -2533,27 +2849,34 @@ impl Default for MemoryPressureManager {
 }
 
 // ============================================================================
-// Eviction Policies
+// Eviction Policies / 驱逐策略
 // ============================================================================
 
 /// Eviction policy for state cache
+/// 状态缓存的驱逐策略
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum EvictionPolicy {
     /// Least Recently Used - evict states that haven't been hit recently
+    /// 最近最少使用 - 驱逐最近未命中的状态
     LRU,
     /// Least Frequently Used - evict states with lowest hit count
+    /// 最不经常使用 - 驱逐命中计数最低的状态
     LFU,
     /// Miss/Hit Ratio - evict states with high miss ratio
+    /// 未命中/命中比率 - 驱逐未命中比率高的状态
     MissRatio,
     /// Age-based - evict oldest states first
+    /// 基于年龄 - 首先驱逐最旧的状态
     Age,
     /// Combined heuristic - uses multiple factors
+    /// 组合启发式 - 使用多个因素
     #[default]
     Combined,
 }
 
 impl EvictionPolicy {
     /// Select states for eviction from a specific instruction
+    /// 从特定指令选择要驱逐的状态
     pub fn select_for_eviction(
         &self,
         cache: &StateCache,
@@ -2583,6 +2906,7 @@ impl EvictionPolicy {
     }
 
     /// Compute eviction score for a cached state (lower = more evictable)
+    /// 计算缓存状态的驱逐分数（越低越容易被驱逐）
     fn compute_score(&self, cached: &CachedState) -> u64 {
         match self {
             EvictionPolicy::LRU => {
@@ -2623,6 +2947,7 @@ impl EvictionPolicy {
     }
 
     /// Select states for global eviction across all instructions
+    /// 跨所有指令选择要全局驱逐的状态
     pub fn select_global_eviction(&self, cache: &StateCache, count: usize) -> Vec<StateId> {
         let mut all_candidates: Vec<(StateId, u64)> = Vec::new();
 
@@ -2647,44 +2972,59 @@ impl EvictionPolicy {
 
 
 // ============================================================================
-// Adaptive Pruning
+// Adaptive Pruning / 自适应剪枝
 // ============================================================================
 
 /// Pruning mode based on verification complexity
+/// 基于验证复杂度的剪枝模式
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PruningMode {
     /// Normal pruning - standard comparison
+    /// 正常剪枝 - 标准比较
     Normal,
     /// Relaxed pruning - allow more subsumption
+    /// 宽松剪枝 - 允许更多包含关系
     Relaxed,
     /// Aggressive pruning - evict more states
+    /// 激进剪枝 - 驱逐更多状态
     Aggressive,
     /// Emergency pruning - maximum eviction
+    /// 紧急剪枝 - 最大程度驱逐
     Emergency,
 }
 
 /// Adaptive pruning configuration
+/// 自适应剪枝配置
 ///
 /// Adjusts pruning behavior based on program complexity and memory pressure.
 /// This helps balance verification precision with resource usage.
+/// 根据程序复杂度和内存压力调整剪枝行为。
+/// 这有助于平衡验证精度与资源使用。
 #[derive(Debug, Clone)]
 pub struct AdaptivePruning {
     /// Current pruning mode
+    /// 当前剪枝模式
     pub current_mode: PruningMode,
     /// States added since last adjustment
+    /// 自上次调整以来添加的状态数
     states_added: u64,
     /// States pruned since last adjustment
+    /// 自上次调整以来剪枝的状态数
     states_pruned: u64,
     /// Adjustment interval (number of states before reconsidering mode)
+    /// 调整间隔（重新考虑模式之前的状态数）
     adjustment_interval: u64,
     /// Prune ratio target as percentage (0-100)
+    /// 目标剪枝比率（百分比 0-100）
     target_prune_ratio_percent: u32,
     /// Mode changes performed
+    /// 执行的模式更改次数
     pub mode_changes: u64,
 }
 
 impl AdaptivePruning {
     /// Create new adaptive pruning with defaults
+    /// 使用默认值创建新的自适应剪枝
     pub fn new() -> Self {
         Self {
             current_mode: PruningMode::Normal,
@@ -2697,6 +3037,7 @@ impl AdaptivePruning {
     }
 
     /// Create with custom parameters
+    /// 使用自定义参数创建
     pub fn with_params(interval: u64, target_ratio_percent: u32) -> Self {
         Self {
             current_mode: PruningMode::Normal,
@@ -2709,21 +3050,25 @@ impl AdaptivePruning {
     }
 
     /// Record a state being added
+    /// 记录正在添加的状态
     pub fn record_state_added(&mut self) {
         self.states_added += 1;
     }
 
     /// Record a state being pruned
+    /// 记录正在剪枝的状态
     pub fn record_state_pruned(&mut self) {
         self.states_pruned += 1;
     }
 
     /// Check if adjustment is needed
+    /// 检查是否需要调整
     pub fn should_adjust(&self) -> bool {
         self.states_added >= self.adjustment_interval
     }
 
     /// Adjust pruning mode based on pressure level
+    /// 根据压力级别调整剪枝模式
     pub fn adjust_mode(&mut self, pressure: PressureLevel) {
         let old_mode = self.current_mode;
 
@@ -2758,6 +3103,7 @@ impl AdaptivePruning {
     }
 
     /// Get comparison config for current mode
+    /// 获取当前模式的比较配置
     pub fn get_compare_config(&self) -> CompareConfig {
         match self.current_mode {
             PruningMode::Normal => CompareConfig::for_pruning(),
@@ -2783,6 +3129,7 @@ impl AdaptivePruning {
     }
 
     /// Check if we should skip adding state to cache
+    /// 检查是否应跳过将状态添加到缓存
     pub fn should_skip_cache(&self) -> bool {
         matches!(self.current_mode, PruningMode::Emergency)
     }
@@ -2799,40 +3146,54 @@ impl Default for AdaptivePruning {
 // ============================================================================
 
 /// Integrated pruning controller combining all pruning strategies
+/// 集成所有剪枝策略的剪枝控制器
 ///
 /// This controller coordinates memory pressure management, eviction,
 /// and adaptive pruning to maintain efficient verification.
+/// 此控制器协调内存压力管理、驱逐和自适应剪枝以维持高效验证。
 #[derive(Debug)]
 pub struct PruningController {
     /// Memory pressure manager
+    /// 内存压力管理器
     pub pressure: MemoryPressureManager,
     /// Eviction policy
+    /// 驱逐策略
     pub eviction_policy: EvictionPolicy,
     /// Adaptive pruning
+    /// 自适应剪枝
     pub adaptive: AdaptivePruning,
     /// Statistics
+    /// 统计信息
     pub stats: PruningStats,
 }
 
 /// Pruning statistics
+/// 剪枝统计信息
 #[derive(Debug, Clone, Default)]
 pub struct PruningStats {
     /// Total states added
+    /// 添加的状态总数
     pub states_added: u64,
     /// Total states pruned
+    /// 剪枝的状态总数
     pub states_pruned: u64,
     /// Total states evicted
+    /// 驱逐的状态总数
     pub states_evicted: u64,
     /// Times eviction was triggered
+    /// 触发驱逐的次数
     pub eviction_rounds: u64,
     /// Cache hits
+    /// 缓存命中次数
     pub cache_hits: u64,
     /// Cache misses
+    /// 缓存未命中次数
     pub cache_misses: u64,
 }
 
 impl PruningController {
     /// Create a new pruning controller
+    /// 创建新的剪枝控制器
     pub fn new(max_states: usize) -> Self {
         Self {
             pressure: MemoryPressureManager::new(max_states),
@@ -2843,6 +3204,7 @@ impl PruningController {
     }
 
     /// Create with custom configuration
+    /// 使用自定义配置创建
     pub fn with_config(
         max_states: usize,
         policy: EvictionPolicy,
@@ -2857,6 +3219,7 @@ impl PruningController {
     }
 
     /// Update controller with current cache state
+    /// 使用当前缓存状态更新控制器
     pub fn update(&mut self, cache: &StateCache) {
         self.pressure.update_state_count(cache.total_states);
 
@@ -2866,6 +3229,7 @@ impl PruningController {
     }
 
     /// Perform eviction if needed
+    /// 如果需要则执行驱逐
     pub fn maybe_evict(&mut self, cache: &mut StateCache) {
         if !self.pressure.needs_eviction() {
             return;
@@ -2888,48 +3252,57 @@ impl PruningController {
     }
 
     /// Record state added
+    /// 记录添加的状态
     pub fn record_added(&mut self) {
         self.stats.states_added += 1;
         self.adaptive.record_state_added();
     }
 
     /// Record state pruned
+    /// 记录剪枝的状态
     pub fn record_pruned(&mut self) {
         self.stats.states_pruned += 1;
         self.adaptive.record_state_pruned();
     }
 
     /// Record cache hit
+    /// 记录缓存命中
     pub fn record_hit(&mut self) {
         self.stats.cache_hits += 1;
     }
 
     /// Record cache miss
+    /// 记录缓存未命中
     pub fn record_miss(&mut self) {
         self.stats.cache_misses += 1;
     }
 
     /// Get current pressure level
+    /// 获取当前压力级别
     pub fn pressure_level(&self) -> PressureLevel {
         self.pressure.pressure_level()
     }
 
     /// Get current pruning mode
+    /// 获取当前剪枝模式
     pub fn pruning_mode(&self) -> PruningMode {
         self.adaptive.current_mode
     }
 
     /// Get comparison config for current state
+    /// 获取当前状态的比较配置
     pub fn get_compare_config(&self) -> CompareConfig {
         self.adaptive.get_compare_config()
     }
 
     /// Check if state caching should be skipped
+    /// 检查是否应跳过状态缓存
     pub fn should_skip_cache(&self) -> bool {
         self.adaptive.should_skip_cache()
     }
 
     /// Get cache efficiency as percentage (0-100)
+    /// 获取缓存效率百分比（0-100）
     pub fn cache_efficiency_percent(&self) -> u32 {
         let total = self.stats.cache_hits + self.stats.cache_misses;
         if total == 0 {
@@ -2940,6 +3313,7 @@ impl PruningController {
     }
 
     /// Get pruning efficiency as percentage (0-100)
+    /// 获取剪枝效率百分比（0-100）
     pub fn pruning_efficiency_percent(&self) -> u32 {
         if self.stats.states_added == 0 {
             0

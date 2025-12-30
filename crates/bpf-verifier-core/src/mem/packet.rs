@@ -1,18 +1,36 @@
 // SPDX-License-Identifier: GPL-2.0
 
+//! XDP 和 TC 程序的数据包访问验证模块
 //!
-
+//! Packet data access verification for XDP and TC programs.
+//!
+//! 本模块实现了 XDP 和 TC 程序的数据包数据访问验证。它跟踪数据包指针
+//! （data、data_end、data_meta）并确保安全访问。
+//!
 //! This module implements packet data access verification for XDP and TC programs.
-
 //! It tracks packet pointers (data, data_end, data_meta) and ensures safe access.
-
 //!
-
+//! # 边界检查模式 / Bounds Check Patterns
+//!
+//! BPF 验证器必须确保所有数据包访问都在边界内。这通过跟踪边界检查并将该信息
+//! 传播到后续指令来实现。
+//!
 //! The BPF verifier must ensure that all packet accesses are within bounds.
-
 //! This is done by tracking bounds checks and propagating that information
-
 //! to subsequent instructions.
+//!
+//! ## 典型的边界检查模式 / Typical Bounds Check Pattern
+//!
+//! ```text
+//! // C 代码 / C code:
+//! if (data + sizeof(struct ethhdr) > data_end)
+//!     return XDP_DROP;
+//! // 此后可以安全访问以太网头 / After this, ethernet header access is safe
+//! ```
+//!
+//! # 可变偏移访问 / Variable Offset Access
+//!
+//! 对于非常量偏移的数据包访问，验证器使用 min/max 边界来验证安全性。
 
 use alloc::{format, vec::Vec};
 

@@ -1,12 +1,18 @@
 // SPDX-License-Identifier: GPL-2.0
 
 //! Control flow graph analysis
+//! 控制流图分析
 //!
 //! This module handles control flow analysis including:
+//! 本模块处理控制流分析，包括：
 //! - Building the CFG from instructions
+//! - 从指令构建 CFG
 //! - Detecting loops and back-edges
+//! - 检测循环和回边
 //! - Managing exploration of all paths
+//! - 管理所有路径的探索
 //! - State pruning and merging
+//! - 状态剪枝和合并
 
 use crate::core::error::{Result, VerifierError};
 use crate::core::insn::{check_alu_op, check_call, check_cond_jmp_op, check_exit, check_ld_imm64};
@@ -20,31 +26,41 @@ use alloc::collections::{BTreeMap as HashMap, BTreeSet as HashSet};
 use super::states_equal::states_equal;
 
 /// Information about a basic block
+/// 基本块信息
 #[derive(Debug, Clone, Default)]
 pub struct BasicBlock {
     /// Start instruction index
+    /// 起始指令索引
     pub start: usize,
     /// End instruction index (inclusive)
+    /// 结束指令索引（包含）
     pub end: usize,
     /// Successor blocks
+    /// 后继块
     pub successors: Vec<usize>,
     /// Predecessor blocks
+    /// 前驱块
     pub predecessors: Vec<usize>,
 }
 
 /// Control flow graph
+/// 控制流图
 #[derive(Debug, Default)]
 pub struct ControlFlowGraph {
     /// Map from start instruction to basic block
+    /// 从起始指令到基本块的映射
     pub blocks: HashMap<usize, BasicBlock>,
     /// Entry block index
+    /// 入口块索引
     pub entry: usize,
     /// All instruction indices that are jump targets
+    /// 所有作为跳转目标的指令索引
     pub jump_targets: HashSet<usize>,
 }
 
 impl ControlFlowGraph {
     /// Build CFG from instructions
+    /// 从指令构建 CFG
     pub fn build(insns: &[BpfInsn]) -> Result<Self> {
         let mut cfg = Self::default();
 
@@ -53,7 +69,8 @@ impl ControlFlowGraph {
         }
 
         // First pass: find all jump targets
-        cfg.jump_targets.insert(0); // Entry point
+        // 第一遍：找到所有跳转目标
+        cfg.jump_targets.insert(0); // Entry point / 入口点
 
         for (i, insn) in insns.iter().enumerate() {
             let class = insn.class();
@@ -64,20 +81,24 @@ impl ControlFlowGraph {
                 match op {
                     BPF_CALL => {
                         // Call might transfer to subprogram
+                        // 调用可能转移到子程序
                         if insn.is_pseudo_call() {
                             let target = (i as i32 + insn.imm + 1) as usize;
                             cfg.jump_targets.insert(target);
                         }
                         // Fall-through is also a target
+                        // 顺序执行也是一个目标
                         if i + 1 < insns.len() {
                             cfg.jump_targets.insert(i + 1);
                         }
                     }
                     BPF_EXIT => {
                         // No successors
+                        // 没有后继
                     }
                     BPF_JA => {
                         // Unconditional jump
+                        // 无条件跳转
                         let target = (i as i32 + insn.off as i32 + 1) as usize;
                         if target < insns.len() {
                             cfg.jump_targets.insert(target);
@@ -85,11 +106,13 @@ impl ControlFlowGraph {
                     }
                     _ => {
                         // Conditional jump
+                        // 条件跳转
                         let target = (i as i32 + insn.off as i32 + 1) as usize;
                         if target < insns.len() {
                             cfg.jump_targets.insert(target);
                         }
                         // Fall-through
+                        // 顺序执行
                         if i + 1 < insns.len() {
                             cfg.jump_targets.insert(i + 1);
                         }
@@ -98,12 +121,15 @@ impl ControlFlowGraph {
             }
 
             // LD_IMM64 takes two slots
+            // LD_IMM64 占用两个槽位
             if insn.code == (BPF_LD | BPF_IMM | 0x18) {
                 // Skip the second instruction
+                // 跳过第二条指令
             }
         }
 
         // Second pass: build basic blocks
+        // 第二遍：构建基本块
         let mut sorted_targets: Vec<usize> = cfg.jump_targets.iter().copied().collect();
         sorted_targets.sort();
 
@@ -115,6 +141,7 @@ impl ControlFlowGraph {
             };
 
             // Find successors
+            // 查找后继
             let mut successors = Vec::new();
             if end < insns.len() {
                 let last_insn = &insns[end];
@@ -126,6 +153,7 @@ impl ControlFlowGraph {
                     match op {
                         BPF_EXIT => {
                             // No successors
+                            // 没有后继
                         }
                         BPF_JA => {
                             let target = (end as i32 + last_insn.off as i32 + 1) as usize;
@@ -139,12 +167,14 @@ impl ControlFlowGraph {
                                 successors.push(target);
                             }
                             // Return continues after call
+                            // 返回后继续执行
                             if end + 1 < insns.len() {
                                 successors.push(end + 1);
                             }
                         }
                         _ if op != BPF_CALL && op != BPF_EXIT => {
                             // Conditional jump
+                            // 条件跳转
                             let target = (end as i32 + last_insn.off as i32 + 1) as usize;
                             if target < insns.len() {
                                 successors.push(target);
@@ -155,6 +185,7 @@ impl ControlFlowGraph {
                         }
                         _ => {
                             // Regular call, continues to next instruction
+                            // 常规调用，继续执行下一条指令
                             if end + 1 < insns.len() {
                                 successors.push(end + 1);
                             }
@@ -162,6 +193,7 @@ impl ControlFlowGraph {
                     }
                 } else if end + 1 < insns.len() {
                     // Not a jump, falls through
+                    // 不是跳转，顺序执行
                     successors.push(end + 1);
                 }
             }
@@ -178,6 +210,7 @@ impl ControlFlowGraph {
         }
 
         // Third pass: fill in predecessors
+        // 第三遍：填充前驱
         let block_starts: Vec<usize> = cfg.blocks.keys().copied().collect();
         for start in &block_starts {
             let successors = cfg
@@ -196,22 +229,29 @@ impl ControlFlowGraph {
     }
 
     /// Check if there's a back-edge from `from` to `to`
+    /// 检查从 `from` 到 `to` 是否存在回边
     pub fn is_back_edge(&self, from: usize, to: usize) -> bool {
         // A back-edge goes to an earlier block (loop)
+        // 回边指向更早的块（循环）
         to <= from
     }
 
     /// Get all blocks in the CFG
+    /// 获取 CFG 中的所有块
     pub fn all_blocks(&self) -> impl Iterator<Item = &BasicBlock> {
         self.blocks.values()
     }
 
     /// Compute postorder traversal of instructions within each subprogram.
+    /// 计算每个子程序中指令的后序遍历。
     /// Returns a vector of instruction indices in postorder.
+    /// 返回后序中的指令索引向量。
     /// This is useful for optimization passes that need reverse postorder.
+    /// 这对于需要逆后序的优化遍历很有用。
     pub fn compute_postorder(&self, insns: &[BpfInsn], subprog_starts: &[usize]) -> Vec<usize> {
         let mut postorder = Vec::new();
         let mut state: Vec<u8> = vec![0; insns.len()]; // 0=unvisited, 1=discovered, 2=explored
+                                                        // 0=未访问, 1=已发现, 2=已探索
 
         const DISCOVERED: u8 = 1;
         const EXPLORED: u8 = 2;
@@ -235,6 +275,7 @@ impl ControlFlowGraph {
                 }
 
                 // Get successors for this instruction
+                // 获取此指令的后继
                 let successors = self.get_insn_successors(insns, top);
                 let mut pushed_any = false;
 
@@ -256,6 +297,7 @@ impl ControlFlowGraph {
     }
 
     /// Get successors for a single instruction (not a basic block)
+    /// 获取单条指令的后继（不是基本块）
     fn get_insn_successors(&self, insns: &[BpfInsn], idx: usize) -> Vec<usize> {
         let mut successors = Vec::new();
 
@@ -267,6 +309,7 @@ impl ControlFlowGraph {
         let class = insn.class();
 
         // Handle LD_IMM64 which takes two instruction slots
+        // 处理占用两个指令槽位的 LD_IMM64
         if insn.code == (BPF_LD | BPF_IMM | 0x18) {
             if idx + 2 < insns.len() {
                 successors.push(idx + 2);
@@ -280,6 +323,7 @@ impl ControlFlowGraph {
             match op {
                 BPF_EXIT => {
                     // No successors
+                    // 没有后继
                 }
                 BPF_JA => {
                     let target = (idx as i32 + insn.off as i32 + 1) as usize;
@@ -289,12 +333,14 @@ impl ControlFlowGraph {
                 }
                 BPF_CALL => {
                     // Regular call continues to next instruction
+                    // 常规调用继续执行下一条指令
                     if idx + 1 < insns.len() {
                         successors.push(idx + 1);
                     }
                 }
                 _ => {
                     // Conditional jump: both fall-through and target
+                    // 条件跳转：顺序执行和跳转目标
                     let target = (idx as i32 + insn.off as i32 + 1) as usize;
                     if target < insns.len() {
                         successors.push(target);
@@ -306,6 +352,7 @@ impl ControlFlowGraph {
             }
         } else {
             // Non-jump instruction falls through
+            // 非跳转指令顺序执行
             if idx + 1 < insns.len() {
                 successors.push(idx + 1);
             }
@@ -315,6 +362,7 @@ impl ControlFlowGraph {
     }
 
     /// Get reverse postorder (useful for forward dataflow analysis)
+    /// 获取逆后序（对前向数据流分析有用）
     pub fn compute_reverse_postorder(
         &self,
         insns: &[BpfInsn],
@@ -326,7 +374,9 @@ impl ControlFlowGraph {
     }
 
     /// Detect loop headers (targets of back edges)
+    /// 检测循环头（回边的目标）
     /// Uses iterative DFS to avoid stack overflow in kernel mode
+    /// 使用迭代式 DFS 以避免内核模式下的栈溢出
     pub fn find_loop_headers(&self, insns: &[BpfInsn]) -> HashSet<usize> {
         let mut loop_headers = HashSet::new();
         let mut visited = HashSet::new();
@@ -337,15 +387,20 @@ impl ControlFlowGraph {
         }
 
         // Iterative DFS
+        // 迭代式 DFS
         // Each entry: (node_idx, next_successor_to_process, is_entering)
+        // 每个条目：(节点索引, 下一个要处理的后继, 是否正在进入)
         // is_entering: true means we're just entering this node
+        // is_entering：true 表示我们刚进入这个节点
         //              false means we're returning from a child
+        //              false 表示我们从子节点返回
         let mut stack: Vec<(usize, usize, bool)> = Vec::new();
         stack.push((0, 0, true));
 
         while let Some((idx, succ_idx, is_entering)) = stack.pop() {
             if is_entering {
                 // First time visiting this node
+                // 第一次访问这个节点
                 if visited.contains(&idx) {
                     continue;
                 }
@@ -359,11 +414,14 @@ impl ControlFlowGraph {
             for (i, &succ) in successors.iter().enumerate().skip(succ_idx) {
                 if in_stack.contains(&succ) {
                     // Back edge found - succ is a loop header
+                    // 找到回边 - succ 是循环头
                     loop_headers.insert(succ);
                 } else if !visited.contains(&succ) && succ < insns.len() {
                     // Push current node back to continue after child returns
+                    // 将当前节点压回以便子节点返回后继续
                     stack.push((idx, i + 1, false));
                     // Push child to visit
+                    // 压入要访问的子节点
                     stack.push((succ, 0, true));
                     found_unvisited = true;
                     break;
@@ -371,6 +429,7 @@ impl ControlFlowGraph {
             }
 
             // If no unvisited successors, we're done with this node
+            // 如果没有未访问的后继，则此节点处理完成
             if !found_unvisited {
                 in_stack.remove(&idx);
             }
@@ -381,23 +440,29 @@ impl ControlFlowGraph {
 }
 
 /// Explored states at each instruction
+/// 每条指令处的已探索状态
 #[derive(Debug, Default)]
 pub struct ExploredStates {
     /// States at each instruction index
+    /// 每个指令索引处的状态
     states: HashMap<usize, Vec<BpfVerifierState>>,
     /// Total number of states
+    /// 状态总数
     pub total_states: usize,
     /// Peak states encountered
+    /// 遇到的峰值状态数
     pub peak_states: usize,
 }
 
 impl ExploredStates {
     /// Create a new explored states tracker
+    /// 创建新的已探索状态跟踪器
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Add a state at an instruction
+    /// 在某指令处添加状态
     pub fn add_state(&mut self, insn_idx: usize, state: BpfVerifierState) {
         self.states.entry(insn_idx).or_default().push(state);
         self.total_states += 1;
@@ -405,11 +470,13 @@ impl ExploredStates {
     }
 
     /// Get states at an instruction
+    /// 获取某指令处的状态
     pub fn get_states(&self, insn_idx: usize) -> Option<&Vec<BpfVerifierState>> {
         self.states.get(&insn_idx)
     }
 
     /// Check if a state is equivalent to any existing state at this instruction
+    /// 检查某状态是否与此指令处的任何现有状态等价
     pub fn find_equivalent(&self, insn_idx: usize, state: &BpfVerifierState) -> Option<usize> {
         if let Some(states) = self.states.get(&insn_idx) {
             for (i, existing) in states.iter().enumerate() {
@@ -423,33 +490,46 @@ impl ExploredStates {
 }
 
 // Note: states_equal is provided by the states_equal module for state comparison
+// 注意：states_equal 由 states_equal 模块提供用于状态比较
 
 /// Verifier context for CFG-based verification
+/// 基于 CFG 的验证器上下文
 pub struct Verifier {
     /// Program instructions
+    /// 程序指令
     pub insns: Vec<BpfInsn>,
     /// Control flow graph
+    /// 控制流图
     pub cfg: ControlFlowGraph,
     /// Current state
+    /// 当前状态
     pub cur_state: BpfVerifierState,
     /// Exploration stack
+    /// 探索栈
     pub stack: ExplorationStack,
     /// Explored states
+    /// 已探索状态
     pub explored: ExploredStates,
     /// Subprogram information
+    /// 子程序信息
     pub subprogs: Vec<BpfSubprogInfo>,
     /// Whether in privileged mode
+    /// 是否处于特权模式
     pub allow_ptr_leaks: bool,
     /// Whether program is sleepable
+    /// 程序是否可睡眠
     pub in_sleepable: bool,
     /// Current instruction index
+    /// 当前指令索引
     pub insn_idx: usize,
     /// Previous instruction index
+    /// 上一条指令索引
     pub prev_insn_idx: usize,
 }
 
 impl Verifier {
     /// Create a new verifier for a program
+    /// 为程序创建新的验证器
     pub fn new(insns: Vec<BpfInsn>, allow_ptr_leaks: bool) -> Result<Self> {
         let cfg = ControlFlowGraph::build(&insns)?;
 
@@ -468,20 +548,26 @@ impl Verifier {
     }
 
     /// Verify the program
+    /// 验证程序
     pub fn verify(&mut self) -> Result<()> {
         // First pass: check CFG structure
+        // 第一遍：检查 CFG 结构
         self.check_cfg()?;
 
         // Add subprograms
+        // 添加子程序
         self.add_subprogs()?;
 
         // Main verification loop
+        // 主验证循环
         self.do_check()
     }
 
     /// Check CFG for issues (unreachable code, invalid jumps)
+    /// 检查 CFG 是否有问题（不可达代码、无效跳转）
     fn check_cfg(&self) -> Result<()> {
         // Check all instructions are reachable
+        // 检查所有指令是否可达
         let mut reachable = HashSet::new();
         let mut to_visit = vec![0usize];
 
@@ -498,6 +584,7 @@ impl Verifier {
             let class = insn.class();
 
             // Handle LD_IMM64 which takes two instruction slots
+            // 处理占用两个指令槽位的 LD_IMM64
             if insn.code == (BPF_LD | BPF_IMM | 0x18) {
                 to_visit.push(idx + 2);
                 continue;
@@ -509,6 +596,7 @@ impl Verifier {
                 match op {
                     BPF_EXIT => {
                         // No successors
+                        // 没有后继
                     }
                     BPF_JA => {
                         let target = (idx as i32 + insn.off as i32 + 1) as usize;
@@ -519,6 +607,7 @@ impl Verifier {
                     }
                     _ => {
                         // Conditional
+                        // 条件跳转
                         let target = (idx as i32 + insn.off as i32 + 1) as usize;
                         to_visit.push(target);
                         to_visit.push(idx + 1);
@@ -530,9 +619,11 @@ impl Verifier {
         }
 
         // Check for unreachable instructions
+        // 检查不可达指令
         for i in 0..self.insns.len() {
             if !reachable.contains(&i) {
                 // Skip second slot of LD_IMM64
+                // 跳过 LD_IMM64 的第二个槽位
                 if i > 0 && self.insns[i - 1].code == (BPF_LD | BPF_IMM | 0x18) {
                     continue;
                 }
@@ -544,14 +635,17 @@ impl Verifier {
     }
 
     /// Find and add subprograms
+    /// 查找并添加子程序
     fn add_subprogs(&mut self) -> Result<()> {
         // Main program is subprog 0
+        // 主程序是子程序 0
         self.subprogs.push(BpfSubprogInfo {
             start: 0,
             ..Default::default()
         });
 
         // Find call targets
+        // 查找调用目标
         for (i, insn) in self.insns.iter().enumerate() {
             if insn.is_pseudo_call() {
                 let target = (i as i32 + insn.imm + 1) as usize;
@@ -560,6 +654,7 @@ impl Verifier {
                 }
 
                 // Check if already added
+                // 检查是否已添加
                 if !self.subprogs.iter().any(|s| s.start == target) {
                     self.subprogs.push(BpfSubprogInfo {
                         start: target,
@@ -570,22 +665,27 @@ impl Verifier {
         }
 
         // Sort by start
+        // 按起始位置排序
         self.subprogs.sort_by_key(|s| s.start);
 
         Ok(())
     }
 
     /// Main verification loop
+    /// 主验证循环
     fn do_check(&mut self) -> Result<()> {
         // Set up initial state
+        // 设置初始状态
         if let Some(func) = self.cur_state.cur_func_mut() {
             // R1 is context pointer
+            // R1 是上下文指针
             func.regs[1].reg_type = BpfRegType::PtrToCtx;
             func.regs[1].mark_known_zero();
         }
 
         loop {
             // Check state complexity
+            // 检查状态复杂度
             if self.explored.total_states > BPF_COMPLEXITY_LIMIT_STATES * self.insns.len() {
                 return Err(VerifierError::TooComplex(format!(
                     "exceeded {} states",
@@ -594,27 +694,32 @@ impl Verifier {
             }
 
             // Check if this state was already visited
+            // 检查此状态是否已被访问
             if self
                 .explored
                 .find_equivalent(self.insn_idx, &self.cur_state)
                 .is_some()
             {
                 // State is equivalent to an existing one, prune this path
+                // 状态与现有状态等价，剪枝此路径
                 if !self.pop_state()? {
-                    break; // No more states to explore
+                    break; // No more states to explore / 没有更多状态可探索
                 }
                 continue;
             }
 
             // Add current state to explored
+            // 将当前状态添加到已探索集合
             self.explored
                 .add_state(self.insn_idx, self.cur_state.clone());
 
             // Process the instruction
+            // 处理指令
             let continue_check = self.do_check_insn()?;
 
             if !continue_check {
                 // Instruction ended this path (EXIT or error)
+                // 指令结束了此路径（EXIT 或错误）
                 if !self.pop_state()? {
                     break;
                 }
@@ -625,6 +730,7 @@ impl Verifier {
     }
 
     /// Process a single instruction
+    /// 处理单条指令
     fn do_check_insn(&mut self) -> Result<bool> {
         if self.insn_idx >= self.insns.len() {
             return Err(VerifierError::InvalidInstruction(self.insn_idx));
@@ -640,11 +746,13 @@ impl Verifier {
             }
             BPF_LDX => {
                 // Load from memory
+                // 从内存加载
                 self.check_ldx(&insn)?;
                 self.insn_idx += 1;
             }
             BPF_STX | BPF_ST => {
                 // Store to memory
+                // 存储到内存
                 self.check_stx(&insn)?;
                 self.insn_idx += 1;
             }
@@ -659,6 +767,7 @@ impl Verifier {
                     self.insn_idx += 2;
                 } else {
                     // Other LD instructions
+                    // 其他 LD 指令
                     self.insn_idx += 1;
                 }
             }
@@ -668,7 +777,7 @@ impl Verifier {
                 match op {
                     BPF_EXIT => {
                         check_exit(&self.cur_state)?;
-                        return Ok(false); // End of path
+                        return Ok(false); // End of path / 路径结束
                     }
                     BPF_CALL => {
                         check_call(&mut self.cur_state, &insn, self.insn_idx)?;
@@ -680,6 +789,7 @@ impl Verifier {
                     }
                     _ => {
                         // Conditional jump
+                        // 条件跳转
                         let (fall_through, target) = check_cond_jmp_op(
                             &mut self.cur_state,
                             &insn,
@@ -689,6 +799,7 @@ impl Verifier {
 
                         if let Some(target_idx) = target {
                             // Push target path to stack
+                            // 将目标路径压入栈
                             let mut target_state = self.cur_state.clone();
                             target_state.branches += 1;
                             self.stack.push(BpfVerifierStackElem::new(
@@ -715,11 +826,13 @@ impl Verifier {
     }
 
     /// Check LDX instruction
+    /// 检查 LDX 指令
     fn check_ldx(&mut self, insn: &BpfInsn) -> Result<()> {
         let dst_reg = insn.dst_reg as usize;
         let src_reg = insn.src_reg as usize;
 
         // Source must be a valid pointer
+        // 源必须是有效指针
         let src = self
             .cur_state
             .reg(src_reg)
@@ -731,6 +844,7 @@ impl Verifier {
         }
 
         // Perform load - result is usually a scalar
+        // 执行加载 - 结果通常是标量
         if let Some(dst) = self.cur_state.reg_mut(dst_reg) {
             dst.mark_unknown(false);
         }
@@ -739,11 +853,13 @@ impl Verifier {
     }
 
     /// Check STX instruction
+    /// 检查 STX 指令
     fn check_stx(&mut self, insn: &BpfInsn) -> Result<()> {
         let dst_reg = insn.dst_reg as usize;
         let src_reg = insn.src_reg as usize;
 
         // Destination must be a valid pointer
+        // 目标必须是有效指针
         let dst = self
             .cur_state
             .reg(dst_reg)
@@ -755,6 +871,7 @@ impl Verifier {
         }
 
         // Source must be initialized
+        // 源必须已初始化
         let src = self
             .cur_state
             .reg(src_reg)
@@ -764,10 +881,13 @@ impl Verifier {
         }
 
         // Check for pointer leaks
+        // 检查指针泄漏
         if !self.allow_ptr_leaks && src.is_pointer() {
             // Storing pointers to maps or other memory may leak them
+            // 将指针存储到 map 或其他内存可能会泄漏它们
             if dst.reg_type == BpfRegType::PtrToMapValue {
                 // Check if map allows pointer storage
+                // 检查 map 是否允许存储指针
             }
         }
 
@@ -775,6 +895,7 @@ impl Verifier {
     }
 
     /// Pop next state from exploration stack
+    /// 从探索栈弹出下一个状态
     fn pop_state(&mut self) -> Result<bool> {
         match self.stack.pop() {
             Some(elem) => {

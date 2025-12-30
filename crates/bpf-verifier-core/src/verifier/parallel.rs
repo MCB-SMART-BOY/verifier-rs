@@ -1,23 +1,32 @@
 // SPDX-License-Identifier: GPL-2.0
 
+//! BPF 验证器的并行验证探索模块
+//!
 //! Parallel verification exploration for the BPF verifier.
+//!
+//! 本模块提供并行状态探索的基础设施，通过并发探索多个路径实现复杂程序的快速验证。
 //!
 //! This module provides infrastructure for parallel state exploration,
 //! enabling faster verification of complex programs by exploring multiple
 //! paths concurrently.
 //!
-//! # Design
+//! # 设计 / Design
+//!
+//! 并行验证器使用工作窃取方法：
+//! 1. 主验证循环将未探索的分支推送到工作队列
+//! 2. 工作线程拉取工作项并并行探索路径
+//! 3. 结果通过适当的同步合并回来
 //!
 //! The parallel verifier uses a work-stealing approach:
 //! 1. The main verification loop pushes unexplored branches to a work queue
 //! 2. Worker threads pull work items and explore paths in parallel
 //! 3. Results are merged back with proper synchronization
 //!
-//! # Safety Considerations
+//! # 安全考虑 / Safety Considerations
 //!
-//! - State cache access must be synchronized
-//! - Error reporting must be thread-safe
-//! - Memory limits must account for all threads
+//! - 状态缓存访问必须同步 / State cache access must be synchronized
+//! - 错误报告必须线程安全 / Error reporting must be thread-safe
+//! - 内存限制必须考虑所有线程 / Memory limits must account for all threads
 
 use crate::core::error::VerifierError;
 use crate::state::verifier_state::BpfVerifierState;

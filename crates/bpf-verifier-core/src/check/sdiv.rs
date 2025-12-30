@@ -1,12 +1,20 @@
 // SPDX-License-Identifier: GPL-2.0
 
+//! 有符号除法安全检查模块
 //!
-
+//! Signed division safety check module.
+//!
+//! 本模块实现了 BPF 中有符号除法操作的安全检查。有符号除法有需要谨慎处理
+//! 的特殊情况，以防止未定义行为。
+//!
 //! This module implements safety checks for signed division operations in BPF.
-
 //! Signed division has special cases that need careful handling to prevent
-
 //! undefined behavior.
+//!
+//! # 特殊情况 / Special Cases
+//!
+//! - **除以零 / Division by zero**: 必须防止
+//! - **溢出 / Overflow**: `INT_MIN / -1` 会导致溢出
 
 use alloc::vec::Vec;
 

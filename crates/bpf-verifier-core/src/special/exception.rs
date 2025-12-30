@@ -1,9 +1,19 @@
 // SPDX-License-Identifier: GPL-2.0
 
-//! Exception handling support
+//! 异常处理支持模块
+//!
+//! Exception handling support module.
+//!
+//! 本模块实现了 BPF 程序的异常回调验证。异常回调用于处理 struct_ops 程序中的错误。
 //!
 //! This module implements exception callback verification for BPF programs.
 //! Exception callbacks are used for handling errors in struct_ops programs.
+//!
+//! # 异常回调特性 / Exception Callback Features
+//!
+//! - 支持全局异常回调 / Global exception callback support
+//! - 嵌套深度限制 / Nesting depth limits
+//! - 状态跟踪 / State tracking
 
 use alloc::{format, string::String, vec::Vec};
 

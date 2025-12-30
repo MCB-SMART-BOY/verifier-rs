@@ -1,9 +1,19 @@
 // SPDX-License-Identifier: GPL-2.0
 
-//! Return value verification
+//! 返回值验证模块
+//!
+//! Return value verification module.
+//!
+//! 本模块实现了 BPF 程序返回值的验证。不同的程序类型对返回值有不同的要求。
 //!
 //! This module implements verification of BPF program return values.
 //! Different program types have different requirements for their return values.
+//!
+//! # 返回值要求示例 / Return Value Requirements Examples
+//!
+//! - **XDP 程序 / XDP Programs**: 返回 XDP_PASS, XDP_DROP, XDP_TX 等
+//! - **Socket Filter**: 返回要保留的字节数
+//! - **Tracing 程序 / Tracing Programs**: 通常返回 0 表示成功
 
 use alloc::format;
 

@@ -1,18 +1,33 @@
 // SPDX-License-Identifier: GPL-2.0
 
+//! BPF 子程序 JIT 编译准备模块
 //!
-
+//! JIT subprogram preparation for BPF programs.
+//!
+//! 本模块实现内核验证器的 `jit_subprogs()` 功能，负责准备子程序进行 JIT 编译。
+//!
 //! This module implements the jit_subprogs() functionality from the kernel verifier.
-
-//! It handles:
-
-//! - Subprogram extraction and preparation for JIT compilation
-
-//! - Stack depth calculation for each subprogram
-
-//! - Tail call compatibility checking
-
-//! - Subprogram patching for function calls
+//!
+//! # 主要功能 / Main Features
+//!
+//! - **子程序提取 / Subprogram extraction**: 从主程序中提取子程序并准备 JIT 编译
+//! - **栈深度计算 / Stack depth calculation**: 计算每个子程序的栈使用量
+//! - **尾调用兼容性检查 / Tail call compatibility**: 检查子程序是否与尾调用兼容
+//! - **子程序调用修补 / Subprogram patching**: 修补函数调用指令
+//!
+//! # 栈深度传播 / Stack Depth Propagation
+//!
+//! 子程序的栈深度需要考虑调用链：
+//! - 计算每个子程序自身的栈使用
+//! - 沿调用图传播累积栈深度
+//! - 验证总栈深度不超过 512 字节限制
+//!
+//! # 属性传播 / Property Propagation
+//!
+//! 某些属性需要在调用图中传播：
+//! - `tail_call_reachable`: 向前传播（调用者 → 被调用者）
+//! - `changes_pkt_data`: 向后传播（被调用者 → 调用者）
+//! - `might_sleep`: 向后传播（被调用者 → 调用者）
 
 use alloc::{format, vec, vec::Vec};
 

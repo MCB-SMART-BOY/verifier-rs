@@ -1,9 +1,21 @@
 // SPDX-License-Identifier: GPL-2.0
 
-//! Linux BPF helper function database.
+//! Linux BPF 辅助函数数据库模块
+//!
+//! Linux BPF Helper Function Database.
+//!
+//! 本模块包含 Linux BPF 辅助函数的完整数据库，包括函数签名、
+//! 返回类型和允许的程序类型。
 //!
 //! This module contains the complete database of Linux BPF helper functions,
 //! including their signatures, return types, and allowed program types.
+//!
+//! # 主要辅助函数类别 / Main Helper Categories
+//!
+//! - **Map 操作 / Map operations**: `bpf_map_lookup_elem`、`bpf_map_update_elem` 等
+//! - **数据包操作 / Packet operations**: `bpf_skb_load_bytes`、`bpf_xdp_adjust_head` 等
+//! - **跟踪 / Tracing**: `bpf_probe_read`、`bpf_get_current_pid_tgid` 等
+//! - **时间 / Time**: `bpf_ktime_get_ns`、`bpf_jiffies64` 等
 
 use bpf_verifier_core::platform::{HelperProvider, HelperDef, HelperFlags};
 use bpf_verifier_core::core::types::{BpfArgType, BpfRetType};

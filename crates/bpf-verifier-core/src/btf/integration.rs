@@ -1,13 +1,19 @@
 // SPDX-License-Identifier: GPL-2.0
 
-//! BTF verifier integration
+//! BTF 验证器集成模块
+//!
+//! BTF verifier integration module.
+//!
+//! 本模块提供 BTF 类型信息与 BPF 验证器之间的集成。
 //!
 //! This module provides integration between BTF type information and the BPF verifier.
-//! It enables:
-//! - Type-aware memory access validation
-//! - Source location tracking via line info
-//! - Function signature verification
-//! - CO-RE relocation during program loading
+//!
+//! # 功能 / Features
+//!
+//! - **类型感知内存访问验证 / Type-aware memory access validation**: 基于 BTF 类型检查访问
+//! - **源位置跟踪 / Source location tracking**: 通过行信息提供调试支持
+//! - **函数签名验证 / Function signature verification**: 验证调用约定
+//! - **CO-RE 重定位 / CO-RE relocation**: 程序加载时的重定位处理
 
 #![allow(missing_docs)]
 

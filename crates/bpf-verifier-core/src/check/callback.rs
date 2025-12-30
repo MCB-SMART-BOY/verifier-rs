@@ -1,24 +1,26 @@
 // SPDX-License-Identifier: GPL-2.0
 
+//! 回调函数验证模块
 //!
-
+//! Callback function verification module.
+//!
+//! 本模块实现了与辅助函数（如 bpf_for_each_map_elem、bpf_loop、
+//! bpf_timer_set_callback 等）配合使用的回调函数的验证。
+//!
 //! This module implements verification of callback functions used with
-
 //! helpers like bpf_for_each_map_elem, bpf_loop, bpf_timer_set_callback,
-
 //! and similar constructs.
-
 //!
-
+//! # 回调要求 / Callback Requirements
+//!
+//! 回调必须满足以下要求：
+//!
 //! Callbacks must satisfy specific requirements:
-
-//! - Correct argument types based on the callback context
-
-//! - Correct return value semantics
-
-//! - No unreleased resources at callback exit
-
-//! - Bounded execution (for loop callbacks)
+//!
+//! - **正确的参数类型 / Correct argument types**: 基于回调上下文
+//! - **正确的返回值语义 / Correct return value semantics**: 控制循环继续/中断
+//! - **无未释放资源 / No unreleased resources**: 回调退出时
+//! - **有界执行 / Bounded execution**: 对于循环回调
 
 use alloc::{boxed::Box, format, vec, vec::Vec};
 

@@ -1,6 +1,24 @@
 // SPDX-License-Identifier: GPL-2.0
 
-//! Linux BPF map type definitions.
+//! Linux BPF Map 类型定义模块
+//!
+//! Linux BPF Map Type Definitions.
+//!
+//! 本模块包含 Linux 支持的所有 BPF Map 类型定义，包括它们的能力和允许的操作。
+//!
+//! This module contains definitions of all BPF map types supported by Linux,
+//! including their capabilities and allowed operations.
+//!
+//! # 主要 Map 类型 / Main Map Types
+//!
+//! - **HASH / ARRAY**: 基础键值存储
+//!   Basic key-value storage
+//! - **PERCPU_***: 每 CPU 变体，避免锁竞争
+//!   Per-CPU variants avoiding lock contention
+//! - **STACK / QUEUE**: 栈和队列数据结构
+//!   Stack and queue data structures
+//! - **RINGBUF**: 高效的环形缓冲区
+//!   Efficient ring buffer
 
 use bpf_verifier_core::platform::{MapProvider, MapTypeInfo, MapCapabilities};
 

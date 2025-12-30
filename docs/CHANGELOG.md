@@ -25,6 +25,54 @@ This isn't just a changelog. It's the story of late nights, "aha!" moments, and 
 
 ---
 
+## 🚀 [0.2.1] - 2025-12-30
+
+### 📝 Documentation / 文档
+
+#### 🌏 Comprehensive Chinese Comments
+
+Added bilingual (English/Chinese) documentation comments throughout the entire codebase!
+
+| Module | Files Updated | Description |
+|--------|---------------|-------------|
+| `core` | 7 files | Types, instructions, disassembly, logging, errors |
+| `state` | 8 files | Register state, stack, verifier state, references |
+| `bounds` | 5 files | Scalar bounds, Tnum, range refinement |
+| `analysis` | 10 files | CFG, SCC, liveness, pruning, precision |
+| `check` | 6 files | ALU, memory, jumps, atomics, subprograms |
+| `mem` | 3 files | Memory access, user memory |
+| `special` | 4 files | Dynptr, iterators, arena |
+| `btf` | 3 files | BTF types, validation |
+| `opt` | 2 files | Optimizations, dead code elimination |
+| `sanitize` | 2 files | Spectre mitigation |
+| `verifier` | 4 files | Main verifier, environment |
+| `platform` | 3 files | Platform abstraction traits |
+| `bpf-verifier-linux` | 5 files | Linux platform implementation |
+
+**Total**: 60+ files with comprehensive bilingual comments!
+
+#### 为整个代码库添加了双语（英文/中文）文档注释！
+
+| 模块 | 更新文件数 | 描述 |
+|------|-----------|------|
+| `core` | 7 个文件 | 类型、指令、反汇编、日志、错误 |
+| `state` | 8 个文件 | 寄存器状态、栈、验证器状态、引用 |
+| `bounds` | 5 个文件 | 标量边界、Tnum、范围细化 |
+| `analysis` | 10 个文件 | CFG、SCC、活性分析、剪枝、精度 |
+| `check` | 6 个文件 | ALU、内存、跳转、原子操作、子程序 |
+| `mem` | 3 个文件 | 内存访问、用户内存 |
+| `special` | 4 个文件 | Dynptr、迭代器、arena |
+| `btf` | 3 个文件 | BTF 类型、验证 |
+| `opt` | 2 个文件 | 优化、死代码消除 |
+| `sanitize` | 2 个文件 | Spectre 缓解 |
+| `verifier` | 4 个文件 | 主验证器、环境 |
+| `platform` | 3 个文件 | 平台抽象 trait |
+| `bpf-verifier-linux` | 5 个文件 | Linux 平台实现 |
+
+**总计**：60+ 个文件包含完整的双语注释！
+
+---
+
 ## 🚀 [0.2.0] - 2025-12-29
 
 ### 🎉 The Big One: Platform Abstraction!
@@ -154,6 +202,34 @@ I kept up with the kernel! (It wasn't easy)
 ## 🎢 这一路的折腾
 
 这不只是个更新日志。这是关于熬夜、灵光一现、还有喝了太多咖啡的故事。
+
+---
+
+## 🚀 [0.2.1] - 2025-12-30
+
+### 📝 文档
+
+#### 🌏 全面的中文注释
+
+为整个代码库添加了双语（英文/中文）文档注释！
+
+| 模块 | 更新文件数 | 描述 |
+|------|-----------|------|
+| `core` | 7 个文件 | 类型、指令、反汇编、日志、错误 |
+| `state` | 8 个文件 | 寄存器状态、栈、验证器状态、引用 |
+| `bounds` | 5 个文件 | 标量边界、Tnum、范围细化 |
+| `analysis` | 10 个文件 | CFG、SCC、活性分析、剪枝、精度 |
+| `check` | 6 个文件 | ALU、内存、跳转、原子操作、子程序 |
+| `mem` | 3 个文件 | 内存访问、用户内存 |
+| `special` | 4 个文件 | Dynptr、迭代器、arena |
+| `btf` | 3 个文件 | BTF 类型、验证 |
+| `opt` | 2 个文件 | 优化、死代码消除 |
+| `sanitize` | 2 个文件 | Spectre 缓解 |
+| `verifier` | 4 个文件 | 主验证器、环境 |
+| `platform` | 3 个文件 | 平台抽象 trait |
+| `bpf-verifier-linux` | 5 个文件 | Linux 平台实现 |
+
+**总计**：60+ 个文件包含完整的双语注释！
 
 ---
 

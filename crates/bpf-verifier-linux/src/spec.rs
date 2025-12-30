@@ -1,6 +1,14 @@
 // SPDX-License-Identifier: GPL-2.0
 
-//! Linux platform specification implementation.
+//! Linux 平台规范实现模块
+//!
+//! Linux Platform Specification Implementation.
+//!
+//! 本模块实现了 Linux 平台的 [`PlatformSpec`] trait，提供访问所有
+//! Linux 特定定义的统一入口点。
+//!
+//! This module implements the [`PlatformSpec`] trait for the Linux platform,
+//! providing the main entry point for accessing all Linux-specific definitions.
 
 use bpf_verifier_core::platform::PlatformSpec;
 use crate::{

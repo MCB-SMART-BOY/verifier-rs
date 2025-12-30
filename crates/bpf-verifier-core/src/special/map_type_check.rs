@@ -1,12 +1,25 @@
 // SPDX-License-Identifier: GPL-2.0
 
-//! Map-Function Compatibility Checking
+//! 映射-函数兼容性检查模块
+//!
+//! Map-Function Compatibility Checking module.
+//!
+//! 本模块提供 BPF 映射操作的全面类型检查，确保键和值类型匹配映射规范，
+//! 并且操作对特定映射类型有效。
 //!
 //! This module provides comprehensive type checking for BPF map operations,
 //! ensuring that key and value types match map specifications, and that
 //! operations are valid for specific map types.
 //!
+//! # 双向检查 / Two-way Check
+//!
+//! 核心函数 `check_map_func_compatibility` 实现双向检查：
+//!
 //! The core function `check_map_func_compatibility` implements a two-way check:
+//!
+//! 1. 从映射角度：此映射可以与哪些辅助函数一起使用？
+//! 2. 从函数角度：此辅助函数可以接受哪些映射类型？
+//!
 //! 1. From the map perspective: what helper functions can this map be used with?
 //! 2. From the function perspective: what map types can this helper accept?
 

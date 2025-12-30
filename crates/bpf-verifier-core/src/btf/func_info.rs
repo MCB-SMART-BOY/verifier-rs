@@ -1,10 +1,21 @@
 // SPDX-License-Identifier: GPL-2.0
 
-//! BTF function and line info verification
+//! BTF 函数和行信息验证模块
+//!
+//! BTF function and line info verification module.
+//!
+//! 本模块实现了 BTF 函数信息、行信息和 CO-RE 重定位的验证。这些对应于内核的
+//! check_btf_func()、check_btf_line() 和 check_core_relo() 函数。
 //!
 //! This module implements verification of BTF function info, line info,
 //! and CO-RE relocations. These correspond to the kernel's check_btf_func(),
 //! check_btf_line(), and check_core_relo() functions.
+//!
+//! # 信息类型 / Info Types
+//!
+//! - **FuncInfo**: 函数入口点和 BTF 类型 / Function entry point and BTF type
+//! - **LineInfo**: 源代码位置信息 / Source code location info
+//! - **CoreRelo**: CO-RE 重定位记录 / CO-RE relocation records
 
 use alloc::{format, string::String, vec::Vec};
 

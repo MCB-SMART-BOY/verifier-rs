@@ -1,9 +1,13 @@
 // SPDX-License-Identifier: GPL-2.0
 
 //! BPF program disassembler
+//! BPF 程序反汇编器
 //!
 //! This module provides disassembly of BPF bytecode into human-readable
 //! assembly format. Useful for debugging and understanding BPF programs.
+//!
+//! 本模块提供将 BPF 字节码反汇编为人类可读汇编格式的功能。
+//! 用于调试和理解 BPF 程序。
 
 use crate::core::types::*;
 use core::fmt::Write;
@@ -16,22 +20,29 @@ use alloc::{
 use alloc::collections::BTreeSet as HashSet;
 
 /// Disassembly options
+/// 反汇编选项
 #[derive(Debug, Clone, Default)]
 pub struct DisasmOptions {
     /// Show raw bytecode
+    /// 显示原始字节码
     pub show_bytecode: bool,
     /// Show instruction offsets
+    /// 显示指令偏移量
     pub show_offsets: bool,
     /// Annotate jump targets
+    /// 标注跳转目标
     pub annotate_jumps: bool,
     /// Use symbolic names for helpers
+    /// 对辅助函数使用符号名称
     pub symbolic_helpers: bool,
     /// Maximum width for instruction mnemonic column
+    /// 指令助记符列的最大宽度
     pub mnemonic_width: usize,
 }
 
 impl DisasmOptions {
     /// Create default options
+    /// 创建默认选项
     pub fn new() -> Self {
         Self {
             show_bytecode: false,
@@ -43,12 +54,14 @@ impl DisasmOptions {
     }
 
     /// Enable bytecode display
+    /// 启用字节码显示
     pub fn with_bytecode(mut self) -> Self {
         self.show_bytecode = true;
         self
     }
 
     /// Disable offset display
+    /// 禁用偏移量显示
     pub fn without_offsets(mut self) -> Self {
         self.show_offsets = false;
         self
@@ -56,15 +69,18 @@ impl DisasmOptions {
 }
 
 /// Disassemble a single instruction
+/// 反汇编单条指令
 pub fn disasm_insn(insn: &BpfInsn, idx: usize, opts: &DisasmOptions) -> String {
     let mut s = String::new();
 
     // Offset
+    // 偏移量
     if opts.show_offsets {
         write!(s, "{:4}: ", idx).unwrap();
     }
 
     // Raw bytecode
+    // 原始字节码
     if opts.show_bytecode {
         write!(
             s,
@@ -79,6 +95,7 @@ pub fn disasm_insn(insn: &BpfInsn, idx: usize, opts: &DisasmOptions) -> String {
     }
 
     // Mnemonic
+    // 助记符
     let mnemonic = disasm_mnemonic(insn, idx, opts);
     s.push_str(&mnemonic);
 
@@ -86,6 +103,7 @@ pub fn disasm_insn(insn: &BpfInsn, idx: usize, opts: &DisasmOptions) -> String {
 }
 
 /// Get the mnemonic for an instruction
+/// 获取指令的助记符
 fn disasm_mnemonic(insn: &BpfInsn, idx: usize, opts: &DisasmOptions) -> String {
     let class = insn.class();
 
@@ -101,6 +119,7 @@ fn disasm_mnemonic(insn: &BpfInsn, idx: usize, opts: &DisasmOptions) -> String {
 }
 
 /// Disassemble ALU instruction
+/// 反汇编 ALU 指令
 fn disasm_alu(insn: &BpfInsn, is_64: bool) -> String {
     let op = insn.code & 0xf0;
     let src_type = insn.code & 0x08;
@@ -144,6 +163,7 @@ fn disasm_alu(insn: &BpfInsn, is_64: bool) -> String {
 }
 
 /// Disassemble LDX instruction
+/// 反汇编 LDX 指令
 fn disasm_ldx(insn: &BpfInsn) -> String {
     let size = match insn.code & 0x18 {
         x if x == BPF_B => "b",
@@ -172,6 +192,7 @@ fn disasm_ldx(insn: &BpfInsn) -> String {
 }
 
 /// Disassemble STX instruction
+/// 反汇编 STX 指令
 fn disasm_stx(insn: &BpfInsn) -> String {
     let size = match insn.code & 0x18 {
         x if x == BPF_B => "b",
@@ -203,6 +224,7 @@ fn disasm_stx(insn: &BpfInsn) -> String {
 }
 
 /// Disassemble atomic operation
+/// 反汇编原子操作
 fn disasm_atomic(insn: &BpfInsn, size: &str) -> String {
     let atomic_op = insn.imm as u32;
     let fetch = if atomic_op & BPF_FETCH != 0 {
@@ -236,6 +258,7 @@ fn disasm_atomic(insn: &BpfInsn, size: &str) -> String {
 }
 
 /// Disassemble ST instruction
+/// 反汇编 ST 指令
 fn disasm_st(insn: &BpfInsn) -> String {
     let size = match insn.code & 0x18 {
         x if x == BPF_B => "b",
@@ -253,12 +276,16 @@ fn disasm_st(insn: &BpfInsn) -> String {
 }
 
 /// Disassemble LD instruction
+/// 反汇编 LD 指令
 fn disasm_ld(insn: &BpfInsn) -> String {
     if insn.code == (BPF_LD | BPF_IMM | BPF_DW) {
         let src = insn.src_reg;
         // Note: BPF_PSEUDO_MAP_FD (1) == BPF_PSEUDO_CALL (1)
         //       BPF_PSEUDO_MAP_VALUE (2) == BPF_PSEUDO_KFUNC_CALL (2)
+        // 注意：BPF_PSEUDO_MAP_FD (1) == BPF_PSEUDO_CALL (1)
+        //       BPF_PSEUDO_MAP_VALUE (2) == BPF_PSEUDO_KFUNC_CALL (2)
         // For LD_IMM64, we interpret these as map-related pseudo values
+        // 对于 LD_IMM64，我们将这些解释为映射表相关的伪值
         let src_name = match src {
             0 => "",
             1 => "map_fd",    // BPF_PSEUDO_MAP_FD
@@ -279,6 +306,7 @@ fn disasm_ld(insn: &BpfInsn) -> String {
 }
 
 /// Disassemble JMP instruction
+/// 反汇编 JMP 指令
 fn disasm_jmp(insn: &BpfInsn, idx: usize, is_64: bool, opts: &DisasmOptions) -> String {
     let op = insn.code & 0xf0;
     let src_type = insn.code & 0x08;
@@ -334,6 +362,7 @@ fn disasm_jmp(insn: &BpfInsn, idx: usize, is_64: bool, opts: &DisasmOptions) -> 
 }
 
 /// Disassemble CALL instruction
+/// 反汇编 CALL 指令
 fn disasm_call(insn: &BpfInsn, idx: usize, opts: &DisasmOptions) -> String {
     if insn.src_reg == BPF_PSEUDO_CALL {
         let target = idx as i32 + insn.imm + 1;
@@ -359,6 +388,7 @@ fn disasm_call(insn: &BpfInsn, idx: usize, opts: &DisasmOptions) -> String {
 }
 
 /// Get symbolic name for a helper function
+/// 获取辅助函数的符号名称
 pub fn get_helper_name(id: u32) -> Option<&'static str> {
     match id {
         1 => Some("map_lookup_elem"),
@@ -392,6 +422,7 @@ pub fn get_helper_name(id: u32) -> Option<&'static str> {
 }
 
 /// Disassemble an entire program
+/// 反汇编整个程序
 pub fn disasm_program(insns: &[BpfInsn], opts: &DisasmOptions) -> String {
     let mut output = String::new();
     let mut i = 0;
@@ -403,6 +434,7 @@ pub fn disasm_program(insns: &[BpfInsn], opts: &DisasmOptions) -> String {
         output.push('\n');
 
         // Handle LD_IMM64 which spans two instructions
+        // 处理跨越两条指令的 LD_IMM64
         if insn.code == (BPF_LD | BPF_IMM | BPF_DW) {
             i += 1;
             if i < insns.len() {
@@ -423,6 +455,7 @@ pub fn disasm_program(insns: &[BpfInsn], opts: &DisasmOptions) -> String {
                     .unwrap();
                 }
                 // Show the upper 32 bits
+                // 显示高 32 位
                 output.push_str(&format!("     ; hi32={:#x}\n", next.imm as u32));
             }
         }
@@ -434,11 +467,13 @@ pub fn disasm_program(insns: &[BpfInsn], opts: &DisasmOptions) -> String {
 }
 
 /// Disassemble with annotations showing jump targets
+/// 带有跳转目标标注的反汇编
 pub fn disasm_annotated(insns: &[BpfInsn]) -> String {
     let opts = DisasmOptions::new();
     let mut output = String::new();
 
     // Find all jump targets
+    // 查找所有跳转目标
     let mut targets = HashSet::new();
     for (i, insn) in insns.iter().enumerate() {
         let class = insn.class();
@@ -460,6 +495,7 @@ pub fn disasm_annotated(insns: &[BpfInsn]) -> String {
     }
 
     // Disassemble with labels
+    // 带标签的反汇编
     let mut i = 0;
     while i < insns.len() {
         if targets.contains(&i) {
@@ -473,6 +509,7 @@ pub fn disasm_annotated(insns: &[BpfInsn]) -> String {
         output.push('\n');
 
         // Handle LD_IMM64
+        // 处理 LD_IMM64
         if insn.code == (BPF_LD | BPF_IMM | BPF_DW) && i + 1 < insns.len() {
             i += 1;
         }
@@ -484,6 +521,7 @@ pub fn disasm_annotated(insns: &[BpfInsn]) -> String {
 }
 
 /// Program dumper that shows both disassembly and analysis
+/// 显示反汇编和分析的程序转储器
 #[derive(Debug)]
 pub struct ProgramDumper<'a> {
     insns: &'a [BpfInsn],
@@ -492,6 +530,7 @@ pub struct ProgramDumper<'a> {
 
 impl<'a> ProgramDumper<'a> {
     /// Create a new program dumper
+    /// 创建新的程序转储器
     pub fn new(insns: &'a [BpfInsn]) -> Self {
         Self {
             insns,
@@ -500,12 +539,14 @@ impl<'a> ProgramDumper<'a> {
     }
 
     /// Set disassembly options
+    /// 设置反汇编选项
     pub fn with_options(mut self, opts: DisasmOptions) -> Self {
         self.opts = opts;
         self
     }
 
     /// Get program statistics
+    /// 获取程序统计信息
     pub fn stats(&self) -> ProgramStats {
         let mut stats = ProgramStats {
             total_insns: self.insns.len(),
@@ -537,34 +578,40 @@ impl<'a> ProgramDumper<'a> {
     }
 
     /// Dump the program
+    /// 转储程序
     pub fn dump(&self) -> String {
         let mut output = String::new();
 
         // Header
+        // 头部
         output.push_str("; BPF Program Dump\n");
-        output.push_str(&format!("; {} instructions\n\n", self.insns.len()));
+        output.push_str("; BPF 程序转储\n");
+        output.push_str(&format!("; {} instructions\n", self.insns.len()));
+        output.push_str(&format!("; {} 条指令\n\n", self.insns.len()));
 
         // Stats
+        // 统计信息
         let stats = self.stats();
-        output.push_str("; Statistics:\n");
+        output.push_str("; Statistics / 统计信息:\n");
         output.push_str(&format!(
             ";   ALU64: {}, ALU32: {}\n",
             stats.alu64_insns, stats.alu32_insns
         ));
         output.push_str(&format!(
-            ";   Loads: {}, Stores: {}\n",
+            ";   Loads / 加载: {}, Stores / 存储: {}\n",
             stats.load_insns, stats.store_insns
         ));
         output.push_str(&format!(
-            ";   Branches: {}, Jumps: {}\n",
+            ";   Branches / 分支: {}, Jumps / 跳转: {}\n",
             stats.branch_insns, stats.jump_insns
         ));
         output.push_str(&format!(
-            ";   Calls: {}, Exits: {}\n\n",
+            ";   Calls / 调用: {}, Exits / 退出: {}\n\n",
             stats.call_insns, stats.exit_insns
         ));
 
         // Disassembly
+        // 反汇编
         output.push_str(&disasm_program(self.insns, &self.opts));
 
         output
@@ -572,17 +619,28 @@ impl<'a> ProgramDumper<'a> {
 }
 
 /// Basic program statistics
+/// 基本程序统计信息
 #[allow(missing_docs)]
 #[derive(Debug, Default)]
 pub struct ProgramStats {
+    /// Total instruction count / 总指令数
     pub total_insns: usize,
+    /// 64-bit ALU instruction count / 64 位 ALU 指令数
     pub alu64_insns: usize,
+    /// 32-bit ALU instruction count / 32 位 ALU 指令数
     pub alu32_insns: usize,
+    /// Load instruction count / 加载指令数
     pub load_insns: usize,
+    /// Store instruction count / 存储指令数
     pub store_insns: usize,
+    /// Branch instruction count / 分支指令数
     pub branch_insns: usize,
+    /// Jump instruction count / 跳转指令数
     pub jump_insns: usize,
+    /// Call instruction count / 调用指令数
     pub call_insns: usize,
+    /// Exit instruction count / 退出指令数
     pub exit_insns: usize,
+    /// LD_IMM64 instruction count / LD_IMM64 指令数
     pub ld_imm64_insns: usize,
 }

@@ -1,9 +1,20 @@
 // SPDX-License-Identifier: GPL-2.0
 
+//! 基于工作列表的验证器实现
+//!
 //! Worklist-based verifier implementation.
+//!
+//! 本模块提供使用基于工作列表的探索的高级验证器，集成了状态合并和范围细化。
 //!
 //! This module provides an advanced verifier that uses worklist-based
 //! exploration with integrated state merging and range refinement.
+//!
+//! # 特性 / Features
+//!
+//! - **优先级探索 / Priority exploration**: 深度优先（默认）或广度优先
+//! - **状态合并 / State merging**: 在汇合点合并状态以控制状态爆炸
+//! - **剪枝优化 / Pruning**: 使用已探索状态快照进行路径剪枝
+//! - **范围细化 / Range refinement**: 在分支处精确跟踪寄存器范围
 
 use alloc::boxed::Box;
 

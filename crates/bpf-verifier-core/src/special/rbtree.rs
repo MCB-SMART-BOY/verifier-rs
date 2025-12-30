@@ -1,9 +1,19 @@
 // SPDX-License-Identifier: GPL-2.0
 
-//! Rbtree and graph node tracking
+//! 红黑树和图节点跟踪模块
+//!
+//! Rbtree and graph node tracking module.
+//!
+//! 本模块实现了 BPF 红黑树操作和图数据结构节点的验证
+//! （bpf_rb_root、bpf_rb_node、bpf_list_head 等）。
 //!
 //! This module implements verification for BPF rbtree operations
 //! and graph data structure nodes (bpf_rb_root, bpf_rb_node, bpf_list_head, etc.)
+//!
+//! # 支持的图类型 / Supported Graph Types
+//!
+//! - **Rbtree**: 红黑树（bpf_rb_root/bpf_rb_node）
+//! - **List**: 链表（bpf_list_head/bpf_list_node）
 
 use alloc::{format, vec::Vec};
 

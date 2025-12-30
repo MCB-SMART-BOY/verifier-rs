@@ -1,10 +1,21 @@
 // SPDX-License-Identifier: GPL-2.0
 
-//! BTF-based type validation.
+//! 基于 BTF 的类型验证模块
+//!
+//! BTF-based type validation module.
+//!
+//! 本模块使用 BPF 类型格式（BTF）信息提供类型感知的验证。BTF 使验证器能够
+//! 理解结构体布局、函数签名和类型关系，从而进行更精确的验证。
 //!
 //! This module provides type-aware verification using BPF Type Format (BTF)
 //! information. BTF enables the verifier to understand struct layouts,
 //! function signatures, and type relationships for more precise validation.
+//!
+//! # 主要功能 / Main Features
+//!
+//! - 结构体字段偏移验证 / Struct field offset validation
+//! - 函数签名匹配 / Function signature matching
+//! - 类型兼容性检查 / Type compatibility checking
 
 use alloc::{
     format,

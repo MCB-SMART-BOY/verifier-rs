@@ -1,15 +1,32 @@
 // SPDX-License-Identifier: GPL-2.0
 
-//! Kernel error types for the BPF verifier.
+//! BPF 验证器的内核错误类型模块
+//!
+//! Kernel Error Types for the BPF Verifier.
+//!
+//! 本模块提供与内核错误报告机制集成的错误处理。
+//! 错误表示为负的 errno 值，符合内核的约定。
 //!
 //! This module provides error handling that integrates with the kernel's
 //! error reporting mechanisms. Errors are represented as negative errno
 //! values, matching the kernel's convention.
 //!
-//! # Kernel Integration
+//! # 内核集成 / Kernel Integration
+//!
+//! 作为内核一部分构建时，本模块使用 `kernel::error::Error`。
+//! 对于独立测试，提供兼容的实现。
 //!
 //! When building as part of the kernel, this module uses `kernel::error::Error`.
 //! For standalone testing, it provides a compatible implementation.
+//!
+//! # 错误转换 / Error Conversion
+//!
+//! 验证器错误自动转换为适当的 errno 值：
+//! Verifier errors are automatically converted to appropriate errno values:
+//! - `EINVAL`: 无效参数或指令 / Invalid argument or instruction
+//! - `EACCES`: 内存访问被拒绝 / Memory access denied
+//! - `E2BIG`: 复杂度限制超出 / Complexity limit exceeded
+//! - `ENOMEM`: 内存不足 / Out of memory
 
 use crate::stdlib::String;
 use core::fmt;

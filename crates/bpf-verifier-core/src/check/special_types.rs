@@ -1,9 +1,19 @@
 // SPDX-License-Identifier: GPL-2.0
 
-//! Special types verification integration
+//! 特殊类型验证集成模块
+//!
+//! Special types verification integration module.
+//!
+//! 本模块将 dynptr、迭代器和竞技场验证集成到主验证循环中。
 //!
 //! This module integrates dynptr, iterator, and arena verification
 //! into the main verification loop.
+//!
+//! # 支持的特殊类型 / Supported Special Types
+//!
+//! - **Dynptr**: 动态指针，用于访问可变大小的内存区域
+//! - **Iterator**: 迭代器，用于安全遍历内核数据结构
+//! - **Arena**: 竞技场内存，用于用户/内核共享内存
 
 use alloc::{format, string::String};
 

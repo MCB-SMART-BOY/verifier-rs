@@ -1,12 +1,24 @@
 // SPDX-License-Identifier: GPL-2.0
 
+//! 程序类型特定验证模块
 //!
-
+//! Program type specific validation module.
+//!
+//! 本模块提供每种 BPF 程序类型特定的验证逻辑。不同的程序类型有不同的
+//! 上下文结构、允许的辅助函数、返回值要求和访问权限。
+//!
 //! This module provides validation logic specific to each BPF program type.
-
 //! Different program types have different context structures, allowed helpers,
-
 //! return value requirements, and access permissions.
+//!
+//! # 支持的程序类型 / Supported Program Types
+//!
+//! - **XDP**: 网络数据包处理 / Network packet processing
+//! - **TC (SchedCls/SchedAct)**: 流量控制 / Traffic control
+//! - **Kprobe/Uprobe**: 内核/用户空间探针 / Kernel/userspace probes
+//! - **Tracepoint**: 静态追踪点 / Static tracepoints
+//! - **Perf Event**: 性能事件处理 / Performance event handling
+//! - **Cgroup**: 控制组策略 / Cgroup policies
 
 use alloc::{format, string::String, vec, vec::Vec};
 

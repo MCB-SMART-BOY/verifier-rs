@@ -1,10 +1,22 @@
 // SPDX-License-Identifier: GPL-2.0
 
+//! 跳转指令验证模块
 //!
-
+//! Jump instruction verification module.
+//!
+//! 本模块实现了跳转指令序列的验证，包括条件跳转、无条件跳转和调用指令。
+//!
 //! This module implements verification of jump instruction sequences,
-
 //! including conditional jumps, unconditional jumps, and call instructions.
+//!
+//! # 跳转类型 / Jump Types
+//!
+//! - `JA/GOTO`: 无条件跳转 / Unconditional jump
+//! - `JEQ/JNE/JGT/...`: 条件跳转 / Conditional jump
+//! - `CALL`: 函数调用 / Function call
+//! - `EXIT`: 程序退出 / Program exit
+//! - `TAIL_CALL`: 尾调用 / Tail call
+//! - `MAY_GOTO`: 有界循环构造 / Bounded loop construct
 
 use alloc::{format, vec::Vec};
 

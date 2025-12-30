@@ -1,17 +1,37 @@
 // SPDX-License-Identifier: GPL-2.0
 
-//! Main verification loop for BPF verifier
+//! BPF 验证器主验证循环模块
+//!
+//! Main Verification Loop for BPF Verifier.
+//!
+//! 本模块实现了核心验证循环，遍历所有程序路径并验证每条指令。
+//! 对应内核的 `do_check()` 函数。
 //!
 //! This module implements the core verification loop that walks through
 //! all program paths and validates each instruction. This corresponds to
 //! the kernel's `do_check()` function.
 //!
-//! Key features:
-//! - Branch exploration using a state stack (DFS)
-//! - State pruning to avoid redundant exploration
-//! - Branch counting for parent state tracking
-//! - Subprogram call/return handling
-//! - Precision tracking for conditional jumps
+//! # 主要特性 / Key Features
+//!
+//! - **分支探索 / Branch exploration**: 使用状态栈进行 DFS 遍历
+//!   Use state stack for DFS traversal
+//! - **状态剪枝 / State pruning**: 避免冗余路径探索
+//!   Avoid redundant path exploration
+//! - **分支计数 / Branch counting**: 用于父状态跟踪
+//!   For parent state tracking
+//! - **子程序处理 / Subprogram handling**: 调用和返回处理
+//!   Call and return handling
+//! - **精度跟踪 / Precision tracking**: 条件跳转的精度传播
+//!   Precision propagation for conditional jumps
+//!
+//! # 验证流程 / Verification Flow
+//!
+//! 1. 初始化寄存器状态 / Initialize register state
+//! 2. 从入口点开始遍历 / Start traversal from entry point
+//! 3. 在剪枝点检查状态 / Check state at prune points
+//! 4. 验证每条指令 / Verify each instruction
+//! 5. 处理分支和调用 / Handle branches and calls
+//! 6. 检查资源泄漏 / Check resource leaks at exit
 
 use alloc::{boxed::Box, format, vec::Vec};
 

@@ -1,9 +1,28 @@
 // SPDX-License-Identifier: GPL-2.0
 
-//! Arena and memory arena support
+//! 竞技场（Arena）内存管理验证模块
+//!
+//! Arena and memory arena support for BPF programs.
+//!
+//! 本模块实现了 BPF 程序的竞技场内存管理验证。竞技场为 BPF 程序提供了
+//! 用户空间可寻址的内存区域，支持内核/用户地址空间转换。
 //!
 //! This module implements arena-based memory management verification for BPF programs.
 //! Arenas provide user-space addressable memory regions for BPF programs.
+//!
+//! # 竞技场特性 / Arena Features
+//!
+//! - **地址空间转换 / Address Space Cast**: 支持 `kern_to_user` 和 `user_to_kern` 转换
+//! - **边界检查 / Bounds Checking**: 验证所有访问都在竞技场边界内
+//! - **分配跟踪 / Allocation Tracking**: 跟踪竞技场内的内存分配和释放
+//! - **推测屏障 / Speculation Barriers**: 用户空间指针访问需要推测保护
+//!
+//! # 使用场景 / Use Cases
+//!
+//! 竞技场主要用于：
+//! - 用户空间和 BPF 程序之间共享内存
+//! - 实现自定义内存分配器
+//! - 高性能数据传递场景
 
 use alloc::{format, vec::Vec};
 

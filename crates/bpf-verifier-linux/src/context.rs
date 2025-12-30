@@ -1,6 +1,22 @@
 // SPDX-License-Identifier: GPL-2.0
 
-//! Linux BPF context structure definitions.
+//! Linux BPF 上下文结构定义模块
+//!
+//! Linux BPF Context Structure Definitions.
+//!
+//! 本模块包含 Linux 各种程序类型的上下文结构定义，如 XDP、Socket Filter 等。
+//!
+//! This module contains context structure definitions for various Linux
+//! program types such as XDP, Socket Filter, etc.
+//!
+//! # 支持的上下文 / Supported Contexts
+//!
+//! - **`xdp_md`**: XDP 程序上下文，提供数据包数据访问
+//!   XDP program context providing packet data access
+//! - **`__sk_buff`**: Socket 程序上下文
+//!   Socket program context
+//! - **`pt_regs`**: Kprobe 程序上下文
+//!   Kprobe program context
 
 use bpf_verifier_core::platform::{
     ContextProvider, ContextFieldDef, FieldAccessMode, FieldResultType, ContextDef,

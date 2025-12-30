@@ -1,9 +1,20 @@
 // SPDX-License-Identifier: GPL-2.0
 
-//! BPF iterator support.
+//! BPF 迭代器支持模块
+//!
+//! BPF iterator support module.
+//!
+//! BPF 迭代器允许程序安全地遍历内核数据结构。每种迭代器类型都有自己的生命周期：
+//! new -> next* -> destroy。
 //!
 //! BPF iterators allow programs to iterate over kernel data structures safely.
 //! Each iterator type has its own lifecycle: new -> next* -> destroy.
+//!
+//! # 迭代器生命周期 / Iterator Lifecycle
+//!
+//! 1. `bpf_iter_*_new()`: 初始化迭代器 / Initialize iterator
+//! 2. `bpf_iter_*_next()`: 获取下一个元素（可调用多次）/ Get next element
+//! 3. `bpf_iter_*_destroy()`: 销毁迭代器 / Destroy iterator
 
 use alloc::{format, vec::Vec};
 
@@ -324,9 +335,9 @@ impl IteratorKind {
 /// Iterator state machine for open-coded iterators
 ///
 /// Open-coded iterators follow this lifecycle:
-/// 1. bpf_iter_<type>_new() - Initialize iterator (Invalid -> Active)
-/// 2. bpf_iter_<type>_next() - Get next element (may return NULL when drained)
-/// 3. bpf_iter_<type>_destroy() - Clean up iterator
+/// 1. `bpf_iter_<type>_new()` - Initialize iterator (Invalid -> Active)
+/// 2. `bpf_iter_<type>_next()` - Get next element (may return NULL when drained)
+/// 3. `bpf_iter_<type>_destroy()` - Clean up iterator
 #[derive(Debug, Clone)]
 pub struct IteratorStateMachine {
     /// Current iterator state

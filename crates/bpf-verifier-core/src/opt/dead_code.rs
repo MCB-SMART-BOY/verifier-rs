@@ -1,10 +1,20 @@
 // SPDX-License-Identifier: GPL-2.0
 
-//! Dead code elimination
+//! 死代码消除模块
+//!
+//! Dead code elimination module.
+//!
+//! 本模块实现了 BPF 程序的死代码消除。它识别并标记永远不会执行的指令
+//! （不可达代码）或结果永远不会被使用的指令（死存储）。
 //!
 //! This module implements dead code elimination for BPF programs.
 //! It identifies and marks instructions that are never executed
 //! (unreachable) or whose results are never used (dead stores).
+//!
+//! # 消除类型 / Elimination Types
+//!
+//! - **不可达代码 / Unreachable code**: 无法到达的指令
+//! - **死存储 / Dead stores**: 结果未被使用的写操作
 
 use crate::core::error::Result;
 use crate::core::types::*;

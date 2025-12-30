@@ -1,10 +1,23 @@
 // SPDX-License-Identifier: GPL-2.0
 
-//! Struct_ops program verification support.
+//! Struct_ops 程序验证支持模块
+//!
+//! Struct_ops program verification support module.
+//!
+//! struct_ops 允许 BPF 程序实现内核结构操作，使得可以自定义内核回调的实现，
+//! 如 TCP 拥塞控制算法（tcp_congestion_ops）或调度器操作。
 //!
 //! struct_ops allows BPF programs to implement kernel struct operations,
 //! enabling custom implementations of kernel callbacks like TCP congestion
 //! control algorithms (tcp_congestion_ops) or scheduler operations.
+//!
+//! # 验证要求 / Key Verification Requirements
+//!
+//! 1. 函数原型必须通过 BTF 匹配内核结构成员签名
+//! 2. 返回值必须符合内核期望
+//! 3. 参数访问必须根据 BTF 类型验证
+//! 4. 某些 struct_ops 可睡眠，其他不可以
+//! 5. 必须验证状态转换和生命周期
 //!
 //! Key verification requirements:
 //! 1. Function prototypes must match kernel struct member signatures via BTF

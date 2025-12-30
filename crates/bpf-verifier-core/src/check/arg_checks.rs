@@ -1,10 +1,21 @@
 // SPDX-License-Identifier: GPL-2.0
 
+//! 辅助函数参数验证模块
 //!
-
+//! Helper function argument validation module.
+//!
+//! 本模块实现了 BPF 辅助函数的详细参数验证，包括内存边界检查、
+//! 类型兼容性检查和特殊参数处理。
+//!
 //! This module implements detailed argument validation for BPF helper functions,
-
 //! including memory bounds checking, type compatibility, and special argument handling.
+//!
+//! # 验证内容 / Validation Contents
+//!
+//! - **类型匹配 / Type Matching**: 参数类型是否符合原型
+//! - **内存边界 / Memory Bounds**: 指针参数的有效范围
+//! - **空指针处理 / Null Handling**: 是否允许 NULL 参数
+//! - **只读检查 / Read-only Check**: 参数是否可被修改
 
 use alloc::format;
 

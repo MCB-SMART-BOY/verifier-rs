@@ -1,9 +1,24 @@
 // SPDX-License-Identifier: GPL-2.0
 
-//! Platform-agnostic type definitions.
+//! 平台无关的类型定义模块
+//!
+//! Platform-Agnostic Type Definitions.
+//!
+//! 本模块定义了跨所有平台实现使用的通用类型，为验证器提供统一的类型词汇表。
 //!
 //! These types are used across all platform implementations and provide
 //! a common vocabulary for the verifier.
+//!
+//! # 主要类型 / Main Types
+//!
+//! - **`PlatformError`**: 平台级错误类型
+//!   Platform-level error types
+//! - **`ArgTypeDesc`**: 参数类型描述符
+//!   Argument type descriptor
+//! - **`RetTypeDesc`**: 返回类型描述符
+//!   Return type descriptor
+//! - **`RetvalRange`**: 返回值范围
+//!   Return value range
 
 use crate::core::types::{BpfArgType, BpfRetType};
 

@@ -1,9 +1,21 @@
 // SPDX-License-Identifier: GPL-2.0
 
-//! BTF (BPF Type Format) support
+//! BTF（BPF 类型格式）支持模块
+//!
+//! BTF (BPF Type Format) support module.
+//!
+//! 本模块为验证器提供基本的 BTF 类型处理。BTF 用于类型安全的内存访问和调试。
 //!
 //! This module provides basic BTF type handling for the verifier.
 //! BTF is used for type-safe memory access and debugging.
+//!
+//! # BTF 类型种类 / BTF Type Kinds
+//!
+//! - `Int/Float`: 整数/浮点类型 / Integer/float types
+//! - `Ptr`: 指针类型 / Pointer type
+//! - `Array`: 数组类型 / Array type
+//! - `Struct/Union`: 结构体/联合体 / Struct/union
+//! - `Func/FuncProto`: 函数/函数原型 / Function/prototype
 
 #![allow(missing_docs)] // BTF types have complex internal structure
 

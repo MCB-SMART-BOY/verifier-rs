@@ -1,10 +1,24 @@
 // SPDX-License-Identifier: GPL-2.0
 
-//! Helper function provider trait and types.
+//! 辅助函数提供者 trait 和类型定义模块
+//!
+//! Helper Function Provider Trait and Types.
+//!
+//! 本模块定义了 BPF 辅助函数的平台无关接口。
+//! 每个平台（Linux、自定义 OS）实现 [`HelperProvider`] 来提供其自己的辅助函数定义集。
 //!
 //! This module defines the platform-agnostic interface for BPF helper functions.
 //! Each platform (Linux, custom OS) implements [`HelperProvider`] to provide
 //! its own set of helper function definitions.
+//!
+//! # 主要组件 / Main Components
+//!
+//! - **`HelperDef`**: 辅助函数定义，包含参数类型、返回类型和标志
+//!   Helper function definition with argument types, return type, and flags
+//! - **`HelperFlags`**: 辅助函数特性标志（特权、可睡眠、引用获取/释放等）
+//!   Helper function characteristic flags (privileged, sleepable, ref acquire/release, etc.)
+//! - **`HelperProvider`**: 平台必须实现的 trait，用于提供辅助函数
+//!   Trait that platforms must implement to provide helper functions
 
 use crate::core::types::{BpfArgType, BpfRetType};
 use super::types::PlatformResult;

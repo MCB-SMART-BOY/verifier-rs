@@ -1,9 +1,22 @@
 // SPDX-License-Identifier: GPL-2.0
 
+//! 验证限制模块
+//!
 //! Verification limits.
+//!
+//! 本模块强制执行验证限制以防止过于复杂的程序导致拒绝服务，并在验证期间跟踪资源使用。
 //!
 //! This module enforces verification limits to prevent denial of service
 //! from overly complex programs and tracks resource usage during verification.
+//!
+//! # 限制类型 / Limit Types
+//!
+//! - **指令限制 / Instruction limits**: 最大指令数、最大复杂度
+//! - **调用限制 / Call limits**: 最大调用深度、最大尾调用数
+//! - **循环限制 / Loop limits**: 最大循环数、最大迭代次数
+//! - **状态限制 / State limits**: 每指令最大状态数
+//! - **时间限制 / Time limits**: 最大验证时间
+//! - **内存限制 / Memory limits**: 最大内存使用
 
 use alloc::{format, string::String, vec::Vec};
 use core::time::Duration;

@@ -1,10 +1,22 @@
 // SPDX-License-Identifier: GPL-2.0
 
-//! Kernel function (kfunc) support
+//! 内核函数（kfunc）支持模块
+//!
+//! Kernel function (kfunc) support module.
+//!
+//! 本模块实现了可从 BPF 程序调用的内核函数的验证。与辅助函数不同，
+//! kfunc 定义在内核模块中，具有基于 BTF 的类型信息。
 //!
 //! This module implements verification for kernel functions that can be
 //! called from BPF programs. Unlike helpers, kfuncs are defined in kernel
 //! modules and have BTF-based type information.
+//!
+//! # Kfunc 特性 / Kfunc Features
+//!
+//! - **BTF 类型信息 / BTF Type Info**: 使用 BTF 描述参数和返回值类型
+//! - **引用管理 / Reference Management**: 支持获取/释放引用的函数
+//! - **可睡眠支持 / Sleepable Support**: 某些 kfunc 可以睡眠
+//! - **RCU 保护 / RCU Protection**: 支持 RCU 保护的访问
 
 #![allow(missing_docs)] // Kfunc internals
 

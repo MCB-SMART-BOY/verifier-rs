@@ -1,13 +1,20 @@
 // SPDX-License-Identifier: GPL-2.0
 
+//! BPF 验证的基于工作列表的路径探索模块
+//!
 //! Worklist-based path exploration for BPF verification.
 //!
+//! 本模块实现用于探索所有程序路径的高级工作列表算法。
+//!
 //! This module implements an advanced worklist algorithm for exploring
-//! all program paths. It uses:
-//! - Priority-based exploration (depth-first by default)
-//! - State merging at join points to control state explosion
-//! - Pruning using explored state snapshots
-//! - Range refinement on branches for precise tracking
+//! all program paths.
+//!
+//! # 特性 / Features
+//!
+//! - **优先级探索 / Priority-based exploration**: 默认深度优先
+//! - **状态合并 / State merging**: 在汇合点合并状态以控制状态爆炸
+//! - **剪枝 / Pruning**: 使用已探索状态快照进行剪枝
+//! - **范围细化 / Range refinement**: 在分支处进行精确跟踪
 
 use core::cmp::Ordering;
 

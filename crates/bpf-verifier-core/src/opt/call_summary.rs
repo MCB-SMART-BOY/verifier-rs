@@ -1,34 +1,41 @@
 // SPDX-License-Identifier: GPL-2.0
 
-//! Call Summary Optimization
+//! 调用摘要优化模块
+//!
+//! Call Summary Optimization.
+//!
+//! 本模块实现调用摘要缓存，避免对具有相同寄存器状态的相同函数调用进行重复验证。
 //!
 //! This module implements call summary caching to avoid re-verifying
 //! the same function calls with identical register states.
 //!
-//! ## Overview
+//! # 概述 / Overview
+//!
+//! 当 BPF 程序以相同的寄存器状态多次调用子程序时，我们可以缓存验证结果（调用摘要）
+//! 并重用它，而不是重新验证整个子程序。
 //!
 //! When a BPF program calls a subprogram multiple times with the same
 //! register state, we can cache the verification result (call summary)
 //! and reuse it instead of re-verifying the entire subprogram.
 //!
-//! ## Benefits
+//! # 优势 / Benefits
 //!
-//! - Reduces verification time for programs with repeated function calls
-//! - Improves scalability for large programs with many subprograms
-//! - Maintains safety guarantees (conservative cache invalidation)
+//! - **减少验证时间 / Reduce verification time**: 对于有重复函数调用的程序
+//! - **提高可扩展性 / Improve scalability**: 适用于有多个子程序的大型程序
+//! - **保持安全保证 / Maintain safety**: 使用保守的缓存失效策略
 //!
-//! ## Implementation
+//! # 实现细节 / Implementation
 //!
-//! Call summaries store:
-//! - Input register states (arguments)
-//! - Output register states (return value and modified registers)
-//! - Stack depth changes
-//! - Reference state changes
+//! 调用摘要存储以下信息：
+//! - 输入寄存器状态（参数）/ Input register states (arguments)
+//! - 输出寄存器状态（返回值和修改的寄存器）/ Output register states
+//! - 栈深度变化 / Stack depth changes
+//! - 引用状态变化 / Reference state changes
 //!
-//! Summaries are invalidated when:
-//! - Input states don't match exactly
-//! - Global state changes (maps modified, etc.)
-//! - Subprogram code changes
+//! 摘要在以下情况下失效：
+//! - 输入状态不完全匹配 / Input states don't match exactly
+//! - 全局状态变化（map 被修改等）/ Global state changes
+//! - 子程序代码变化 / Subprogram code changes
 
 use crate::stdlib::*;
 use crate::core::error::{Result, VerifierError};

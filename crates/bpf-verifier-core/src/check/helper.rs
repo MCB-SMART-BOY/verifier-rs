@@ -1,9 +1,20 @@
 // SPDX-License-Identifier: GPL-2.0
 
-//! Helper function verification
+//! 辅助函数验证模块
+//!
+//! Helper function verification module.
+//!
+//! 本模块实现了 BPF 辅助函数的参数类型检查和返回值处理。
 //!
 //! This module implements argument type checking and return value
 //! handling for BPF helper functions.
+//!
+//! # 主要功能 / Main Features
+//!
+//! - **参数类型检查 / Argument Type Checking**: 验证传入参数符合辅助函数原型
+//! - **返回值处理 / Return Value Handling**: 设置返回值的类型和边界
+//! - **引用管理 / Reference Management**: 跟踪辅助函数获取/释放的引用
+//! - **用户内存访问 / User Memory Access**: 验证用户内存相关辅助函数的安全性
 
 use alloc::format;
 

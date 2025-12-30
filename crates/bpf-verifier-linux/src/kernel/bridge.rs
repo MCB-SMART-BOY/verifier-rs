@@ -1,10 +1,24 @@
 // SPDX-License-Identifier: GPL-2.0
 
-//! Bridge between kernel C structures and Rust verifier.
+//! 内核 C 结构与 Rust 验证器之间的桥接模块
+//!
+//! Bridge Between Kernel C Structures and Rust Verifier.
+//!
+//! 本模块提供内核 BPF 数据结构的安全 Rust 封装，允许 Rust 验证器
+//! 安全地与内核代码交互。
 //!
 //! This module provides safe Rust wrappers around the kernel's BPF
 //! data structures, allowing the Rust verifier to interact with
 //! kernel code safely.
+//!
+//! # 主要封装 / Main Wrappers
+//!
+//! - **`KernelProgram`**: 内核 `bpf_prog` 的安全封装
+//!   Safe wrapper for kernel `bpf_prog`
+//! - **`KernelVerifierEnv`**: 内核 `bpf_verifier_env` 的安全封装
+//!   Safe wrapper for kernel `bpf_verifier_env`
+//! - **`KernelMap`**: 内核 `bpf_map` 的安全封装
+//!   Safe wrapper for kernel `bpf_map`
 
 use crate::core::types::{BpfInsn, BpfProgType};
 use crate::check::prog_type::BpfAttachType;

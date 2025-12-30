@@ -1,12 +1,17 @@
 // SPDX-License-Identifier: GPL-2.0
 
+//! BPF 验证器缓存优化模块
+//!
 //! Cache optimization for the BPF verifier.
+//!
+//! 本模块提供优化的缓存结构和算法以提高验证性能：
 //!
 //! This module provides optimized caching structures and algorithms
 //! for improving verification performance:
-//! - Bloom filters for fast negative lookups
-//! - State compression for memory efficiency
-//! - Parallel-friendly data structures
+//!
+//! - **布隆过滤器 / Bloom filters**: 快速否定查找
+//! - **状态压缩 / State compression**: 提高内存效率
+//! - **并行友好数据结构 / Parallel-friendly data structures**: 支持并行验证
 
 #![allow(missing_docs)] // Performance optimization internals
 

@@ -1,9 +1,33 @@
 // SPDX-License-Identifier: GPL-2.0
 
-//! Verifier environment
+//! 验证器环境模块
+//!
+//! Verifier Environment Module.
+//!
+//! 本模块实现了主验证器环境，包含所有验证上下文、程序信息和配置。
 //!
 //! This module implements the main verifier environment that holds all
 //! verification context, program information, and configuration.
+//!
+//! # 主要组件 / Main Components
+//!
+//! - **`VerifierEnv`**: 主验证器环境结构体，包含程序指令、状态、配置等
+//!   Main verifier environment structure containing instructions, state, and configuration
+//! - **`VerifierCaps`**: 验证器能力标志，指示支持的特性
+//!   Verifier capability flags indicating supported features
+//! - **`InsnAuxData`**: 每条指令的辅助数据
+//!   Per-instruction auxiliary data
+//! - **`SubprogInfoEntry`**: 子程序信息
+//!   Subprogram information
+//!
+//! # 设计原则 / Design Principles
+//!
+//! - **内核安全 / Kernel safety**: 使用 Box 分配避免栈溢出
+//!   Use Box allocation to avoid stack overflow
+//! - **状态跟踪 / State tracking**: 维护探索状态栈用于 DFS
+//!   Maintain exploration state stack for DFS traversal
+//! - **剪枝优化 / Pruning optimization**: 缓存已探索状态以避免重复验证
+//!   Cache explored states to avoid redundant verification
 
 #![allow(missing_docs)] // Many internal types don't need public docs
 

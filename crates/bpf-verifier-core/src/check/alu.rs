@@ -1,9 +1,25 @@
 // SPDX-License-Identifier: GPL-2.0
 
-//! ALU instruction verification
+//! ALU 指令验证模块
+//!
+//! ALU instruction verification module.
+//!
+//! 本模块实现了 BPF ALU 和 ALU64 指令的全面验证，包括 MOV、算术运算、
+//! 位运算和移位操作。
 //!
 //! This module implements comprehensive verification of BPF ALU and ALU64 instructions,
 //! including MOV, arithmetic operations, bitwise operations, and shifts.
+//!
+//! # 支持的操作 / Supported Operations
+//!
+//! - `BPF_MOV`: 寄存器/立即数移动 / Register/immediate move
+//! - `BPF_ADD/SUB/MUL/DIV`: 算术运算 / Arithmetic operations
+//! - `BPF_AND/OR/XOR`: 位运算 / Bitwise operations
+//! - `BPF_LSH/RSH/ARSH`: 移位操作 / Shift operations
+//! - `BPF_NEG`: 取反 / Negation
+//! - `BPF_END`: 字节交换 / Byte swap
+//!
+//! 对应 Linux 内核 verifier.c 中的 check_alu_op()（第 15744-16200 行）
 //!
 //! Corresponds to check_alu_op() in Linux kernel verifier.c (lines 15744-16200)
 

@@ -1,11 +1,30 @@
 // SPDX-License-Identifier: GPL-2.0
 
-//! Context provider trait and types.
+//! 上下文提供者 trait 和类型定义模块
+//!
+//! Context Provider Trait and Types.
+//!
+//! 本模块定义了 BPF 程序上下文结构的平台无关接口。
+//! 每种程序类型都有特定的上下文结构，提供对程序特定数据的访问
+//! （例如 XDP 的数据包数据，socket filter 的套接字缓冲区）。
 //!
 //! This module defines the platform-agnostic interface for BPF program
 //! context structures. Each program type has a specific context structure
 //! that provides access to program-specific data (e.g., packet data for XDP,
 //! socket buffer for socket filter).
+//!
+//! # 主要组件 / Main Components
+//!
+//! - **`ContextDef`**: 上下文结构定义，包含字段列表和大小
+//!   Context structure definition with field list and size
+//! - **`ContextFieldDef`**: 上下文字段定义，包含偏移、大小和访问权限
+//!   Context field definition with offset, size, and access permissions
+//! - **`FieldAccessMode`**: 字段访问模式（只读、只写、读写）
+//!   Field access mode (read-only, write-only, read-write)
+//! - **`FieldResultType`**: 字段访问结果类型（标量、数据包指针等）
+//!   Field access result type (scalar, packet pointer, etc.)
+//! - **`ContextProvider`**: 平台必须实现的 trait，用于定义上下文结构
+//!   Trait that platforms must implement to define context structures
 
 use super::types::{PlatformError, PlatformResult};
 use crate::core::types::BpfRegType;
@@ -166,7 +185,7 @@ impl ContextFieldDef {
         }
 
         // Check alignment
-        if (off - self.offset) % self.alignment != 0 {
+        if !(off - self.offset).is_multiple_of(self.alignment) {
             return false;
         }
 

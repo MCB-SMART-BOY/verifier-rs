@@ -1,19 +1,35 @@
 // SPDX-License-Identifier: GPL-2.0
 
-//! Context access optimization for BPF programs
+//! BPF 程序上下文访问优化模块
+//!
+//! Context access optimization for BPF programs.
+//!
+//! 本模块将上下文字段访问转换为实际的内存操作。不同的 BPF 程序类型有不同的
+//! 上下文结构（sk_buff、xdp_buff 等），此优化遍将通用的上下文字段读写重写为
+//! 特定架构的加载/存储序列。
 //!
 //! This module converts context field accesses to actual memory operations.
 //! Different BPF program types have different context structures (sk_buff, xdp_buff, etc.)
 //! and this pass rewrites generic context field reads/writes to architecture-specific
 //! load/store sequences.
 //!
-//! ## Optimization Features
+//! # 优化功能 / Optimization Features
 //!
-//! - **Access pattern analysis**: Detects common access patterns (sequential, strided)
-//! - **Field coalescing**: Combines multiple small accesses into larger ones
-//! - **Speculative conversion**: Pre-converts likely accessed fields
-//! - **Cache-aware ordering**: Reorders accesses for better cache behavior
-//! - **Dead access elimination**: Removes accesses whose results are unused
+//! - **访问模式分析 / Access pattern analysis**: 检测常见访问模式（顺序、跨步）
+//! - **字段合并 / Field coalescing**: 将多个小访问合并为较大的访问
+//! - **推测性转换 / Speculative conversion**: 预转换可能访问的字段
+//! - **缓存感知排序 / Cache-aware ordering**: 重排访问以获得更好的缓存行为
+//! - **死访问消除 / Dead access elimination**: 移除结果未使用的访问
+//!
+//! # 支持的程序类型 / Supported Program Types
+//!
+//! - `SocketFilter`: 套接字过滤器，使用 `__sk_buff` 上下文
+//! - `XDP`: XDP 程序，使用 `xdp_md` 上下文
+//! - `SchedCls/SchedAct`: TC 分类器/动作，使用 `__sk_buff`
+//! - `CgroupSkb`: Cgroup 数据包过滤，使用 `__sk_buff`
+//! - `SockOps`: Socket 操作，使用 `bpf_sock_ops`
+//! - `SkMsg`: Socket 消息，使用 `sk_msg_md`
+//! - `Tracing`: 跟踪程序，使用 BTF 基础访问
 
 use alloc::{format, vec, vec::Vec};
 

@@ -1,9 +1,22 @@
 // SPDX-License-Identifier: GPL-2.0
 
-//! Load and store instruction verification
+//! 加载和存储指令验证模块
+//!
+//! Load and store instruction verification module.
+//!
+//! 本模块实现了 BPF_LDX 和 BPF_STX 指令的验证，处理内存加载、存储和原子操作。
 //!
 //! This module implements verification for BPF_LDX and BPF_STX instructions,
 //! handling memory loads, stores, and atomic operations.
+//!
+//! # 主要功能 / Main Features
+//!
+//! - **内存加载 / Memory Load**: 验证从内存读取数据的安全性
+//! - **内存存储 / Memory Store**: 验证向内存写入数据的安全性
+//! - **原子操作 / Atomic Operations**: 验证原子读-改-写操作
+//! - **溢出/填充跟踪 / Spill/Fill Tracking**: 跟踪寄存器到栈的保存和恢复
+//!
+//! 对应 Linux 内核 verifier.c 中的 check_load_mem() 和 check_store_reg()
 //!
 //! Corresponds to check_load_mem() and check_store_reg() in Linux kernel verifier.c
 

@@ -1,10 +1,30 @@
 // SPDX-License-Identifier: GPL-2.0
 
+//! 内存加载和存储操作验证模块
 //!
-
+//! Memory load and store operation validation module.
+//!
+//! 本模块处理内存加载和存储操作的验证，包括指针边界检查、对齐检查和访问权限检查。
+//!
 //! This module handles validation of memory load and store operations,
-
 //! including checks for pointer bounds, alignment, and access permissions.
+//!
+//! # 支持的指针类型 / Supported Pointer Types
+//!
+//! - `PTR_TO_STACK`: 栈内存访问 / Stack memory access
+//! - `PTR_TO_MAP_VALUE`: 映射值访问 / Map value access
+//! - `PTR_TO_PACKET`: 数据包数据访问 / Packet data access
+//! - `PTR_TO_CTX`: 上下文结构访问 / Context structure access
+//! - `PTR_TO_BTF_ID`: BTF 类型指针访问 / BTF typed pointer access
+//! - `PTR_TO_MEM`: 通用内存区域访问 / Generic memory region access
+//!
+//! # 安全检查 / Safety Checks
+//!
+//! - 空指针解引用检测 / Null pointer dereference detection
+//! - 边界检查（固定和可变偏移）/ Bounds checking (fixed and variable offset)
+//! - 对齐验证 / Alignment validation
+//! - RCU 保护内存访问验证 / RCU-protected memory access validation
+//! - 指针泄漏防护 / Pointer leak prevention
 
 use alloc::{format, string::ToString};
 

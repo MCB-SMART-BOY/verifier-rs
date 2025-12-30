@@ -1,10 +1,26 @@
 // SPDX-License-Identifier: GPL-2.0
 
-//! Kernel function (kfunc) provider trait and types.
+//! 内核函数 (kfunc) 提供者 trait 和类型定义模块
+//!
+//! Kernel Function (kfunc) Provider Trait and Types.
+//!
+//! 本模块定义了 BPF 内核函数的平台无关接口。
+//! Kfunc 是可以从 BPF 程序直接调用的内核函数，提供比辅助函数更大的灵活性。
 //!
 //! This module defines the platform-agnostic interface for BPF kernel functions.
 //! Kfuncs are kernel functions that can be called directly from BPF programs,
 //! providing more flexibility than helper functions.
+//!
+//! # 主要组件 / Main Components
+//!
+//! - **`KfuncDef`**: 内核函数定义，包含 BTF ID、参数类型和标志
+//!   Kernel function definition with BTF ID, parameter types, and flags
+//! - **`KfuncFlags`**: 内核函数特性标志（获取/释放引用、可信参数、可睡眠等）
+//!   Kfunc characteristic flags (acquire/release ref, trusted args, sleepable, etc.)
+//! - **`KfuncParamType`**: 内核函数参数类型枚举
+//!   Kfunc parameter type enumeration
+//! - **`KfuncProvider`**: 平台必须实现的 trait，用于提供内核函数
+//!   Trait that platforms must implement to provide kernel functions
 
 use super::types::{PlatformError, PlatformResult};
 

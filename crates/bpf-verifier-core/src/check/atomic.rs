@@ -1,9 +1,22 @@
 // SPDX-License-Identifier: GPL-2.0
 
-//! Atomic instruction handling
+//! 原子指令处理模块
+//!
+//! Atomic instruction handling module.
+//!
+//! 本模块实现了 BPF 原子操作的验证，包括原子加法、交换、比较交换和获取操作。
 //!
 //! This module implements verification for BPF atomic operations,
 //! including atomic add, exchange, compare-exchange, and fetch operations.
+//!
+//! # 原子操作类型 / Atomic Operation Types
+//!
+//! - `ATOMIC_ADD`: 原子加法 / Atomic add
+//! - `ATOMIC_OR/AND/XOR`: 原子位运算 / Atomic bitwise operations
+//! - `ATOMIC_XCHG`: 原子交换 / Atomic exchange
+//! - `ATOMIC_CMPXCHG`: 原子比较交换 / Atomic compare-exchange
+//! - `LOAD_ACQ`: 带获取语义的加载 / Load with acquire semantics
+//! - `STORE_REL`: 带释放语义的存储 / Store with release semantics
 
 #![allow(missing_docs)] // Atomic operation constants
 

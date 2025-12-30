@@ -1,10 +1,28 @@
 // SPDX-License-Identifier: GPL-2.0
 
-//! Map provider trait and types.
+//! Map 提供者 trait 和类型定义模块
+//!
+//! Map Provider Trait and Types.
+//!
+//! 本模块定义了 BPF Map 的平台无关接口。
+//! 每个平台实现 [`MapProvider`] 来定义其支持的 Map 类型及其能力。
 //!
 //! This module defines the platform-agnostic interface for BPF maps.
 //! Each platform implements [`MapProvider`] to define its supported
 //! map types and their capabilities.
+//!
+//! # 主要组件 / Main Components
+//!
+//! - **`MapTypeInfo`**: Map 类型信息，包含能力和允许的操作
+//!   Map type info with capabilities and allowed operations
+//! - **`MapCapabilities`**: Map 能力标志（查找、更新、删除、per-CPU 等）
+//!   Map capability flags (lookup, update, delete, per-CPU, etc.)
+//! - **`MapOp`**: Map 操作枚举（查找、更新、删除、入栈/出栈等）
+//!   Map operation enumeration (lookup, update, delete, push/pop, etc.)
+//! - **`SpecialFieldType`**: Map 值中的特殊字段类型（定时器、自旋锁、kptr 等）
+//!   Special field types in map values (timer, spinlock, kptr, etc.)
+//! - **`MapProvider`**: 平台必须实现的 trait，用于定义 Map 类型
+//!   Trait that platforms must implement to define map types
 
 use super::types::{PlatformError, PlatformResult};
 

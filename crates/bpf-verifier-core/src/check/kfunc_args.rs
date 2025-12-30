@@ -1,10 +1,23 @@
 // SPDX-License-Identifier: GPL-2.0
 
+//! Kfunc 参数验证模块
 //!
-
+//! Kfunc argument validation module.
+//!
+//! 本模块提供内核函数参数的详细验证，包括类型检查、可空性、
+//! 大小验证和引用处理。
+//!
 //! This module provides detailed validation for kernel function arguments,
-
 //! including type checking, nullability, size validation, and reference handling.
+//!
+//! # 参数类型 / Argument Types
+//!
+//! - `Scalar`: 标量值（整数）
+//! - `PtrToMem`: 内存指针
+//! - `PtrToBtfId`: BTF 类型指针
+//! - `RefAcquire/RefRelease`: 引用获取/释放
+//! - `Dynptr`: 动态指针
+//! - `Callback`: 回调函数指针
 
 use alloc::{
     format,

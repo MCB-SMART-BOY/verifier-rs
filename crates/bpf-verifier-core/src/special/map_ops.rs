@@ -1,10 +1,20 @@
 // SPDX-License-Identifier: GPL-2.0
 
+//! BPF 映射操作验证模块
 //!
-
+//! BPF map operations verification module.
+//!
+//! 本模块实现了 BPF 映射操作的验证，包括查找、更新、删除和迭代。
+//!
 //! This module implements verification for BPF map operations including
-
 //! lookup, update, delete, and iteration.
+//!
+//! # 映射操作类型 / Map Operation Types
+//!
+//! - `Lookup`: 查找键值 / Lookup key
+//! - `Update`: 更新键值对 / Update key-value pair
+//! - `Delete`: 删除键 / Delete key
+//! - `Push/Pop/Peek`: 栈/队列操作 / Stack/queue operations
 
 use alloc::{format, vec::Vec};
 

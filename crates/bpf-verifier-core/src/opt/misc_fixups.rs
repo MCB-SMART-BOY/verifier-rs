@@ -1,15 +1,36 @@
 // SPDX-License-Identifier: GPL-2.0
 
+//! 杂项指令修复模块
+//!
 //! Miscellaneous instruction fixups.
 //!
+//! 本模块实现内核验证器在验证后、JIT 编译前执行的各种指令转换。
+//!
 //! This module implements various instruction transformations that the kernel
-//! verifier performs after verification but before JIT compilation:
-//! - Map lookup inlining
-//! - BPF_LOOP inlining
-//! - Helper call transformations
-//! - Atomic operation fixups
-//! - Tail call limit enforcement
-//! - Arena access conversion
+//! verifier performs after verification but before JIT compilation.
+//!
+//! # 修复类型 / Fixup Types
+//!
+//! - **Map 查找内联 / Map lookup inlining**: 将 `bpf_map_lookup_elem` 转换为直接数组访问
+//! - **BPF_LOOP 内联 / BPF_LOOP inlining**: 展开或转换 `bpf_loop` 调用
+//! - **辅助函数转换 / Helper call transformations**: 转换特定辅助函数调用
+//! - **原子操作修复 / Atomic operation fixups**: 架构特定的原子操作适配
+//! - **尾调用限制强制 / Tail call limit enforcement**: 插入尾调用计数器检查
+//! - **Arena 访问转换 / Arena access conversion**: 32位地址到64位内核地址转换
+//!
+//! # Map 查找内联 / Map Lookup Inlining
+//!
+//! 对于数组类型的 map，常量索引查找可以内联为直接内存访问：
+//! - `BPF_MAP_TYPE_ARRAY`: 直接索引访问
+//! - `BPF_MAP_TYPE_PERCPU_ARRAY`: Per-CPU 直接访问
+//! - `BPF_MAP_TYPE_PROG_ARRAY`: 直接程序槽访问
+//!
+//! # Kfunc 特化 / Kfunc Specialization
+//!
+//! 某些 kfunc 需要在调用前注入额外参数：
+//! - `bpf_obj_new_impl`: 注入对象大小和结构元数据
+//! - `bpf_obj_drop_impl`: 注入结构元数据
+//! - `bpf_dynptr_from_skb`: 可特化为只读变体
 
 #![allow(missing_docs)] // Fixup internals
 

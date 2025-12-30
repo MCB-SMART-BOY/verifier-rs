@@ -1,10 +1,24 @@
 // SPDX-License-Identifier: GPL-2.0
 
-//! Program type provider trait and types.
+//! 程序类型提供者 trait 和类型定义模块
+//!
+//! Program Type Provider Trait and Types.
+//!
+//! 本模块定义了 BPF 程序类型的平台无关接口。
+//! 每个平台实现 [`ProgTypeProvider`] 来定义其支持的程序类型及其能力。
 //!
 //! This module defines the platform-agnostic interface for BPF program types.
 //! Each platform implements [`ProgTypeProvider`] to define its supported
 //! program types and their capabilities.
+//!
+//! # 主要组件 / Main Components
+//!
+//! - **`ProgTypeInfo`**: 程序类型信息，包含上下文大小、返回值范围和能力
+//!   Program type info with context size, return value range, and capabilities
+//! - **`ProgCapabilities`**: 程序类型能力标志（数据包访问、尾调用、自旋锁等）
+//!   Program type capability flags (packet access, tail call, spinlock, etc.)
+//! - **`ProgTypeProvider`**: 平台必须实现的 trait，用于定义程序类型
+//!   Trait that platforms must implement to define program types
 
 use super::types::{PlatformError, PlatformResult, RetvalRange};
 

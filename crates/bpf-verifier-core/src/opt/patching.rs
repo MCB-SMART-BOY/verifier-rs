@@ -1,14 +1,19 @@
 // SPDX-License-Identifier: GPL-2.0
 
+//! BPF 程序指令修补模块
+//!
 //! Instruction patching for BPF programs.
+//!
+//! 本模块实现了 BPF 程序的指令修补。验证器可能需要修补指令用于：
 //!
 //! This module implements instruction patching for BPF programs.
 //! The verifier may need to patch instructions for:
-//! - Map pointer fixups (LD_IMM64 with map fd -> map pointer)
-//! - Helper call resolution
-//! - Kfunc call fixups
-//! - Zero extension insertion
-//! - Spectre mitigation (nospec barriers)
+//!
+//! - **映射指针修复 / Map pointer fixups**: LD_IMM64 map fd 转换为指针
+//! - **辅助函数调用解析 / Helper call resolution**: 解析辅助函数地址
+//! - **Kfunc 调用修复 / Kfunc call fixups**: 内核函数调用修补
+//! - **零扩展插入 / Zero extension insertion**: 32位到64位扩展
+//! - **Spectre 缓解 / Spectre mitigation**: nospec 屏障
 
 #![allow(missing_docs)] // Patching internals
 

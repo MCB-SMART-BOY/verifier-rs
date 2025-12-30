@@ -1,14 +1,33 @@
 // SPDX-License-Identifier: GPL-2.0
 
-//! Pointer overflow check patches
+//! 指针溢出检查修补模块
+//!
+//! Pointer overflow check patches.
+//!
+//! 本模块实现指针算术操作的溢出检测和修补。对应内核验证器中
+//! `adjust_ptr_min_max_vals()` 的溢出检查，生成供 JIT 插入的溢出检查补丁。
 //!
 //! This module implements overflow detection and patching for pointer arithmetic
 //! operations. It corresponds to the kernel's pointer overflow checking in
 //! `adjust_ptr_min_max_vals()` that generates patches for JIT to insert
 //! overflow checks.
 //!
+//! 内核使用这些补丁确保指针算术即使在推测执行下也不会溢出，防止 Spectre 风格攻击。
+//!
 //! The kernel uses these patches to ensure pointer arithmetic doesn't overflow
 //! even under speculative execution, preventing Spectre-style attacks.
+//!
+//! # 溢出类型 / Overflow Types
+//!
+//! - **无符号溢出 / Unsigned**: 加法导致回绕
+//! - **有符号溢出 / Signed**: 有符号运算回绕
+//! - **混合溢出 / Both**: 同时存在无符号和有符号溢出风险
+//!
+//! # 补丁策略 / Patch Strategy
+//!
+//! 1. 计算偏移量与限制的差值
+//! 2. 算术右移获取符号位
+//! 3. 与指针进行与操作（溢出时清零指针）
 
 #![allow(missing_docs)]
 

@@ -1,22 +1,29 @@
 // SPDX-License-Identifier: GPL-2.0
 
-//! Timer and Kptr special field validation
+//! 定时器和 Kptr 特殊字段验证模块
+//!
+//! Timer and Kptr special field validation module.
+//!
+//! 本模块实现了嵌入在映射值中的 bpf_timer 和 bpf_kptr 特殊字段的验证。
+//! 这些字段有严格的访问规则。
 //!
 //! This module implements verification for bpf_timer and bpf_kptr special fields
 //! embedded in map values. These fields have strict access rules:
 //!
-//! ## Timer Rules:
-//! - Timer must be initialized with bpf_timer_init before use
-//! - Timer callbacks must match the map they're associated with (map_uid)
-//! - Timer cannot be used in PREEMPT_RT configurations
-//! - Timer fields cannot be directly read/written by BPF programs
+//! ## 定时器规则 / Timer Rules
 //!
-//! ## Kptr Rules:
-//! - Kptr can be UNREF (unreferenced) or REF (referenced)
-//! - Referenced kptrs require proper acquire/release semantics
-//! - Kptr access must be through bpf_kptr_xchg or atomic operations
-//! - Kptr type must match the BTF type declared in the map
-//! - RCU-safe kptrs can be read under RCU protection
+//! - 定时器使用前必须用 bpf_timer_init 初始化
+//! - 定时器回调必须匹配关联的映射（map_uid）
+//! - 定时器不能在 PREEMPT_RT 配置中使用
+//! - BPF 程序不能直接读写定时器字段
+//!
+//! ## Kptr 规则 / Kptr Rules
+//!
+//! - Kptr 可以是 UNREF（无引用）或 REF（有引用）
+//! - 有引用的 kptr 需要正确的获取/释放语义
+//! - Kptr 访问必须通过 bpf_kptr_xchg 或原子操作
+//! - Kptr 类型必须匹配映射中声明的 BTF 类型
+//! - RCU 安全的 kptr 可以在 RCU 保护下读取
 
 use alloc::format;
 

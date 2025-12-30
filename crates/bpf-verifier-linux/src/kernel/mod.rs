@@ -1,14 +1,22 @@
 // SPDX-License-Identifier: GPL-2.0
 
-//! Kernel integration layer for the BPF verifier.
+//! BPF 验证器的内核集成层模块
+//!
+//! Kernel Integration Layer for the BPF Verifier.
+//!
+//! 本模块提供 Rust BPF 验证器和 Linux 内核之间的接口。处理以下内容：
 //!
 //! This module provides the interface between the Rust BPF verifier
 //! and the Linux kernel. It handles:
 //!
-//! - FFI bindings to kernel data structures
-//! - Memory allocation using kernel allocators
-//! - Error code translation
-//! - Logging through kernel facilities
+//! - **FFI 绑定 / FFI bindings**: 内核数据结构的绑定
+//!   Bindings to kernel data structures
+//! - **内存分配 / Memory allocation**: 使用内核分配器
+//!   Using kernel allocators
+//! - **错误码转换 / Error code translation**: 验证器错误到 errno 的转换
+//!   Verifier errors to errno translation
+//! - **日志 / Logging**: 通过内核设施进行日志记录
+//!   Logging through kernel facilities
 //!
 //! # Architecture
 //!

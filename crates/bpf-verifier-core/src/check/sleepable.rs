@@ -1,13 +1,29 @@
 // SPDX-License-Identifier: GPL-2.0
 
-//! Sleepable context validation
+//! 可睡眠上下文验证模块
+//!
+//! Sleepable context validation module.
+//!
+//! 本模块实现了可睡眠 BPF 程序的验证。可睡眠程序可以调用睡眠函数
+//! （如 bpf_copy_from_user），但有额外的限制。
 //!
 //! This module implements validation for sleepable BPF programs.
 //! Sleepable programs can call sleeping functions (like bpf_copy_from_user),
 //! but have additional restrictions:
-//! - Cannot be called while holding spin locks
-//! - Cannot be called in atomic context (preempt disabled, RCU read lock)
-//! - Cannot be called from certain program types
+//!
+//! # 限制条件 / Restrictions
+//!
+//! - 持有自旋锁时不能调用 / Cannot be called while holding spin locks
+//! - 原子上下文中不能调用 / Cannot be called in atomic context
+//! - 某些程序类型不支持 / Cannot be called from certain program types
+//!
+//! # RCU/抢占交互规则 / RCU/Preempt Interaction Rules
+//!
+//! - 在 bpf_rcu_read_lock 区域内不能调用可睡眠辅助函数
+//! - 在 bpf_preempt_disable 区域内不能调用可睡眠辅助函数
+//! - 持有 IRQ 状态时不能调用可睡眠辅助函数
+//! - RCU 锁释放时，MEM_RCU 指针变为无效
+//! - might_sleep 的全局函数将此属性传播给调用者
 //!
 //! RCU/Preempt interaction rules:
 //! - Sleepable helpers cannot be called inside bpf_rcu_read_lock region

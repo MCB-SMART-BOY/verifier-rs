@@ -1,10 +1,21 @@
 // SPDX-License-Identifier: GPL-2.0
 
-//! Verification statistics and metrics
+//! 验证统计和指标模块
+//!
+//! Verification statistics and metrics.
+//!
+//! 本模块在 BPF 程序验证期间跟踪统计信息，提供程序复杂度、资源使用和验证性能的洞察。
 //!
 //! This module tracks statistics during BPF program verification,
 //! providing insights into program complexity, resource usage,
 //! and verification performance.
+//!
+//! # 统计类型 / Statistics Types
+//!
+//! - **指令统计 / Instruction stats**: 按类别统计处理的指令数
+//! - **状态统计 / State stats**: 创建、剪枝、合并的状态数
+//! - **内存统计 / Memory stats**: 各类内存访问计数
+//! - **复杂度指标 / Complexity metrics**: 圈复杂度、嵌套深度等
 
 use alloc::collections::BTreeMap as HashMap;
 use alloc::{format, string::String, vec::Vec};

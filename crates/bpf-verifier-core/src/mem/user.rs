@@ -1,13 +1,37 @@
 // SPDX-License-Identifier: GPL-2.0
 
+//! BPF 程序的用户内存访问验证模块
+//!
 //! User memory access verification for BPF programs.
+//!
+//! 本模块实现了 BPF 程序对用户空间内存访问的验证。用户内存需要特殊处理，因为：
 //!
 //! This module implements validation for user-space memory access from BPF programs.
 //! User memory requires special handling because:
-//! 1. Direct access may fault (page not mapped, permissions, etc.)
-//! 2. User pointers cannot be trusted and must be validated
-//! 3. Special helpers like bpf_probe_read_user must be used for safe access
-//! 4. Speculation attacks must be mitigated
+//!
+//! 1. **直接访问可能导致故障 / Direct access may fault**:
+//!    页面未映射、权限不足等 / Page not mapped, permissions, etc.
+//!
+//! 2. **用户指针不可信 / User pointers cannot be trusted**:
+//!    必须进行验证 / Must be validated
+//!
+//! 3. **需要使用安全的辅助函数 / Special helpers required**:
+//!    如 `bpf_probe_read_user` 用于安全访问 / For safe access
+//!
+//! 4. **推测执行攻击防护 / Speculation attack mitigation**:
+//!    必须防止 Spectre 类攻击 / Must prevent Spectre-class attacks
+//!
+//! # 用户内存访问类型 / User Memory Access Types
+//!
+//! - `ProbeRead`: 通过 `bpf_probe_read_user` 安全读取
+//! - `ProbeReadStr`: 通过 `bpf_probe_read_user_str` 读取字符串
+//! - `CopyFromUser`: 通过 `bpf_copy_from_user` 复制（需要可睡眠上下文）
+//! - `ProbeWrite`: 通过 `bpf_probe_write_user` 写入（需要特权）
+//! - `DirectLoad/Store`: 直接访问（不安全，需要特殊保护）
+//!
+//! # 污点跟踪 / Taint Tracking
+//!
+//! 本模块实现数据流分析，跟踪来自用户内存的数据如何在程序中传播。
 
 use alloc::{format, string::String};
 

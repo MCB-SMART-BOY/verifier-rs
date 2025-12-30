@@ -1,9 +1,13 @@
 // SPDX-License-Identifier: GPL-2.0
 
 //! Verbose logging for BPF verifier
+//! BPF 验证器的详细日志记录
 //!
 //! This module provides structured logging for the verification process,
 //! useful for debugging and understanding why programs pass or fail.
+//!
+//! 本模块为验证过程提供结构化日志记录，
+//! 用于调试和理解程序通过或失败的原因。
 
 use crate::core::types::*;
 use crate::state::reg_state::BpfRegState;
@@ -13,48 +17,62 @@ use core::fmt::Write;
 use alloc::{format, string::String};
 
 /// Log level for verifier output
+/// 验证器输出的日志级别
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub enum LogLevel {
     /// No logging
+    /// 无日志记录
     #[default]
     Off = 0,
     /// Only errors
+    /// 仅错误
     Error = 1,
     /// Errors and warnings
+    /// 错误和警告
     Warn = 2,
     /// General information (state changes, branches)
+    /// 一般信息（状态变化、分支）
     Info = 3,
     /// Detailed debugging info
+    /// 详细调试信息
     Debug = 4,
     /// Very verbose (every instruction)
+    /// 非常详细（每条指令）
     Trace = 5,
 }
 
 /// Verifier log buffer
+/// 验证器日志缓冲区
 #[derive(Debug, Clone, Default)]
 pub struct VerifierLog {
     /// Log level threshold
+    /// 日志级别阈值
     pub level: LogLevel,
     /// Log buffer
+    /// 日志缓冲区
     pub buffer: String,
     /// Maximum buffer size
+    /// 最大缓冲区大小
     pub max_size: usize,
     /// Whether buffer has been truncated
+    /// 缓冲区是否已被截断
     pub truncated: bool,
 }
 
 impl VerifierLog {
     /// Create a new log with specified level
+    /// 使用指定级别创建新日志
     pub fn new(level: LogLevel) -> Self {
         Self {
             level,
             buffer: String::new(),
-            max_size: 1024 * 1024, // 1MB default
+            max_size: 1024 * 1024, // 1MB default / 1MB 默认值
             truncated: false,
         }
     }
 
     /// Create a log with custom max size
+    /// 使用自定义最大大小创建日志
     pub fn with_max_size(level: LogLevel, max_size: usize) -> Self {
         Self {
             level,
@@ -65,11 +83,13 @@ impl VerifierLog {
     }
 
     /// Check if logging is enabled at the given level
+    /// 检查是否在给定级别启用日志记录
     pub fn enabled(&self, level: LogLevel) -> bool {
         level <= self.level && level != LogLevel::Off
     }
 
     /// Log a message at the given level
+    /// 在给定级别记录消息
     pub fn log(&mut self, level: LogLevel, msg: &str) {
         if !self.enabled(level) || self.truncated {
             return;
@@ -86,58 +106,70 @@ impl VerifierLog {
     }
 
     /// Log an error
+    /// 记录错误
     pub fn error(&mut self, msg: &str) {
         self.log(LogLevel::Error, msg);
     }
 
     /// Log a warning
+    /// 记录警告
     pub fn warn(&mut self, msg: &str) {
         self.log(LogLevel::Warn, msg);
     }
 
     /// Log info
+    /// 记录信息
     pub fn info(&mut self, msg: &str) {
         self.log(LogLevel::Info, msg);
     }
 
     /// Log debug
+    /// 记录调试信息
     pub fn debug(&mut self, msg: &str) {
         self.log(LogLevel::Debug, msg);
     }
 
     /// Log trace
+    /// 记录跟踪信息
     pub fn trace(&mut self, msg: &str) {
         self.log(LogLevel::Trace, msg);
     }
 
     /// Get the log contents
+    /// 获取日志内容
     pub fn contents(&self) -> &str {
         &self.buffer
     }
 
     /// Clear the log
+    /// 清除日志
     pub fn clear(&mut self) {
         self.buffer.clear();
         self.truncated = false;
     }
 
     /// Get the current length of the log buffer
+    /// 获取日志缓冲区的当前长度
     pub fn len(&self) -> usize {
         self.buffer.len()
     }
 
     /// Check if the log buffer is empty
+    /// 检查日志缓冲区是否为空
     pub fn is_empty(&self) -> bool {
         self.buffer.is_empty()
     }
 
     /// Truncate the log buffer to the specified length
+    /// 将日志缓冲区截断到指定长度
     ///
     /// This is used for log rollback when popping states from the stack.
+    /// 当从栈中弹出状态时，用于日志回滚。
     pub fn truncate(&mut self, len: usize) {
         if len < self.buffer.len() {
             self.buffer.truncate(len);
             // If we truncate below max_size, we can log again
+            // 如果截断后低于 max_size，我们可以再次记录日志
             if len < self.max_size {
                 self.truncated = false;
             }
@@ -146,6 +178,7 @@ impl VerifierLog {
 }
 
 /// Format a register state for logging
+/// 格式化寄存器状态用于日志记录
 pub fn fmt_reg(reg: &BpfRegState, regno: usize) -> String {
     let mut s = String::new();
 
@@ -160,6 +193,7 @@ pub fn fmt_reg(reg: &BpfRegState, regno: usize) -> String {
                 write!(s, "={}", reg.const_value()).unwrap();
             } else {
                 // Show bounds
+                // 显示边界
                 if reg.umin_value == reg.umax_value {
                     write!(s, "={}", reg.umin_value).unwrap();
                 } else {
@@ -236,6 +270,7 @@ pub fn fmt_reg(reg: &BpfRegState, regno: usize) -> String {
 }
 
 /// Format register state summary (only non-trivial registers)
+/// 格式化寄存器状态摘要（仅非平凡寄存器）
 pub fn fmt_regs(state: &BpfVerifierState) -> String {
     let mut s = String::new();
 
@@ -256,6 +291,7 @@ pub fn fmt_regs(state: &BpfVerifierState) -> String {
 }
 
 /// Format an instruction for logging
+/// 格式化指令用于日志记录
 pub fn fmt_insn(insn: &BpfInsn, idx: usize) -> String {
     let class = insn.class();
     let mut s = String::new();
@@ -406,6 +442,7 @@ pub fn fmt_insn(insn: &BpfInsn, idx: usize) -> String {
 }
 
 /// Log verifier progress at instruction
+/// 在指令处记录验证器进度
 pub fn log_insn(log: &mut VerifierLog, insn: &BpfInsn, idx: usize, state: &BpfVerifierState) {
     if !log.enabled(LogLevel::Trace) {
         return;
@@ -419,6 +456,7 @@ pub fn log_insn(log: &mut VerifierLog, insn: &BpfInsn, idx: usize, state: &BpfVe
 }
 
 /// Log a branch decision
+/// 记录分支决策
 pub fn log_branch(log: &mut VerifierLog, idx: usize, taken: bool, target: usize) {
     if !log.enabled(LogLevel::Debug) {
         return;
@@ -434,6 +472,7 @@ pub fn log_branch(log: &mut VerifierLog, idx: usize, taken: bool, target: usize)
 }
 
 /// Log state push (exploring new branch)
+/// 记录状态推送（探索新分支）
 pub fn log_state_push(log: &mut VerifierLog, idx: usize, stack_depth: usize) {
     if !log.enabled(LogLevel::Debug) {
         return;
@@ -444,6 +483,7 @@ pub fn log_state_push(log: &mut VerifierLog, idx: usize, stack_depth: usize) {
 }
 
 /// Log state pop
+/// 记录状态弹出
 pub fn log_state_pop(log: &mut VerifierLog, idx: usize, stack_depth: usize) {
     if !log.enabled(LogLevel::Debug) {
         return;
@@ -454,12 +494,14 @@ pub fn log_state_pop(log: &mut VerifierLog, idx: usize, stack_depth: usize) {
 }
 
 /// Log verification error
+/// 记录验证错误
 pub fn log_error(log: &mut VerifierLog, idx: usize, error: &str) {
     let msg = format!("{}: ERROR: {}", idx, error);
     log.error(&msg);
 }
 
 /// Log state pruning
+/// 记录状态剪枝
 pub fn log_prune(log: &mut VerifierLog, idx: usize, reason: &str) {
     if !log.enabled(LogLevel::Info) {
         return;
@@ -470,6 +512,7 @@ pub fn log_prune(log: &mut VerifierLog, idx: usize, reason: &str) {
 }
 
 /// Log function call
+/// 记录函数调用
 pub fn log_call(log: &mut VerifierLog, idx: usize, func_id: i32, is_helper: bool) {
     if !log.enabled(LogLevel::Info) {
         return;
@@ -484,6 +527,7 @@ pub fn log_call(log: &mut VerifierLog, idx: usize, func_id: i32, is_helper: bool
 }
 
 /// Log function return
+/// 记录函数返回
 pub fn log_return(log: &mut VerifierLog, idx: usize, frame_depth: usize) {
     if !log.enabled(LogLevel::Info) {
         return;

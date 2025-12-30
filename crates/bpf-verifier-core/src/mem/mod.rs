@@ -1,9 +1,30 @@
 // SPDX-License-Identifier: GPL-2.0
 
+//! BPF 内存访问验证模块
+//!
 //! Memory access verification for the BPF verifier.
+//!
+//! 本模块包含 BPF 验证器的内存访问验证逻辑，确保所有内存操作都是安全的。
 //!
 //! This module contains memory access checking, packet access verification,
 //! context access validation, arena memory support, and user memory handling.
+//!
+//! ## 主要功能模块
+//!
+//! - `memory`: 核心内存访问验证 - 验证通用内存访问的边界和对齐
+//! - `stack_access`: 栈访问验证 - 验证 BPF 栈的读写操作
+//! - `packet`: 数据包访问验证 - 验证网络数据包的安全访问
+//! - `context`: 上下文访问验证 - 验证 BPF 程序上下文结构的访问
+//! - `arena`: 竞技场内存支持 - 验证用户态共享内存区域的访问
+//! - `user`: 用户内存处理 - 验证用户空间内存的访问
+//!
+//! ## 内存安全保证
+//!
+//! 验证器确保：
+//! - 所有内存访问都在有效边界内
+//! - 指针算术不会导致溢出
+//! - 正确处理不同内存区域的访问权限
+//! - 防止推测执行攻击（通过净化模块配合）
 
 pub mod arena;
 pub mod context;

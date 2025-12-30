@@ -1,9 +1,21 @@
 // SPDX-License-Identifier: GPL-2.0
 
+//! BPF 动态指针（Dynptr）支持模块
+//!
 //! Dynptr support for BPF programs.
+//!
+//! Dynptr 是 BPF 原语，提供对动态大小内存的安全访问。它们可以指向本地栈内存、
+//! ringbuf 条目、SKB/XDP 数据等。
 //!
 //! Dynptrs are BPF primitives that provide safe access to dynamically-sized memory.
 //! They can point to local stack memory, ringbuf entries, SKB/XDP data, etc.
+//!
+//! # Dynptr 类型 / Dynptr Types
+//!
+//! - `Local`: 本地栈内存 / Local stack memory
+//! - `Ringbuf`: 环形缓冲区条目 / Ring buffer entry
+//! - `Skb`: 套接字缓冲区数据 / Socket buffer data
+//! - `Xdp`: XDP 数据包数据 / XDP packet data
 
 use alloc::{format, vec::Vec};
 

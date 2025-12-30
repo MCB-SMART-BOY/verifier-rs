@@ -1,9 +1,30 @@
 // SPDX-License-Identifier: GPL-2.0
 
-//! Platform specification trait.
+//! 平台规范 trait 模块
+//!
+//! Platform Specification Trait.
+//!
+//! 本模块定义了主要的 [`PlatformSpec`] trait，将所有平台特定的提供者
+//! 组合成一个统一的接口。
 //!
 //! This module defines the main [`PlatformSpec`] trait that combines all
 //! platform-specific providers into a single coherent interface.
+//!
+//! # 设计理念 / Design Philosophy
+//!
+//! - **统一接口 / Unified interface**: 通过单一 trait 访问所有平台功能
+//!   Access all platform features through a single trait
+//! - **静态分发 / Static dispatch**: 使用关联类型实现零成本抽象
+//!   Use associated types for zero-cost abstractions
+//! - **可扩展性 / Extensibility**: 易于添加新平台支持
+//!   Easy to add new platform support
+//!
+//! # 主要组件 / Main Components
+//!
+//! - **`PlatformSpec`**: 平台规范主 trait，包含所有提供者
+//!   Main platform specification trait containing all providers
+//! - **`NullPlatform`**: 用于测试的空平台实现
+//!   Null platform implementation for testing
 
 use super::{
     ContextProvider, HelperProvider, KfuncProvider, MapProvider, ProgTypeProvider,

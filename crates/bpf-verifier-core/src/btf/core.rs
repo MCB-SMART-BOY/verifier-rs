@@ -1,15 +1,23 @@
 // SPDX-License-Identifier: GPL-2.0
 
-//! BTF CO-RE (Compile Once - Run Everywhere) support
+//! BTF CO-RE（一次编译到处运行）支持模块
+//!
+//! BTF CO-RE (Compile Once - Run Everywhere) support module.
+//!
+//! 本模块实现了 CO-RE 重定位支持，允许针对一个内核的 BTF 编译的 BPF 程序
+//! 在不同内核上运行。
 //!
 //! This module implements CO-RE relocation support, allowing BPF programs
 //! compiled against one kernel's BTF to run on different kernels.
 //!
-//! CO-RE relocations allow the verifier/loader to:
-//! - Adjust field offsets for struct layout differences
-//! - Handle field existence checks
-//! - Resolve type IDs across different BTF databases
-//! - Handle enum value differences
+//! # CO-RE 重定位功能 / CO-RE Relocation Features
+//!
+//! CO-RE 重定位允许验证器/加载器：
+//!
+//! - 调整结构体布局差异的字段偏移 / Adjust field offsets for struct layout differences
+//! - 处理字段存在性检查 / Handle field existence checks
+//! - 解析不同 BTF 数据库的类型 ID / Resolve type IDs across different BTF databases
+//! - 处理枚举值差异 / Handle enum value differences
 
 #![allow(missing_docs)]
 

@@ -1,12 +1,17 @@
 // SPDX-License-Identifier: GPL-2.0
 
-//! Unified optimization pass framework.
+//! 统一优化传递框架模块
+//!
+//! Unified optimization pass framework module.
+//!
+//! 本模块为优化传递提供通用基础设施：
 //!
 //! This module provides a common infrastructure for optimization passes:
-//! - Pass trait for uniform interface
-//! - Pass manager for scheduling and running passes
-//! - Pass configuration and dependencies
-//! - Pass statistics and diagnostics
+//!
+//! - **Pass 特性 / Pass trait**: 统一接口
+//! - **传递管理器 / Pass manager**: 调度和运行传递
+//! - **传递配置 / Pass configuration**: 配置和依赖
+//! - **传递统计 / Pass statistics**: 统计和诊断
 
 #![allow(missing_docs)]
 

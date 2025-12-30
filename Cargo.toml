@@ -9,7 +9,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 authors = ["MCB-SMART-BOY <mcb2720838051@gmail.com>"]
 license = "GPL-2.0-only"
@@ -39,6 +39,14 @@ panic = "abort"
 lto = true
 codegen-units = 1
 opt-level = 2
+strip = "symbols"
+debug = false
 
 [profile.dev]
 panic = "abort"
+
+# Optimize release build with debug info for profiling
+[profile.release-with-debug]
+inherits = "release"
+debug = true
+strip = "none"

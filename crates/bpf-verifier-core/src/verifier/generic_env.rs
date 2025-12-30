@@ -1,9 +1,34 @@
 // SPDX-License-Identifier: GPL-2.0
 
-//! Generic verifier environment with platform abstraction.
+//! 平台抽象的通用验证器环境模块
+//!
+//! Generic Verifier Environment with Platform Abstraction.
+//!
+//! 本模块提供平台无关的验证器环境版本，使用 `PlatformSpec` trait
+//! 进行平台特定操作。
 //!
 //! This module provides a platform-generic version of the verifier environment
-//! that uses the [`PlatformSpec`] trait for platform-specific operations.
+//! that uses the `PlatformSpec` trait for platform-specific operations.
+//!
+//! # 设计目标 / Design Goals
+//!
+//! - **平台无关 / Platform independence**: 核心验证逻辑与平台解耦
+//!   Core verification logic decoupled from platform
+//! - **可扩展性 / Extensibility**: 易于添加新平台支持
+//!   Easy to add new platform support
+//! - **类型安全 / Type safety**: 通过泛型确保平台一致性
+//!   Ensure platform consistency through generics
+//!
+//! # 使用示例 / Usage Example
+//!
+//! ```ignore
+//! use bpf_verifier_core::verifier::GenericVerifierEnv;
+//! use bpf_verifier_linux::LinuxSpec;
+//!
+//! let platform = LinuxSpec::new();
+//! let insns = vec![/* BPF instructions */];
+//! let env = GenericVerifierEnv::new(platform, insns, 6 /* XDP */, false)?;
+//! ```
 
 use crate::platform::{
     PlatformSpec, HelperProvider, ProgTypeProvider, KfuncProvider, MapProvider, ContextProvider,
@@ -29,12 +54,12 @@ use crate::special::struct_ops::StructOpsContext;
 
 /// Generic verifier environment parameterized by platform.
 ///
-/// This is the platform-generic version of [`VerifierEnv`] that uses
-/// the [`PlatformSpec`] trait for all platform-specific operations.
+/// This is the platform-generic version of `VerifierEnv` that uses
+/// the `PlatformSpec` trait for all platform-specific operations.
 ///
 /// # Type Parameters
 ///
-/// * `P` - The platform specification implementing [`PlatformSpec`]
+/// * `P` - The platform specification implementing `PlatformSpec`
 ///
 /// # Example
 ///

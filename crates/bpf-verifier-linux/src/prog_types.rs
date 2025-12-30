@@ -1,6 +1,25 @@
 // SPDX-License-Identifier: GPL-2.0
 
-//! Linux BPF program type definitions.
+//! Linux BPF 程序类型定义模块
+//!
+//! Linux BPF Program Type Definitions.
+//!
+//! 本模块包含 Linux 支持的所有 BPF 程序类型定义，包括它们的能力、
+//! 上下文大小和返回值范围。
+//!
+//! This module contains definitions of all BPF program types supported by
+//! Linux, including their capabilities, context sizes, and return value ranges.
+//!
+//! # 主要程序类型 / Main Program Types
+//!
+//! - **XDP**: 高性能数据包处理，在驱动层运行
+//!   High-performance packet processing at driver level
+//! - **SOCKET_FILTER**: 套接字过滤器
+//!   Socket filter
+//! - **KPROBE / TRACEPOINT**: 内核跟踪和调试
+//!   Kernel tracing and debugging
+//! - **STRUCT_OPS**: 实现内核结构体操作
+//!   Implement kernel struct operations
 
 use bpf_verifier_core::platform::{ProgTypeProvider, ProgTypeInfo, ProgCapabilities, RetvalRange};
 

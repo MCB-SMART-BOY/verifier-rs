@@ -1,10 +1,36 @@
 // SPDX-License-Identifier: GPL-2.0
 
-//! Spectre mitigation sanitization
+//! Spectre 缓解清理模块
+//!
+//! Spectre mitigation sanitization.
+//!
+//! 本模块实现清理检查以防止推测执行攻击（如 Spectre）。确保指针算术和
+//! 内存访问即使在推测执行下也是安全的。
 //!
 //! This module implements sanitization checks to prevent speculative
 //! execution attacks (like Spectre). It ensures that pointer arithmetic
 //! and memory accesses are safe even under speculative execution.
+//!
+//! # Spectre 变体 / Spectre Variants
+//!
+//! - **Spectre v1（边界检查绕过）/ Bounds Check Bypass**: 条件分支后的推测性数组访问
+//! - **Spectre v2（分支目标注入）/ Branch Target Injection**: 间接调用目标污染
+//! - **Spectre v4（推测性存储绕过）/ Speculative Store Bypass**: 存储-加载别名问题
+//!
+//! # 缓解策略 / Mitigation Strategies
+//!
+//! - **推测屏障 / Speculation barrier**: 插入 LFENCE/nospec 指令
+//! - **索引掩码 / Index masking**: 使用位掩码限制数组索引
+//! - **指针清理 / Pointer sanitization**: 在算术操作后清理指针
+//! - **条件选择 / Conditional select**: 用 CSEL 替代分支
+//!
+//! # 污点跟踪 / Taint Tracking
+//!
+//! 模块使用污点跟踪识别攻击者可控的值：
+//! - `Clean`: 寄存器未被污染
+//! - `Tainted`: 包含攻击者可控值
+//! - `Derived`: 从污染值派生
+//! - `SpeculativeTainted`: 边界检查后仍可能被推测性绕过
 
 #![allow(missing_docs)] // Sanitization internals
 
@@ -1093,7 +1119,7 @@ impl SanitizationReport {
 /// Spectre v1 gadget types
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SpectreV1GadgetType {
-    /// Bounds check bypass - array[untrusted_idx]
+    /// Bounds check bypass - `array[untrusted_idx]`
     BoundsCheckBypass,
     /// Type confusion - accessing wrong variant
     TypeConfusion,

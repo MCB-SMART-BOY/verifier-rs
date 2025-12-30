@@ -1,25 +1,33 @@
 // SPDX-License-Identifier: GPL-2.0
 
-//! Kernel memory allocation abstractions.
+//! 内核内存分配抽象模块
+//!
+//! Kernel Memory Allocation Abstractions.
+//!
+//! 本模块提供与内核内存分配器兼容的内存分配类型。作为内核一部分构建时，
+//! 这些类型映射到内核的分配基础设施。
 //!
 //! This module provides memory allocation types that are compatible with
 //! the kernel's memory allocator. When building as part of the kernel,
 //! these types map to the kernel's allocation infrastructure.
 //!
-//! # Kernel Integration
+//! # 内核集成 / Kernel Integration
 //!
+//! 与内核 crate 集成时，替换为：
 //! When integrated with the kernel crate, replace these with:
-//! - `kernel::alloc::KBox` instead of `Box`
-//! - `kernel::alloc::KVec` instead of `Vec`
-//! - `kernel::alloc::flags::GFP_KERNEL` for allocation flags
+//! - `kernel::alloc::KBox` 替代 `Box`
+//! - `kernel::alloc::KVec` 替代 `Vec`
+//! - `kernel::alloc::flags::GFP_KERNEL` 用于分配标志
 //!
-//! # Allocation Model
+//! # 分配模型 / Allocation Model
 //!
+//! 本模块中所有分配都是可失败的。这意味着：
 //! All allocations in this module are fallible. This means:
-//! - Use `try_push()` instead of `push()`
-//! - Use `try_reserve()` instead of `reserve()`
-//! - Use `TryAlloc::try_alloc()` instead of `Box::new()`
+//! - 使用 `try_push()` 替代 `push()`
+//! - 使用 `try_reserve()` 替代 `reserve()`
+//! - 使用 `TryAlloc::try_alloc()` 替代 `Box::new()`
 //!
+//! 这符合内核的分配模型，内存分配可能失败，必须优雅处理。
 //! This matches the kernel's allocation model where memory allocation
 //! can fail and must be handled gracefully.
 

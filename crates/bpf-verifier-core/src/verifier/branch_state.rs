@@ -1,10 +1,19 @@
 // SPDX-License-Identifier: GPL-2.0
 
+//! 分支状态细化模块
 //!
-
+//! Branch state refinement module.
+//!
+//! 本模块将范围细化集成到验证过程中，将细化后的寄存器边界传播到跳转和不跳转两个分支。
+//!
 //! This module integrates range refinement into the verification process,
-
 //! propagating refined register bounds to both taken and not-taken branches.
+//!
+//! # 功能 / Features
+//!
+//! - **条件分支处理 / Conditional branch handling**: 根据比较条件细化两个分支的状态
+//! - **NULL 检查处理 / NULL check handling**: 自动识别和处理 NULL 指针检查模式
+//! - **分支可达性分析 / Branch reachability**: 静态确定分支是否可达
 
 use alloc::vec::Vec;
 

@@ -1,15 +1,21 @@
 // SPDX-License-Identifier: GPL-2.0
 
+//! BPF 验证器的平台抽象层
+//!
 //! Platform abstraction layer for BPF verifier.
+//!
+//! 本模块定义了平台无关的 trait，使验证器能够支持不同的 BPF 实现
+//! （Linux、自定义操作系统等）。
 //!
 //! This module defines platform-agnostic traits that allow the verifier
 //! to support different BPF implementations (Linux, custom OS, etc.).
 //!
-//! # Design Philosophy
+//! # 设计理念 / Design Philosophy
 //!
+//! 借鉴 Nix crate 的设计模式，我们分离了：
 //! Following the Nix crate's design pattern, we separate:
-//! - **Core logic**: Platform-independent verification algorithms
-//! - **Platform specification**: OS-specific definitions (helpers, prog types, etc.)
+//! - **核心逻辑 / Core logic**: 平台无关的验证算法
+//! - **平台规范 / Platform specification**: 操作系统特定的定义（辅助函数、程序类型等）
 //!
 //! # Architecture
 //!
@@ -52,17 +58,22 @@
 //! let result = MainVerifier::new(&mut env).verify();
 //! ```
 
-/// Platform specification trait
+/// 平台规范 trait / Platform specification trait
 pub mod spec;
+/// 辅助函数提供者 / Helper function provider
 mod helper;
+/// 程序类型提供者 / Program type provider
 mod prog_type;
+/// 内核函数提供者 / Kernel function provider
 mod kfunc;
+/// 映射提供者 / Map provider
 mod map;
-/// Context provider definitions
+/// 上下文提供者定义 / Context provider definitions
 pub mod context;
-/// Platform-agnostic types
+/// 平台无关的类型 / Platform-agnostic types
 pub mod types;
 
+// 重新导出所有 trait 和类型
 // Re-export all traits and types
 pub use spec::{PlatformSpec, NullPlatform};
 pub use helper::{HelperProvider, HelperDef, HelperFlags};

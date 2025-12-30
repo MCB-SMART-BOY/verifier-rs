@@ -1,9 +1,38 @@
 // SPDX-License-Identifier: GPL-2.0
 
-//! Generic main verifier with platform abstraction.
+//! 平台抽象的通用主验证器模块
+//!
+//! Generic Main Verifier with Platform Abstraction.
+//!
+//! 本模块提供平台无关的主验证器版本，使用 `PlatformSpec` trait
+//! 进行平台特定操作。
 //!
 //! This module provides a platform-generic version of the main verifier
-//! that uses the [`PlatformSpec`] trait for platform-specific operations.
+//! that uses the `PlatformSpec` trait for platform-specific operations.
+//!
+//! # 主要功能 / Main Features
+//!
+//! - **指令验证 / Instruction verification**: 验证每条 BPF 指令
+//!   Verify each BPF instruction
+//! - **辅助函数调用 / Helper calls**: 使用平台提供者验证辅助函数
+//!   Validate helpers using platform provider
+//! - **kfunc 调用 / Kfunc calls**: 使用平台提供者验证 kfunc
+//!   Validate kfuncs using platform provider
+//! - **返回值验证 / Return validation**: 根据程序类型验证返回值
+//!   Validate return values based on program type
+//!
+//! # 使用示例 / Usage Example
+//!
+//! ```ignore
+//! use bpf_verifier_core::verifier::{GenericVerifierEnv, GenericMainVerifier};
+//! use bpf_verifier_linux::LinuxSpec;
+//!
+//! let platform = LinuxSpec::new();
+//! let insns = vec![/* BPF instructions */];
+//! let mut env = GenericVerifierEnv::new(platform, insns, 6, false)?;
+//! let mut verifier = GenericMainVerifier::new(&mut env);
+//! verifier.verify()?;
+//! ```
 
 use alloc::{boxed::Box, format, string::String, vec::Vec};
 
@@ -22,12 +51,12 @@ use crate::special::exception::ExceptionState;
 
 /// Generic main verifier parameterized by platform.
 ///
-/// This is the platform-generic version of [`MainVerifier`] that uses
-/// the [`PlatformSpec`] trait for all platform-specific operations.
+/// This is the platform-generic version of `MainVerifier` that uses
+/// the `PlatformSpec` trait for all platform-specific operations.
 ///
 /// # Type Parameters
 ///
-/// * `P` - The platform specification implementing [`PlatformSpec`]
+/// * `P` - The platform specification implementing `PlatformSpec`
 ///
 /// # Example
 ///
@@ -153,9 +182,8 @@ impl<'a, P: PlatformSpec> GenericMainVerifier<'a, P> {
             self.env.count_insn()?;
 
             // Get current instruction
-            let insn = self.env.insn(self.env.insn_idx)
-                .ok_or_else(|| VerifierError::Internal("invalid insn_idx".into()))?
-                .clone();
+            let insn = *self.env.insn(self.env.insn_idx)
+                .ok_or_else(|| VerifierError::Internal("invalid insn_idx".into()))?;
 
             // Mark instruction as seen
             self.env.mark_insn_seen(self.env.insn_idx);
@@ -290,7 +318,7 @@ impl<'a, P: PlatformSpec> GenericMainVerifier<'a, P> {
 
         // Look up helper using platform
         let _helper = self.env.lookup_helper(func_id)
-            .ok_or_else(|| VerifierError::UnknownHelper(func_id))?;
+            .ok_or(VerifierError::UnknownHelper(func_id))?;
 
         // Check if helper is allowed for this program type
         if !self.env.is_helper_allowed(func_id) {
@@ -312,7 +340,7 @@ impl<'a, P: PlatformSpec> GenericMainVerifier<'a, P> {
 
         // Look up kfunc using platform
         let _kfunc = self.env.lookup_kfunc(btf_id)
-            .ok_or_else(|| VerifierError::UnknownKfunc(btf_id))?;
+            .ok_or(VerifierError::UnknownKfunc(btf_id))?;
 
         // Check if kfunc is allowed for this program type
         if !self.env.is_kfunc_allowed(btf_id) {

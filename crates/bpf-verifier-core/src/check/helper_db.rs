@@ -1,9 +1,21 @@
 // SPDX-License-Identifier: GPL-2.0
 
-//! Comprehensive BPF helper function database
+//! BPF 辅助函数数据库
+//!
+//! Comprehensive BPF helper function database.
+//!
+//! 本模块提供所有 BPF 辅助函数的完整原型，包括参数类型、返回类型和特殊特性。
 //!
 //! This module provides complete prototypes for all BPF helper functions,
 //! including argument types, return types, and special characteristics.
+//!
+//! # 辅助函数分类 / Helper Function Categories
+//!
+//! - **Map 操作 / Map Operations**: lookup, update, delete 等
+//! - **数据包处理 / Packet Processing**: 数据包读写和修改
+//! - **追踪 / Tracing**: 探针读取、perf 事件
+//! - **网络 / Networking**: socket 操作、重定向
+//! - **系统 / System**: 时间、随机数、CPU ID
 
 use super::helper::HelperProto;
 use crate::core::types::*;

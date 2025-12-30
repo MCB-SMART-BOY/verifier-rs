@@ -1,10 +1,26 @@
 // SPDX-License-Identifier: GPL-2.0
 
+//! BPF 程序上下文结构访问验证模块
 //!
-
+//! BPF context structure access verification module.
+//!
+//! 本模块实现了 BPF 程序的上下文结构访问验证。不同的程序类型有不同的上下文结构，
+//! 每种结构都有特定的访问规则。
+//!
 //! This module implements context structure access verification for BPF programs.
-
 //! Different program types have different context structures with specific access rules.
+//!
+//! # 上下文结构示例 / Context Structure Examples
+//!
+//! - **XDP 程序 / XDP programs**: `xdp_md` 结构，包含 `data`、`data_end`、`data_meta` 等字段
+//! - **套接字过滤器 / Socket filters**: `__sk_buff` 结构，包含网络元数据字段
+//! - **追踪程序 / Tracing programs**: 架构相关的 `pt_regs` 结构
+//!
+//! # 访问规则 / Access Rules
+//!
+//! - 每个字段都有读写权限标志
+//! - 某些字段只读（如数据包长度），某些可读写（如标记/mark）
+//! - 读取指针字段会返回相应的指针类型（如 `PTR_TO_PACKET`）
 
 use alloc::{format, vec, vec::Vec};
 

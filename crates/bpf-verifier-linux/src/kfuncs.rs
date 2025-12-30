@@ -1,6 +1,19 @@
 // SPDX-License-Identifier: GPL-2.0
 
-//! Linux BPF kfunc definitions.
+//! Linux BPF 内核函数 (kfunc) 定义模块
+//!
+//! Linux BPF Kernel Function (kfunc) Definitions.
+//!
+//! 本模块包含 Linux 内核函数的定义，这些函数可以从 BPF 程序直接调用。
+//!
+//! This module contains definitions of Linux kernel functions that can be
+//! called directly from BPF programs.
+//!
+//! # 主要 kfunc 类别 / Main Kfunc Categories
+//!
+//! - **RCU 操作 / RCU operations**: `bpf_rcu_read_lock`、`bpf_rcu_read_unlock`
+//! - **对象分配 / Object allocation**: `bpf_obj_new`、`bpf_obj_drop`
+//! - **迭代器 / Iterators**: `bpf_iter_*` 系列函数
 
 use bpf_verifier_core::platform::{KfuncProvider, KfuncDef, KfuncFlags};
 

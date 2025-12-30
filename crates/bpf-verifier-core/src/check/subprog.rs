@@ -1,9 +1,20 @@
 // SPDX-License-Identifier: GPL-2.0
 
-//! Subprogram and function call handling
+//! 子程序和函数调用处理模块
+//!
+//! Subprogram and function call handling module.
+//!
+//! 本模块处理 BPF 子程序（BPF 程序内的函数），包括调用跟踪、栈深度计算和回调处理。
 //!
 //! This module handles BPF subprograms (functions within a BPF program),
 //! including call tracking, stack depth calculation, and callback handling.
+//!
+//! # 主要功能 / Main Features
+//!
+//! - **子程序发现 / Subprogram Discovery**: 从 BTF 或调用指令识别子程序边界
+//! - **栈深度跟踪 / Stack Depth Tracking**: 计算每个子程序的栈使用量
+//! - **调用链验证 / Call Chain Validation**: 确保调用深度不超过限制
+//! - **全局函数支持 / Global Function Support**: 验证可跨程序调用的函数
 
 use alloc::{
     format,

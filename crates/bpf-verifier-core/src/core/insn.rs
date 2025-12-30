@@ -1,9 +1,12 @@
 // SPDX-License-Identifier: GPL-2.0
 
 //! Instruction checking and validation
+//! 指令检查和验证
 //!
 //! This module implements the instruction-level verification logic,
 //! including ALU operations, jumps, calls, and memory access instructions.
+//!
+//! 本模块实现指令级验证逻辑，包括 ALU 操作、跳转、调用和内存访问指令。
 
 use crate::core::error::{Result, VerifierError};
 use crate::core::types::*;
@@ -11,17 +14,21 @@ use crate::state::reg_state::BpfRegState;
 use crate::state::verifier_state::BpfVerifierState;
 
 /// Check if a register is 64-bit for the given instruction
+/// 检查寄存器在给定指令中是否为 64 位
 pub fn is_reg64(insn: &BpfInsn, _regno: usize, is_src: bool) -> bool {
     let class = insn.class();
 
     // 32-bit ALU operations
+    // 32 位 ALU 操作
     if class == BPF_ALU {
         // MOV32 and shifts are special
+        // MOV32 和移位操作是特殊的
         if is_src {
             if insn.code & 0xf0 == BPF_MOV {
                 return false;
             }
             // Shifts use only lower 5/6 bits
+            // 移位操作仅使用低 5/6 位
             if matches!(insn.code & 0xf0, BPF_LSH | BPF_RSH | BPF_ARSH) {
                 return false;
             }
@@ -30,33 +37,40 @@ pub fn is_reg64(insn: &BpfInsn, _regno: usize, is_src: bool) -> bool {
     }
 
     // 64-bit ALU operations
+    // 64 位 ALU 操作
     if class == BPF_ALU64 {
         return true;
     }
 
     // Memory operations - depends on size
+    // 内存操作 - 取决于大小
     if matches!(class, BPF_LDX | BPF_STX | BPF_ST) {
         let size = insn.size();
         // BPF_DW is 64-bit
+        // BPF_DW 是 64 位
         return size == 3; // BPF_DW
     }
 
     // Jumps and calls are 64-bit
+    // 跳转和调用是 64 位的
     true
 }
 
 /// Get the destination register for an instruction (if any)
+/// 获取指令的目标寄存器（如果有）
 pub fn insn_def_regno(insn: &BpfInsn) -> Option<usize> {
     let class = insn.class();
 
     match class {
         BPF_ALU | BPF_ALU64 => {
             // NEG has no dst in some cases, but generally ALU writes to dst
+            // NEG 在某些情况下没有目标寄存器，但通常 ALU 会写入目标寄存器
             Some(insn.dst_reg as usize)
         }
         BPF_LDX => Some(insn.dst_reg as usize),
         BPF_LD => {
             // LD_IMM64 writes to dst
+            // LD_IMM64 写入目标寄存器
             if insn.mode() == BPF_IMM {
                 Some(insn.dst_reg as usize)
             } else {
@@ -65,6 +79,7 @@ pub fn insn_def_regno(insn: &BpfInsn) -> Option<usize> {
         }
         BPF_JMP | BPF_JMP32 => {
             // CALL writes to R0
+            // CALL 写入 R0
             if insn.code & 0xf0 == BPF_CALL {
                 Some(BPF_REG_0)
             } else {
@@ -73,8 +88,10 @@ pub fn insn_def_regno(insn: &BpfInsn) -> Option<usize> {
         }
         BPF_STX => {
             // Atomic operations may write to dst
+            // 原子操作可能写入目标寄存器
             if insn.mode() == BPF_ATOMIC {
                 // CMPXCHG always writes to R0
+                // CMPXCHG 总是写入 R0
                 if insn.imm == BPF_CMPXCHG as i32 {
                     Some(BPF_REG_0)
                 } else if insn.imm & BPF_FETCH as i32 != 0 {
@@ -91,6 +108,7 @@ pub fn insn_def_regno(insn: &BpfInsn) -> Option<usize> {
 }
 
 /// Check if instruction has a 32-bit definition
+/// 检查指令是否有 32 位定义
 pub fn insn_has_def32(insn: &BpfInsn) -> bool {
     if let Some(regno) = insn_def_regno(insn) {
         !is_reg64(insn, regno, false)
@@ -100,6 +118,7 @@ pub fn insn_has_def32(insn: &BpfInsn) -> bool {
 }
 
 /// Check register argument (source or destination)
+/// 检查寄存器参数（源或目标）
 pub fn check_reg_arg(
     state: &mut BpfVerifierState,
     _insn: &BpfInsn,
@@ -117,18 +136,24 @@ pub fn check_reg_arg(
 
     if is_src {
         // Source register must be readable (initialized)
+        // 源寄存器必须可读（已初始化）
         if reg.reg_type == BpfRegType::NotInit {
             return Err(VerifierError::UninitializedRegister(regno as u8));
         }
         // Mark as read
+        // 标记为已读
         // state.reg_mut(regno).unwrap().live.read = true;
     } else {
         // Destination register will be written
+        // 目标寄存器将被写入
         // Check pointer leaks in unprivileged mode
+        // 在非特权模式下检查指针泄漏
         if !allow_ptr_leaks && reg.is_pointer() {
             // This is OK for most cases, but might need special handling
+            // 这在大多数情况下是可以的，但可能需要特殊处理
         }
         // Mark as written
+        // 标记为已写入
         // state.reg_mut(regno).unwrap().live.written = true;
     }
 
@@ -136,12 +161,14 @@ pub fn check_reg_arg(
 }
 
 /// Mark instruction as needing zero extension
+/// 标记指令需要零扩展
 pub fn mark_insn_zext(state: &mut BpfVerifierState, insn: &BpfInsn) -> Result<()> {
     if let Some(regno) = insn_def_regno(insn) {
         if !is_reg64(insn, regno, false) {
             // 32-bit write needs zero extension
+            // 32 位写入需要零扩展
             if let Some(reg) = state.reg_mut(regno) {
-                reg.subreg_def = 1; // Mark as having 32-bit definition
+                reg.subreg_def = 1; // Mark as having 32-bit definition / 标记为有 32 位定义
             }
         }
     }
@@ -149,6 +176,7 @@ pub fn mark_insn_zext(state: &mut BpfVerifierState, insn: &BpfInsn) -> Result<()
 }
 
 /// Check ALU operation
+/// 检查 ALU 操作
 pub fn check_alu_op(
     state: &mut BpfVerifierState,
     insn: &BpfInsn,
@@ -164,15 +192,18 @@ pub fn check_alu_op(
     }
 
     // Check destination register
+    // 检查目标寄存器
     check_reg_arg(state, insn, dst_reg, false, allow_ptr_leaks)?;
 
     // For register source, check it's valid
+    // 对于寄存器源，检查其有效性
     if src_type == BPF_X {
         let src_reg = insn.src_reg as usize;
         check_reg_arg(state, insn, src_reg, true, allow_ptr_leaks)?;
     }
 
     // Special handling for NEG (no source operand)
+    // NEG 的特殊处理（无源操作数）
     if op == BPF_NEG {
         let dst_state = state
             .reg(dst_reg)
@@ -197,6 +228,7 @@ pub fn check_alu_op(
                 }
             } else {
                 // For non-constant, swap and negate bounds
+                // 对于非常量，交换并取反边界
                 let (new_smin, new_smax) = if dst.smax_value != i64::MIN {
                     (-dst.smax_value, -dst.smin_value.saturating_neg())
                 } else {
@@ -216,6 +248,7 @@ pub fn check_alu_op(
     }
 
     // Special handling for END (byte swap)
+    // END（字节交换）的特殊处理
     if op == BPF_END {
         let dst_state = state
             .reg(dst_reg)
@@ -229,6 +262,7 @@ pub fn check_alu_op(
         }
 
         // insn.imm specifies the swap size (16, 32, or 64)
+        // insn.imm 指定交换大小（16、32 或 64）
         let swap_size = insn.imm as u32;
 
         if let Some(dst) = state.reg_mut(dst_reg) {
@@ -246,7 +280,9 @@ pub fn check_alu_op(
                 dst.mark_known(swapped);
             } else {
                 // After byte swap, bounds become unknown
+                // 字节交换后，边界变为未知
                 // But we can constrain based on swap size
+                // 但我们可以根据交换大小进行约束
                 match swap_size {
                     16 => {
                         dst.umin_value = 0;
@@ -270,6 +306,7 @@ pub fn check_alu_op(
             }
 
             // BPF_ALU class with END is for 64-bit values
+            // BPF_ALU 类与 END 用于 64 位值
             if class == BPF_ALU && swap_size != 64 {
                 dst.subreg_def = 1;
             }
@@ -278,9 +315,11 @@ pub fn check_alu_op(
     }
 
     // Special handling for MOV
+    // MOV 的特殊处理
     if op == BPF_MOV {
         if src_type == BPF_X {
             // Register move
+            // 寄存器移动
             let src_reg = insn.src_reg as usize;
             let src_state = state
                 .reg(src_reg)
@@ -291,12 +330,14 @@ pub fn check_alu_op(
                 *dst = src_state;
                 if class == BPF_ALU {
                     // 32-bit move - upper bits get zeroed
+                    // 32 位移动 - 高位被清零
                     dst.subreg_def = 1;
                     dst.assign_32_into_64();
                 }
             }
         } else {
             // Immediate move
+            // 立即数移动
             if let Some(dst) = state.reg_mut(dst_reg) {
                 if class == BPF_ALU64 {
                     dst.reg_type = BpfRegType::ScalarValue;
@@ -312,21 +353,25 @@ pub fn check_alu_op(
     }
 
     // For other ALU ops, check operands
+    // 对于其他 ALU 操作，检查操作数
     let dst_state = state
         .reg(dst_reg)
         .ok_or(VerifierError::Internal("failed to get dst register".into()))?
         .clone();
 
     // Handle pointer arithmetic
+    // 处理指针算术
     if dst_state.is_pointer() {
         return check_ptr_alu_op(state, insn, &dst_state, allow_ptr_leaks);
     }
 
     // Scalar ALU operation
+    // 标量 ALU 操作
     check_scalar_alu_op(state, insn, class == BPF_ALU64)
 }
 
 /// Check pointer ALU operation
+/// 检查指针 ALU 操作
 fn check_ptr_alu_op(
     state: &mut BpfVerifierState,
     insn: &BpfInsn,
@@ -338,6 +383,7 @@ fn check_ptr_alu_op(
     let dst_reg = insn.dst_reg as usize;
 
     // Only ADD and SUB are allowed on pointers
+    // 指针上只允许 ADD 和 SUB
     if !matches!(op, BPF_ADD | BPF_SUB) {
         if !allow_ptr_leaks {
             return Err(VerifierError::InvalidPointerArithmetic(
@@ -345,6 +391,7 @@ fn check_ptr_alu_op(
             ));
         }
         // In privileged mode, mark result as unknown scalar
+        // 在特权模式下，将结果标记为未知标量
         if let Some(dst) = state.reg_mut(dst_reg) {
             dst.mark_unknown(false);
         }
@@ -352,6 +399,7 @@ fn check_ptr_alu_op(
     }
 
     // Get the addend (either immediate or register value)
+    // 获取加数（立即数或寄存器值）
     let addend = if src_type == BPF_X {
         let src_reg = insn.src_reg as usize;
         let src_state = state
@@ -359,9 +407,11 @@ fn check_ptr_alu_op(
             .ok_or(VerifierError::Internal("failed to get src register".into()))?;
 
         // Source must be scalar for pointer arithmetic
+        // 指针算术的源必须是标量
         if src_state.is_pointer() {
             if op == BPF_SUB && dst_state.reg_type == src_state.reg_type {
                 // ptr - ptr = scalar (if same type)
+                // ptr - ptr = 标量（如果类型相同）
                 if let Some(dst) = state.reg_mut(dst_reg) {
                     dst.mark_unknown(false);
                 }
@@ -382,6 +432,7 @@ fn check_ptr_alu_op(
     };
 
     // Update pointer offset
+    // 更新指针偏移量
     if let Some(dst) = state.reg_mut(dst_reg) {
         if let Some(add_val) = addend {
             let new_off = if op == BPF_ADD {
@@ -393,6 +444,7 @@ fn check_ptr_alu_op(
             dst.off = new_off;
         } else {
             // Unknown addend - update var_off
+            // 未知加数 - 更新 var_off
             *dst = dst_state.clone();
             dst.var_off = crate::bounds::tnum::Tnum::unknown();
         }
@@ -402,12 +454,14 @@ fn check_ptr_alu_op(
 }
 
 /// Check scalar ALU operation
+/// 检查标量 ALU 操作
 fn check_scalar_alu_op(state: &mut BpfVerifierState, insn: &BpfInsn, is_64bit: bool) -> Result<()> {
     let op = insn.code & 0xf0;
     let src_type = insn.code & 0x08;
     let dst_reg = insn.dst_reg as usize;
 
     // Get source value
+    // 获取源值
     let src_val = if src_type == BPF_X {
         let src_reg = insn.src_reg as usize;
         state.reg(src_reg).cloned()
@@ -415,9 +469,11 @@ fn check_scalar_alu_op(state: &mut BpfVerifierState, insn: &BpfInsn, is_64bit: b
         let mut reg = BpfRegState::new_scalar_unknown(false);
         if is_64bit {
             // Sign-extend for 64-bit operations
+            // 64 位操作的符号扩展
             reg.mark_known(insn.imm as i64 as u64);
         } else {
             // Zero-extend for 32-bit operations
+            // 32 位操作的零扩展
             reg.mark_known(insn.imm as u32 as u64);
         }
         Some(reg)
@@ -430,15 +486,19 @@ fn check_scalar_alu_op(state: &mut BpfVerifierState, insn: &BpfInsn, is_64bit: b
         .clone();
 
     // Check for division by zero
+    // 检查除以零
     if matches!(op, BPF_DIV | BPF_MOD) {
         // Check if divisor could be zero
+        // 检查除数是否可能为零
         if src.umax_value == 0 {
             return Err(VerifierError::DivisionByZero);
         }
         // Note: runtime check will be inserted if umin_value == 0
+        // 注意：如果 umin_value == 0，将插入运行时检查
     }
 
     // Use ScalarBounds for comprehensive bounds propagation
+    // 使用 ScalarBounds 进行全面的边界传播
     let result = compute_alu_result(&dst, &src, op, is_64bit)?;
 
     if let Some(dst_mut) = state.reg_mut(dst_reg) {
@@ -446,9 +506,11 @@ fn check_scalar_alu_op(state: &mut BpfVerifierState, insn: &BpfInsn, is_64bit: b
         if !is_64bit {
             dst_mut.subreg_def = 1;
             // Zero-extend 32-bit result to 64-bit
+            // 将 32 位结果零扩展到 64 位
             dst_mut.assign_32_into_64();
         }
         // Ensure bounds are synchronized
+        // 确保边界同步
         dst_mut.sync_bounds();
     }
 
@@ -456,6 +518,7 @@ fn check_scalar_alu_op(state: &mut BpfVerifierState, insn: &BpfInsn, is_64bit: b
 }
 
 /// Compute ALU result with bounds tracking using ScalarBounds
+/// 使用 ScalarBounds 计算带边界跟踪的 ALU 结果
 fn compute_alu_result(
     dst: &BpfRegState,
     src: &BpfRegState,
@@ -466,16 +529,20 @@ fn compute_alu_result(
     result.reg_type = BpfRegType::ScalarValue;
 
     // Convert to ScalarBounds for comprehensive ALU handling
+    // 转换为 ScalarBounds 以进行全面的 ALU 处理
     let dst_bounds = dst.to_scalar_bounds();
     let src_bounds = src.to_scalar_bounds();
 
     // Use ScalarBounds::alu_op for proper bounds propagation
+    // 使用 ScalarBounds::alu_op 进行正确的边界传播
     let result_bounds = dst_bounds.alu_op(op, &src_bounds, is_64bit)?;
 
     // Apply the computed bounds back to the register state
+    // 将计算的边界应用回寄存器状态
     result.apply_scalar_bounds(&result_bounds);
 
     // Handle 32-bit operations - zero extension
+    // 处理 32 位操作 - 零扩展
     if !is_64bit {
         result.subreg_def = 1;
     }
@@ -484,12 +551,19 @@ fn compute_alu_result(
 }
 
 /// Check conditional jump operation
+/// 检查条件跳转操作
 ///
 /// This function implements the kernel's `check_cond_jmp_op()`. It:
 /// 1. Validates the registers used in the comparison
 /// 2. Determines if the branch outcome can be statically determined
 /// 3. Refines register bounds based on the branch condition
 /// 4. Returns the possible paths (fall-through and/or target)
+///
+/// 此函数实现内核的 `check_cond_jmp_op()`。它：
+/// 1. 验证比较中使用的寄存器
+/// 2. 确定分支结果是否可以静态确定
+/// 3. 根据分支条件细化寄存器边界
+/// 4. 返回可能的路径（直落和/或目标）
 pub fn check_cond_jmp_op(
     state: &mut BpfVerifierState,
     insn: &BpfInsn,
@@ -502,15 +576,18 @@ pub fn check_cond_jmp_op(
     let is_32bit = insn.class() == BPF_JMP32;
 
     // Unconditional jump
+    // 无条件跳转
     if op == BPF_JA {
         let target = (insn_idx as i32 + insn.off as i32 + 1) as usize;
         return Ok((Some(target), None));
     }
 
     // Check destination register
+    // 检查目标寄存器
     check_reg_arg(state, insn, dst_reg, true, allow_ptr_leaks)?;
 
     // Check source register if needed
+    // 如果需要，检查源寄存器
     if src_type == BPF_X {
         let src_reg = insn.src_reg as usize;
         check_reg_arg(state, insn, src_reg, true, allow_ptr_leaks)?;
@@ -520,6 +597,7 @@ pub fn check_cond_jmp_op(
     let target = (insn_idx as i32 + insn.off as i32 + 1) as usize;
 
     // Get register states
+    // 获取寄存器状态
     let dst_state = state
         .reg(dst_reg)
         .ok_or(VerifierError::Internal("no dst register".into()))?
@@ -540,6 +618,7 @@ pub fn check_cond_jmp_op(
     let src_state = src_val.ok_or(VerifierError::Internal("no src".into()))?;
 
     // Check for pointer comparisons
+    // 检查指针比较
     if dst_state.is_pointer() || src_state.is_pointer() {
         return check_ptr_cmp(
             state,
@@ -553,22 +632,27 @@ pub fn check_cond_jmp_op(
     }
 
     // Try to determine if branch is always/never taken using bounds
+    // 尝试使用边界确定分支是否总是/从不被采取
     let taken = is_branch_taken_with_bounds(&dst_state, &src_state, op, is_32bit);
 
     match taken {
         Some(true) => {
             // Branch always taken - refine dst bounds for target path
+            // 分支总是被采取 - 为目标路径细化目标边界
             refine_reg_bounds_for_branch(state, dst_reg, &src_state, op, true, is_32bit);
             Ok((Some(target), None))
         }
         Some(false) => {
             // Branch never taken - refine dst bounds for fall-through path
+            // 分支从不被采取 - 为直落路径细化目标边界
             refine_reg_bounds_for_branch(state, dst_reg, &src_state, op, false, is_32bit);
             Ok((Some(fall_through), None))
         }
         None => {
             // Both paths possible - bounds will be refined per-path in the caller
+            // 两条路径都可能 - 边界将在调用者中按路径细化
             // Mark registers as needing precision for this conditional
+            // 标记寄存器需要此条件的精度
             mark_regs_for_precision(
                 state,
                 dst_reg,
@@ -584,6 +668,7 @@ pub fn check_cond_jmp_op(
 }
 
 /// Check pointer comparison in conditional jump
+/// 检查条件跳转中的指针比较
 fn check_ptr_cmp(
     state: &mut BpfVerifierState,
     insn: &BpfInsn,
@@ -597,12 +682,15 @@ fn check_ptr_cmp(
     let dst_reg = insn.dst_reg as usize;
 
     // Only certain comparisons are allowed for pointers
+    // 指针只允许某些比较
     match op {
         BPF_JEQ | BPF_JNE => {
             // Equality comparison is always allowed
+            // 相等比较始终允许
         }
         BPF_JGT | BPF_JGE | BPF_JLT | BPF_JLE | BPF_JSGT | BPF_JSGE | BPF_JSLT | BPF_JSLE => {
             // Ordering comparisons require same pointer type
+            // 排序比较需要相同的指针类型
             if dst.is_pointer()
                 && src.is_pointer()
                 && dst.reg_type != src.reg_type
@@ -621,8 +709,10 @@ fn check_ptr_cmp(
     }
 
     // Handle NULL pointer checks
+    // 处理 NULL 指针检查
     if op == BPF_JEQ || op == BPF_JNE {
         // Check if comparing with NULL (scalar 0)
+        // 检查是否与 NULL（标量 0）比较
         let comparing_with_null =
             (src.reg_type == BpfRegType::ScalarValue && src.is_const() && src.const_value() == 0)
                 || (dst.reg_type == BpfRegType::ScalarValue
@@ -631,15 +721,19 @@ fn check_ptr_cmp(
 
         if comparing_with_null {
             // This is a NULL check - important for PTR_MAYBE_NULL handling
+            // 这是 NULL 检查 - 对于 PTR_MAYBE_NULL 处理很重要
             if dst.type_flags.contains(BpfTypeFlag::PTR_MAYBE_NULL) {
                 // After check, one path has non-NULL pointer
+                // 检查后，一条路径有非 NULL 指针
                 // The caller should handle marking the pointer as non-null on the appropriate path
+                // 调用者应在适当的路径上处理将指针标记为非空
                 return Ok((Some(fall_through), Some(target)));
             }
         }
     }
 
     // For same-type pointers, try to determine outcome from offsets
+    // 对于相同类型的指针，尝试从偏移量确定结果
     if dst.reg_type == src.reg_type && dst.is_const() && src.is_const() {
         let dst_val = dst.const_value();
         let src_val = src.const_value();
@@ -662,12 +756,14 @@ fn check_ptr_cmp(
     }
 
     // Mark dst as needing precision for the conditional
+    // 标记目标需要条件的精度
     mark_regs_for_precision(state, dst_reg, None);
 
     Ok((Some(fall_through), Some(target)))
 }
 
 /// Determine if branch is taken based on register bounds
+/// 根据寄存器边界确定是否采取分支
 fn is_branch_taken_with_bounds(
     dst: &BpfRegState,
     src: &BpfRegState,
@@ -675,11 +771,13 @@ fn is_branch_taken_with_bounds(
     is_32bit: bool,
 ) -> Option<bool> {
     // First try exact constant comparison
+    // 首先尝试精确常量比较
     if let Some(result) = is_branch_taken(dst, src, op, is_32bit) {
         return Some(result);
     }
 
     // Try bounds-based reasoning
+    // 尝试基于边界的推理
     if dst.reg_type != BpfRegType::ScalarValue {
         return None;
     }
@@ -727,20 +825,24 @@ fn is_branch_taken_with_bounds(
     match op {
         BPF_JEQ => {
             // Can only be always-true if both are single values and equal
+            // 只有当两者都是单一值且相等时才能总是为真
             if dst_umin == dst_umax && src_umin == src_umax && dst_umin == src_umin {
                 return Some(true);
             }
             // Can be always-false if ranges don't overlap
+            // 如果范围不重叠，则可以总是为假
             if dst_umax < src_umin || dst_umin > src_umax {
                 return Some(false);
             }
         }
         BPF_JNE => {
             // Always true if ranges don't overlap
+            // 如果范围不重叠，则总是为真
             if dst_umax < src_umin || dst_umin > src_umax {
                 return Some(true);
             }
             // Always false if both are same constant
+            // 如果两者是相同的常量，则总是为假
             if dst_umin == dst_umax && src_umin == src_umax && dst_umin == src_umin {
                 return Some(false);
             }
@@ -811,16 +913,19 @@ fn is_branch_taken_with_bounds(
         }
         BPF_JSET => {
             // Can determine if known bits definitely overlap or don't
+            // 可以确定已知位是否明确重叠或不重叠
             let known_dst = !dst.var_off.mask;
             let known_src = !src.var_off.mask;
             let val_dst = dst.var_off.value;
             let val_src = src.var_off.value;
 
             // If all bits are known and overlap is non-zero
+            // 如果所有位都已知且重叠非零
             if known_dst & known_src == u64::MAX {
                 return Some((val_dst & val_src) != 0);
             }
             // If any known set bit overlaps
+            // 如果任何已知设置位重叠
             if (val_dst & val_src) != 0 {
                 return Some(true);
             }
@@ -832,6 +937,7 @@ fn is_branch_taken_with_bounds(
 }
 
 /// Refine register bounds based on branch outcome
+/// 根据分支结果细化寄存器边界
 fn refine_reg_bounds_for_branch(
     state: &mut BpfVerifierState,
     dst_reg: usize,
@@ -852,10 +958,11 @@ fn refine_reg_bounds_for_branch(
     let src_val = if src.is_const() {
         src.const_value()
     } else {
-        return; // Can only refine with constant source for now
+        return; // Can only refine with constant source for now / 目前只能用常量源进行细化
     };
 
     // Apply refinement using the range_refine module logic
+    // 使用 range_refine 模块逻辑应用细化
     use crate::bounds::range_refine::{refine_reg_const, BranchCond};
 
     let cond = match op {
@@ -876,13 +983,16 @@ fn refine_reg_bounds_for_branch(
     result.apply_to(dst);
 
     // Handle 32-bit operations
+    // 处理 32 位操作
     if is_32bit {
         // Sync 32-bit bounds to 64-bit
+        // 同步 32 位边界到 64 位
         dst.sync_bounds();
     }
 }
 
 /// Mark registers as needing precision for conditional
+/// 标记寄存器需要条件的精度
 fn mark_regs_for_precision(state: &mut BpfVerifierState, dst_reg: usize, src_reg: Option<usize>) {
     if let Some(dst) = state.reg_mut(dst_reg) {
         if dst.reg_type == BpfRegType::ScalarValue {
@@ -900,10 +1010,13 @@ fn mark_regs_for_precision(state: &mut BpfVerifierState, dst_reg: usize, src_reg
 }
 
 /// Determine if a branch is statically taken
+/// 确定分支是否静态被采取
 fn is_branch_taken(dst: &BpfRegState, src: &BpfRegState, op: u8, _is_32bit: bool) -> Option<bool> {
     // Only check if both are constants
+    // 只有当两者都是常量时才检查
     if !dst.is_const() || !src.is_const() {
         // Could do range analysis here
+        // 这里可以做范围分析
         return None;
     }
 
@@ -929,6 +1042,7 @@ fn is_branch_taken(dst: &BpfRegState, src: &BpfRegState, op: u8, _is_32bit: bool
 }
 
 /// Check LD_IMM64 instruction
+/// 检查 LD_IMM64 指令
 pub fn check_ld_imm64(
     state: &mut BpfVerifierState,
     insn: &BpfInsn,
@@ -941,6 +1055,7 @@ pub fn check_ld_imm64(
     }
 
     // Compute 64-bit immediate
+    // 计算 64 位立即数
     let imm = (insn.imm as u32 as u64) | ((next_insn.imm as u32 as u64) << 32);
 
     if let Some(dst) = state.reg_mut(dst_reg) {
@@ -952,43 +1067,56 @@ pub fn check_ld_imm64(
 }
 
 /// Check CALL instruction
+/// 检查 CALL 指令
 pub fn check_call(state: &mut BpfVerifierState, insn: &BpfInsn, _insn_idx: usize) -> Result<()> {
     // Check that R1-R5 are properly set up for the call
+    // 检查 R1-R5 是否为调用正确设置
     for regno in 1..=5 {
         if let Some(reg) = state.reg(regno) {
             if reg.reg_type == BpfRegType::NotInit {
                 // This might be OK depending on the helper
+                // 这可能没问题，取决于辅助函数
             }
         }
     }
 
     // After call, clear caller-saved registers
+    // 调用后，清除调用者保存的寄存器
     state.clear_caller_saved_regs();
 
     // R0 gets the return value (unknown scalar for now)
+    // R0 获取返回值（目前为未知标量）
     if let Some(r0) = state.reg_mut(BPF_REG_0) {
         r0.mark_unknown(false);
     }
 
     // Handle special helpers would go here
+    // 特殊辅助函数的处理将在这里
     if insn.is_helper_call() {
         // Check helper-specific constraints
+        // 检查辅助函数特定的约束
     } else if insn.is_pseudo_call() {
         // Handle subprogram call
+        // 处理子程序调用
         // Would push a new frame here
+        // 这里将推送新帧
     } else if insn.is_kfunc_call() {
         // Handle kfunc call
+        // 处理 kfunc 调用
     }
 
     Ok(())
 }
 
 /// Check EXIT instruction
+/// 检查 EXIT 指令
 pub fn check_exit(state: &BpfVerifierState) -> Result<()> {
     // Check for unreleased resources
+    // 检查未释放的资源
     state.check_resource_leak()?;
 
     // R0 should contain the return value
+    // R0 应包含返回值
     let r0 = state
         .reg(BPF_REG_0)
         .ok_or(VerifierError::Internal("no R0 at exit".into()))?;
