@@ -182,7 +182,7 @@ I only clone states when I branch. No unnecessary copies!
 
 ---
 
-**Last Updated**: 2025-12-29
+**Last Updated**: 2025-12-30
 
 *No benchmarks were harmed in the making of this document.*
 
